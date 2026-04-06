@@ -1,0 +1,56 @@
+// DELIVERY HUB v2 — Navigation
+
+const MODULE_TITLES = {
+    dashboard: 'Dashboard',
+    consegne: 'Consegne',
+    'anagrafica-driver': 'Anagrafica Driver',
+    compensi: 'Compensi Driver',
+    danni: 'Danni / Furgoni',
+    filiali: 'Filiali',
+    riconciliazione: 'Riconciliazione',
+    fatturazione: 'Fatturazione',
+    import: 'Importa dati',
+    'driver-consegne': 'Le mie consegne',
+    'driver-compensi': 'I miei compensi',
+    'driver-bustepaga': 'Buste paga'
+};
+
+function navigateTo(module) {
+    state.currentModule = module;
+    document.querySelectorAll('.nav-item').forEach(n =>
+        n.classList.toggle('active', n.dataset.module === module));
+    document.querySelectorAll('.screen').forEach(s => {
+        if (s.id !== 'loginScreen') s.style.display = 'none';
+    });
+    const screen = document.getElementById('screen-' + module);
+    if (screen) screen.style.display = 'block';
+    document.getElementById('pageTitle').textContent = MODULE_TITLES[module] || module;
+    closeSidebar();
+    refreshCurrentModule();
+}
+
+function refreshCurrentModule() {
+    switch (state.currentModule) {
+        case 'dashboard': renderDashboard(); break;
+        case 'consegne': renderConsegne(); break;
+        case 'anagrafica-driver': renderAnagraficaDriver(); break;
+        case 'compensi': renderCompensi(); break;
+        case 'danni': renderDanni(); break;
+        case 'filiali': renderFiliali(); break;
+        case 'fatturazione': renderFatturazione(); break;
+        case 'driver-consegne': renderDriverConsegne(); break;
+        case 'driver-compensi': renderDriverCompensi(); break;
+    }
+}
+
+function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    const ov = document.getElementById('sidebarOverlay');
+    if (sb.classList.contains('open')) { closeSidebar(); }
+    else { sb.classList.add('open'); ov.classList.add('visible'); }
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('visible');
+}

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>DELIVERY HUB — AVR Logistic</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚚</text></svg>">
+</head>
+<body>
+    <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">🚚</span>
+                <div>
+                    <div class="logo-title">DELIVERY HUB</div>
+                    <div class="logo-subtitle">AVR Logistic</div>
+                </div>
+            </div>
+        </div>
+        <nav class="sidebar-nav" id="sidebarNav">
+            <!-- Admin nav -->
+            <div id="navAdmin">
+                <div class="nav-section-label">Operatività</div>
+                <a class="nav-item active" data-module="dashboard" onclick="navigateTo('dashboard')">
+                    <span class="nav-icon">📊</span> Dashboard
+                </a>
+                <a class="nav-item" data-module="consegne" onclick="navigateTo('consegne')">
+                    <span class="nav-icon">📦</span> Consegne
+                </a>
+                <a class="nav-item" data-module="riconciliazione" onclick="navigateTo('riconciliazione')">
+                    <span class="nav-icon">⚖️</span> Riconciliazione
+                </a>
+                <a class="nav-item" data-module="fatturazione" onclick="navigateTo('fatturazione')">
+                    <span class="nav-icon">💶</span> Fatturazione
+                </a>
+
+                <div class="nav-section-label">Gestione</div>
+                <a class="nav-item" data-module="anagrafica-driver" onclick="navigateTo('anagrafica-driver')">
+                    <span class="nav-icon">👤</span> Anagrafica Driver
+                </a>
+                <a class="nav-item" data-module="compensi" onclick="navigateTo('compensi')">
+                    <span class="nav-icon">💰</span> Compensi
+                </a>
+                <a class="nav-item" data-module="danni" onclick="navigateTo('danni')">
+                    <span class="nav-icon">🔧</span> Danni / Furgoni
+                </a>
+                <a class="nav-item" data-module="filiali" onclick="navigateTo('filiali')">
+                    <span class="nav-icon">🏪</span> Filiali
+                </a>
+                <a class="nav-item" data-module="import" onclick="navigateTo('import')">
+                    <span class="nav-icon">📥</span> Importa dati
+                </a>
+            </div>
+
+            <!-- Driver nav (shown when driver logs in) -->
+            <div id="navDriver" style="display:none">
+                <div class="nav-section-label">Le mie attività</div>
+                <a class="nav-item active" data-module="driver-consegne" onclick="navigateTo('driver-consegne')">
+                    <span class="nav-icon">📦</span> Le mie consegne
+                </a>
+                <a class="nav-item" data-module="driver-compensi" onclick="navigateTo('driver-compensi')">
+                    <span class="nav-icon">💰</span> I miei compensi
+                </a>
+                <a class="nav-item" data-module="driver-bustepaga" onclick="navigateTo('driver-bustepaga')">
+                    <span class="nav-icon">📄</span> Buste paga
+                </a>
+            </div>
+        </nav>
+        <div class="sidebar-footer">
+            <div id="userInfo" class="user-info">
+                <span class="user-avatar">👤</span>
+                <div style="flex:1;overflow:hidden">
+                    <div id="userName" style="font-size:13px;font-weight:600;color:var(--text)">—</div>
+                    <div id="userRole" style="font-size:11px;color:var(--text-light)">—</div>
+                </div>
+            </div>
+            <button id="btnLogout" class="btn-logout" onclick="doLogout()">Esci</button>
+        </div>
+    </aside>
+
+    <!-- Main content -->
+    <main id="mainContent" class="main-content">
+        <header class="topbar">
+            <button class="hamburger" onclick="toggleSidebar()">☰</button>
+            <h1 id="pageTitle" class="page-title">Dashboard</h1>
+            <div class="topbar-actions">
+                <select id="meseSelector" class="mese-select" onchange="onMeseChange()"></select>
+            </div>
+        </header>
+
+        <!-- ═══ LOGIN ═══ -->
+        <section id="loginScreen" class="screen login-screen">
+            <div class="login-card">
+                <div class="login-logo">🚚</div>
+                <h2>DELIVERY HUB</h2>
+                <p class="login-subtitle">Gestionale Consegne — AVR Logistic</p>
+                <input type="email" id="loginEmail" placeholder="Email" class="input">
+                <input type="password" id="loginPassword" placeholder="Password" class="input">
+                <button id="btnLogin" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="doLogin()">Accedi</button>
+                <p id="loginError" class="error-msg"></p>
+            </div>
+        </section>
+
+        <!-- ═══ DASHBOARD ═══ -->
+        <section id="screen-dashboard" class="screen" style="display:none">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Consegne mese</div>
+                    <div class="kpi-value" id="kpiConsegneMese">—</div>
+                    <div class="kpi-detail" id="kpiConsegneDetail"></div>
+                </div>
+                <div class="kpi-card accent">
+                    <div class="kpi-label">Fatturato stimato</div>
+                    <div class="kpi-value" id="kpiFatturato">—</div>
+                    <div class="kpi-detail" id="kpiFatturatoDetail"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Costo driver</div>
+                    <div class="kpi-value" id="kpiCostoDriver">—</div>
+                    <div class="kpi-detail" id="kpiCostoDriverDetail"></div>
+                </div>
+                <div class="kpi-card accent">
+                    <div class="kpi-label">Margine lordo</div>
+                    <div class="kpi-value" id="kpiMargine">—</div>
+                    <div class="kpi-detail" id="kpiMargineDetail"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title">Consegne per area</h3>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Area</th><th>Filiali</th><th>≥€250</th><th>&lt;€250</th><th>Totale</th><th>Fatturato</th><th>Costo driver</th><th>Margine</th>
+                        </tr></thead>
+                        <tbody id="tblAree"></tbody>
+                        <tfoot><tr class="totals-row">
+                            <td><strong>TOTALE</strong></td><td id="totFiliali"></td><td id="totMaggiori"></td><td id="totMinori"></td><td id="totConsegne"></td><td id="totFatturato"></td><td id="totCostoDriver"></td><td id="totMargine"></td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h3 class="card-title">Top 10 filiali</h3>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead><tr><th>Filiale</th><th>Area</th><th>Consegne</th><th>Fatturato</th></tr></thead>
+                            <tbody id="tblTopFiliali"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 class="card-title">Performance driver</h3>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead><tr><th>Driver</th><th>Consegne</th><th>Compenso</th><th>Filiali</th></tr></thead>
+                            <tbody id="tblTopDriver"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ CONSEGNE ═══ -->
+        <section id="screen-consegne" class="screen" style="display:none">
+            <div class="toolbar">
+                <input type="text" id="searchConsegne" class="input search-input" placeholder="Cerca cliente, driver, filiale..." oninput="filterConsegne()">
+                <select id="filterArea" class="input filter-select" onchange="filterConsegne()">
+                    <option value="">Tutte le aree</option>
+                    <option value="CT">Catania</option><option value="ME">Messina</option>
+                    <option value="SR">Siracusa</option><option value="PA">Palermo</option><option value="EN">Enna</option>
+                </select>
+                <select id="filterFiliale" class="input filter-select" onchange="filterConsegne()"><option value="">Tutte le filiali</option></select>
+            </div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table class="data-table" id="tblConsegne">
+                        <thead><tr>
+                            <th>Data</th><th>Filiale</th><th>Cliente</th><th>Città</th><th>Importo</th><th>Fascia</th><th>Driver</th><th>Tipo</th>
+                        </tr></thead>
+                        <tbody id="tblConsegneBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="paginationConsegne"></div>
+            </div>
+        </section>
+
+        <!-- ═══ ANAGRAFICA DRIVER ═══ -->
+        <section id="screen-anagrafica-driver" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Anagrafica driver</h3>
+                <div class="toolbar">
+                    <button class="btn btn-primary" onclick="openAddDriver()">+ Aggiungi driver</button>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Cognome</th><th>Nome</th><th>Città</th><th>Contratto</th><th>€/consegna</th><th>Stato</th><th>Azioni</th></tr></thead>
+                        <tbody id="tblAnagraficaDriver"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ COMPENSI ═══ -->
+        <section id="screen-compensi" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Compensi driver — riepilogo mensile</h3>
+                <p class="card-desc">Calcolo automatico: consegne × €3,50 netti per ogni driver, con detrazione danni.</p>
+                <div class="kpi-grid" style="margin:16px 0">
+                    <div class="kpi-card"><div class="kpi-label">Totale compensi</div><div class="kpi-value" id="compTotale">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Totale danni</div><div class="kpi-value" id="compDanni">—</div></div>
+                    <div class="kpi-card accent"><div class="kpi-label">Netto da pagare</div><div class="kpi-value" id="compNetto">—</div></div>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Driver</th><th>Città</th><th>Consegne</th><th>Lordo (€3,50×n)</th><th>Danni</th><th>Netto</th>
+                        </tr></thead>
+                        <tbody id="tblCompensi"></tbody>
+                        <tfoot><tr class="totals-row">
+                            <td colspan="2"><strong>TOTALE</strong></td>
+                            <td id="compTotConsegne"></td><td id="compTotLordo"></td><td id="compTotDanniTab"></td><td id="compTotNettoTab"></td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                <div style="margin-top:16px">
+                    <button class="btn btn-primary" onclick="exportCompensi()">📄 Esporta compensi</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ DANNI / FURGONI ═══ -->
+        <section id="screen-danni" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Registro danni</h3>
+                <p class="card-desc">Gestisci danni ai furgoni. Gli importi vengono detratti automaticamente dal compenso del driver responsabile.</p>
+                <div class="toolbar">
+                    <button class="btn btn-primary" onclick="openAddDanno()">+ Registra danno</button>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Data</th><th>Driver</th><th>Targa</th><th>Descrizione</th><th>Importo</th><th>Stato</th><th>Azioni</th></tr></thead>
+                        <tbody id="tblDanni"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ FILIALI ═══ -->
+        <section id="screen-filiali" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Anagrafica filiali</h3>
+                <div class="toolbar"><button class="btn btn-primary" onclick="openAddFiliale()">+ Aggiungi filiale</button></div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Codice</th><th>Nome</th><th>Area</th><th>Gruppo</th><th>Link Sheet</th><th>Azioni</th></tr></thead>
+                        <tbody id="tblFilialiBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ RICONCILIAZIONE ═══ -->
+        <section id="screen-riconciliazione" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Riconciliazione mensile</h3>
+                <p class="card-desc">Confronta i dati delle consegne con i dati Decò.</p>
+                <div class="toolbar">
+                    <button class="btn btn-primary" onclick="runRiconciliazione()">▶ Avvia riconciliazione</button>
+                    <button class="btn" onclick="exportRiconciliazione()">📄 Esporta</button>
+                </div>
+                <div id="riconResults"></div>
+            </div>
+        </section>
+
+        <!-- ═══ FATTURAZIONE ═══ -->
+        <section id="screen-fatturazione" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Calcolo fatturato mensile</h3>
+                <p class="card-desc">Calcolo automatico basato sul prezziario AVR Logistic.</p>
+                <div class="kpi-grid" style="margin:16px 0">
+                    <div class="kpi-card"><div class="kpi-label">Consegne ordinarie</div><div class="kpi-value" id="fatOrdinarie">—</div></div>
+                    <div class="kpi-card accent"><div class="kpi-label">Fatturato ordinarie</div><div class="kpi-value" id="fatFattOrdinarie">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Consegne speciali</div><div class="kpi-value" id="fatSpeciali">—</div></div>
+                    <div class="kpi-card accent"><div class="kpi-label">Fatturato speciali</div><div class="kpi-value" id="fatFattSpeciali">—</div></div>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Area</th><th>Gruppo</th><th>≥€250</th><th>&lt;€250</th><th>Speciali</th><th>Fatt. ord.</th><th>Fatt. spec.</th><th>Totale</th></tr></thead>
+                        <tbody id="tblFattBody"></tbody>
+                        <tfoot><tr class="totals-row">
+                            <td colspan="2"><strong>TOTALE</strong></td>
+                            <td id="fatTotMagg"></td><td id="fatTotMin"></td><td id="fatTotSpec"></td><td id="fatTotFattOrd"></td><td id="fatTotFattSpec"></td><td id="fatTotTot"></td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                <div style="margin-top:16px"><button class="btn btn-primary" onclick="exportFatturazione()">📄 Esporta per Decò</button></div>
+            </div>
+        </section>
+
+        <!-- ═══ IMPORT ═══ -->
+        <section id="screen-import" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Importa dati da file Excel</h3>
+                <p class="card-desc">Carica i file .xlsx delle filiali. Il sistema riconosce automaticamente la struttura.</p>
+                <div class="import-zone" id="importZone">
+                    <div class="import-icon">📂</div>
+                    <p>Trascina qui i file .xlsx<br>oppure <label class="import-link" for="importFile">sfoglia</label></p>
+                    <input type="file" id="importFile" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="handleImportFiles(this.files)">
+                </div>
+                <div id="importProgress" style="display:none">
+                    <div class="progress-bar"><div class="progress-fill" id="importProgressFill"></div></div>
+                    <p id="importStatus" class="import-status"></p>
+                </div>
+                <div id="importLog" class="import-log" style="display:none"></div>
+            </div>
+            <div class="card" style="margin-top:20px">
+                <h3 class="card-title">Importa file riepilogo Decò</h3>
+                <p class="card-desc">Carica il file Excel di riepilogo Decò per la riconciliazione automatica.</p>
+                <div class="import-zone" id="importDecoZone">
+                    <div class="import-icon">📊</div>
+                    <p>Trascina qui il file Decò<br>oppure <label class="import-link" for="importDecFile">sfoglia</label></p>
+                    <input type="file" id="importDecFile" accept=".xlsx,.xls" style="display:none" onchange="handleImportDeco(this.files)">
+                </div>
+                <div id="importDecoLog" class="import-log" style="display:none"></div>
+            </div>
+        </section>
+
+        <!-- ═══ DRIVER: Le mie consegne ═══ -->
+        <section id="screen-driver-consegne" class="screen" style="display:none">
+            <div class="kpi-grid">
+                <div class="kpi-card"><div class="kpi-label">Consegne mese</div><div class="kpi-value" id="drvConsegneMese">—</div></div>
+                <div class="kpi-card accent"><div class="kpi-label">Compenso mese</div><div class="kpi-value" id="drvCompensoMese">—</div></div>
+                <div class="kpi-card"><div class="kpi-label">Media giornaliera</div><div class="kpi-value" id="drvMedia">—</div></div>
+            </div>
+            <div class="card">
+                <h3 class="card-title">Le mie consegne</h3>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Data</th><th>Filiale</th><th>Cliente</th><th>Importo</th><th>Stato</th></tr></thead>
+                        <tbody id="tblDriverConsegne"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ DRIVER: I miei compensi ═══ -->
+        <section id="screen-driver-compensi" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">I miei compensi</h3>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Mese</th><th>Consegne</th><th>Lordo</th><th>Danni</th><th>Netto</th></tr></thead>
+                        <tbody id="tblDriverCompensiBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ DRIVER: Buste paga ═══ -->
+        <section id="screen-driver-bustepaga" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Le mie buste paga</h3>
+                <p class="card-desc">Qui trovi le buste paga caricate dall'amministrazione.</p>
+                <div id="bustePagaList" style="margin-top:16px">
+                    <p style="color:var(--text-muted);text-align:center;padding:40px">Nessuna busta paga disponibile</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal -->
+    <div id="modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modalTitle">—</h3>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div id="modalBody" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <!-- App -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/moduli/auth.js"></script>
+    <script src="js/moduli/navigazione.js"></script>
+    <script src="js/moduli/dashboard.js"></script>
+    <script src="js/moduli/consegne.js"></script>
+    <script src="js/moduli/anagrafica-driver.js"></script>
+    <script src="js/moduli/compensi.js"></script>
+    <script src="js/moduli/danni.js"></script>
+    <script src="js/moduli/filiali.js"></script>
+    <script src="js/moduli/riconciliazione.js"></script>
+    <script src="js/moduli/fatturazione.js"></script>
+    <script src="js/moduli/importa.js"></script>
+    <script src="js/moduli/driver-app.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
