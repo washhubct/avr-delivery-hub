@@ -40,6 +40,9 @@
                 <a class="nav-item" data-module="fatturazione" onclick="navigateTo('fatturazione')">
                     <span class="nav-icon">💶</span> Fatturazione
                 </a>
+                <a class="nav-item" data-module="report-finanziario" onclick="navigateTo('report-finanziario')">
+                    <span class="nav-icon">📈</span> Report Finanziario
+                </a>
 
                 <div class="nav-section-label">Gestione</div>
                 <a class="nav-item" data-module="anagrafica-driver" onclick="navigateTo('anagrafica-driver')">
@@ -318,6 +321,72 @@
             </div>
         </section>
 
+        <!-- ═══ REPORT FINANZIARIO ═══ -->
+        <section id="screen-report-finanziario" class="screen" style="display:none">
+            <div class="kpi-grid">
+                <div class="kpi-card accent">
+                    <div class="kpi-label">Fatturato lordo</div>
+                    <div class="kpi-value" id="rfFatturato">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Totale costi</div>
+                    <div class="kpi-value" id="rfCosti">—</div>
+                </div>
+                <div class="kpi-card accent">
+                    <div class="kpi-label">Revenue (utile)</div>
+                    <div class="kpi-value" id="rfRevenue">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Tot. consegne</div>
+                    <div class="kpi-value" id="rfConsegne">—</div>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <!-- RICAVI -->
+                <div class="card">
+                    <h3 class="card-title">Ricavi</h3>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead><tr><th>Voce</th><th style="text-align:right">Imponibile</th><th style="text-align:right">IVA 22%</th><th style="text-align:right">Totale</th></tr></thead>
+                            <tbody id="rfTblRicavi"></tbody>
+                            <tfoot><tr class="totals-row"><td><strong>TOTALE</strong></td><td id="rfTotImponibile" style="text-align:right"></td><td id="rfTotIva" style="text-align:right"></td><td id="rfTotLordo" style="text-align:right"></td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- COSTI -->
+                <div class="card">
+                    <h3 class="card-title">Costi</h3>
+                    <div class="toolbar"><button class="btn btn-primary" onclick="openEditCosti()">✏️ Modifica costi</button></div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead><tr><th>Voce</th><th style="text-align:right">Importo</th></tr></thead>
+                            <tbody id="rfTblCosti"></tbody>
+                            <tfoot><tr class="totals-row"><td><strong>TOTALE COSTI</strong></td><td id="rfTotCosti" style="text-align:right"></td></tr></tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIEPILOGO -->
+            <div class="card" style="margin-top:20px">
+                <h3 class="card-title">Riepilogo P&L</h3>
+                <div id="rfRiepilogo"></div>
+            </div>
+
+            <!-- STORICO -->
+            <div class="card" style="margin-top:20px">
+                <h3 class="card-title">Storico mensile</h3>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Mese</th><th style="text-align:right">Fatturato</th><th style="text-align:right">Costi</th><th style="text-align:right">Revenue</th><th style="text-align:right">Consegne</th></tr></thead>
+                        <tbody id="rfTblStorico"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- ═══ IMPORT ═══ -->
         <section id="screen-import" class="screen" style="display:none">
             <div class="card">
@@ -424,6 +493,7 @@
     <script src="js/moduli/filiali.js"></script>
     <script src="js/moduli/riconciliazione.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
+    <script src="js/moduli/report-finanziario.js"></script>
     <script src="js/moduli/importa.js"></script>
     <script src="js/moduli/driver-app.js"></script>
     <script src="js/main.js"></script>
