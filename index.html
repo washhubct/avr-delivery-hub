@@ -197,9 +197,17 @@
         <section id="screen-anagrafica-driver" class="screen" style="display:none">
             <div class="card">
                 <h3 class="card-title">Anagrafica driver</h3>
-                <div class="toolbar">
-                    <button class="btn btn-primary" onclick="openAddDriver()">+ Aggiungi driver</button>
-                </div>
+               <div class="toolbar">
+    <button class="btn btn-primary" onclick="openAddDriver()">+ Aggiungi driver</button>
+    <select id="filterDriverCitta" class="input filter-select" onchange="renderAnagraficaDriver()">
+        <option value="">Tutte le città</option>
+        <option value="CT">Catania</option>
+        <option value="ME">Messina</option>
+        <option value="EN">Enna</option>
+        <option value="SR">Siracusa</option>
+        <option value="PA">Palermo</option>
+    </select>
+</div>
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr><th>Cognome</th><th>Nome</th><th>Città</th><th>Contratto</th><th>€/consegna</th><th>Stato</th><th>Azioni</th></tr></thead>
