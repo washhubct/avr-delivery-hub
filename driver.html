@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>AVR Driver</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" href="avr-logo.jpg"><link rel="apple-touch-icon" href="avr-logo.jpg">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0f1d3d">
+<style>
+:root{--navy:#0f1d3d;--navy-l:#1a2e5a;--navy-d:#0a1428;--blue:#2563eb;--bg:#f4f6f9;--white:#fff;--text:#1e293b;--text2:#64748b;--text3:#94a3b8;--border:#e2e8f0;--success:#16a34a;--success-bg:#f0fdf4;--danger:#dc2626;--warning:#d97706;--warning-bg:#fffbeb;--blue-bg:#eff6ff;--radius:14px;--shadow:0 1px 3px rgba(15,29,61,0.08);--font:'Plus Jakarta Sans',-apple-system,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100dvh;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+.app{max-width:480px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;background:var(--white)}
+.app-header{background:var(--navy);color:#fff;padding:14px 20px;padding-top:max(14px,env(safe-area-inset-top));position:sticky;top:0;z-index:10}
+.header-top{display:flex;align-items:center;justify-content:space-between}.header-logo{display:flex;align-items:center;gap:12px}.header-logo img{height:38px;border-radius:6px}
+.header-name{font-size:15px;font-weight:700}.header-city{font-size:11px;color:rgba(255,255,255,0.6)}
+.btn-out{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.7);font-size:12px;padding:6px 14px;cursor:pointer;font-family:var(--font)}
+.app-body{flex:1;padding:20px;padding-bottom:max(20px,calc(80px + env(safe-area-inset-bottom)));overflow-y:auto}
+.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--white);border-top:1px solid var(--border);display:flex;padding:6px 0;padding-bottom:max(6px,env(safe-area-inset-bottom));z-index:10;box-shadow:0 -2px 10px rgba(0,0,0,0.04)}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;background:none;border:none;color:var(--text3);font-size:10px;font-weight:600;font-family:var(--font);cursor:pointer}.nav-tab.active{color:var(--navy)}.nav-tab-icon{font-size:22px}
+.screen{display:none}.screen.active{display:block;animation:fadeUp .25s ease}@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100dvh;padding:24px;background:linear-gradient(160deg,var(--navy-d),var(--navy),var(--navy-l))}
+.login-box{width:100%;max-width:360px;background:var(--white);border-radius:20px;padding:40px 28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.login-logo img{height:60px}.login-logo{margin-bottom:20px}.login-title{font-size:13px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:2px;margin-bottom:4px}.login-sub{color:var(--text2);font-size:13px;margin-bottom:28px}
+.input{width:100%;padding:14px 16px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--font);font-size:15px;outline:none;transition:all .2s;margin-bottom:12px}.input::placeholder{color:var(--text3)}.input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,0.1)}
+.btn{width:100%;padding:14px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-family:var(--font);font-size:15px;font-weight:700;cursor:pointer;margin-top:4px}.btn:active{transform:scale(0.98)}.btn:disabled{opacity:.5}.btn-blue{background:var(--blue)}.btn-success{background:var(--success)}.btn-outline{background:transparent;color:var(--text);border:1.5px solid var(--border);margin-top:10px;font-weight:500;font-size:13px}
+.link{color:var(--blue);font-size:13px;cursor:pointer;margin-top:16px;display:inline-block;border:none;background:none;font-family:var(--font);font-weight:500}.error{color:var(--danger);font-size:13px;margin-top:10px;min-height:20px}
+.login-main{display:block}.login-main.hidden{display:none}.reset-wrap{display:none}.reset-wrap.active{display:block}
+.kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}.kpi{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}.kpi.wide{grid-column:span 2}.kpi.accent{background:var(--navy);border-color:var(--navy);color:#fff}.kpi.accent .kpi-label{color:rgba(255,255,255,0.6)}.kpi.accent .kpi-sub{color:rgba(255,255,255,0.5)}.kpi-label{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px}.kpi-val{font-size:28px;font-weight:800;color:var(--navy);line-height:1.1}.kpi.accent .kpi-val{color:#fff}.kpi-sub{font-size:11px;color:var(--text3);margin-top:4px}
+.section-title{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:8px}.section-title::before{content:'';width:3px;height:16px;background:var(--blue);border-radius:2px}
+.date-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.c-card{background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}.c-card:active{background:var(--bg)}.c-info{flex:1;min-width:0}.c-name{font-size:14px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.c-det{font-size:12px;color:var(--text2);margin-top:2px}.c-imp{font-size:15px;font-weight:700;color:var(--navy);white-space:nowrap}
+.badge-sm{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;display:inline-block;margin-top:4px}.badge-ok{background:var(--success-bg);color:var(--success)}
+.form-group{margin-bottom:14px}.form-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;display:block}
+select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%2364748b' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+.success-msg{text-align:center;padding:40px 20px}.success-icon{font-size:48px;margin-bottom:12px}.success-text{font-size:18px;font-weight:700;color:var(--success);margin-bottom:4px}.success-sub{font-size:13px;color:var(--text2)}
+.comp-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)}.comp-mese{font-size:14px;font-weight:600;color:var(--navy)}.comp-cnt{font-size:12px;color:var(--text2)}.comp-val{font-size:15px;font-weight:800;color:var(--blue)}
+.prof-card{background:var(--navy);border-radius:var(--radius);padding:24px 20px;color:#fff;margin-bottom:20px}.prof-name{font-size:20px;font-weight:800;margin-bottom:2px}.prof-email{font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:14px}.prof-badges{display:flex;gap:8px;flex-wrap:wrap}.prof-badge{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.8)}
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}.empty-icon{font-size:40px;margin-bottom:8px}
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:12px 24px;border-radius:12px;font-size:14px;font-weight:600;z-index:100;box-shadow:0 8px 30px rgba(0,0,0,0.2);animation:toastIn .3s ease}@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}}
+</style>
+</head>
+<body>
+<div id="loginView" class="login-wrap"><div class="login-box">
+<div class="login-logo"><img src="avr-logo.jpg" alt="AVR Logistic"></div>
+<div class="login-title">Area Driver</div><div class="login-sub">Accedi per gestire le tue consegne</div>
+<div id="loginMain" class="login-main">
+<input type="email" id="loginEmail" class="input" placeholder="La tua email">
+<input type="password" id="loginPw" class="input" placeholder="Password">
+<button class="btn" onclick="doLogin()">Accedi</button>
+<button class="link" onclick="showReset()">Hai dimenticato la password?</button>
+<div id="loginErr" class="error"></div></div>
+<div id="resetWrap" class="reset-wrap">
+<p style="font-size:14px;color:var(--text2);margin-bottom:16px">Inserisci la tua email e ti invieremo un link per reimpostare la password.</p>
+<input type="email" id="resetEmail" class="input" placeholder="La tua email">
+<button class="btn btn-blue" onclick="doReset()">Invia link di reset</button>
+<button class="btn btn-outline" onclick="hideReset()">← Torna al login</button>
+<div id="resetMsg" class="error"></div></div>
+</div></div>
+
+<div id="appView" class="app" style="display:none">
+<header class="app-header"><div class="header-top">
+<div class="header-logo"><img src="avr-logo.jpg" alt="AVR" style="height:36px;border-radius:6px"><div><div class="header-name" id="driverName">—</div><div class="header-city" id="driverCity">Driver</div></div></div>
+<button class="btn-out" onclick="doLogout()">Esci</button>
+</div></header>
+
+<div class="app-body">
+<div id="tabOggi" class="screen active">
+<div class="kpi-row"><div class="kpi accent"><div class="kpi-label">Oggi</div><div class="kpi-val" id="kOggi">0</div><div class="kpi-sub">consegne</div></div><div class="kpi"><div class="kpi-label">Questo mese</div><div class="kpi-val" id="kMese">0</div><div class="kpi-sub" id="kMeseEuro">€0,00</div></div></div>
+<button class="btn btn-blue" onclick="showTab('nuova')" style="margin-bottom:20px;font-size:16px">+ Registra consegna</button>
+<div class="section-title">Consegne recenti</div><div id="listaOggi"></div></div>
+
+<div id="tabNuova" class="screen">
+<div class="section-title">Nuova consegna</div>
+<div class="form-group"><label class="form-label">Filiale</label><select id="ncFiliale" class="input"><option value="">Seleziona filiale...</option></select></div>
+<div class="form-group"><label class="form-label">Cliente</label><input type="text" id="ncCliente" class="input" placeholder="Cognome cliente"></div>
+<div class="form-group"><label class="form-label">Importo spesa (€)</label><input type="number" id="ncImporto" class="input" placeholder="0.00" step="0.01" inputmode="decimal"></div>
+<div class="form-group"><label class="form-label">Fascia oraria</label><select id="ncFascia" class="input"><option value="10:00">10:00 – 12:00</option><option value="12:00">12:00 – 14:00</option><option value="14:00">14:00 – 16:00</option><option value="16:00">16:00 – 18:00</option><option value="18:00">18:00 – 20:00</option></select></div>
+<div class="form-group"><label class="form-label">Targa furgone</label><input type="text" id="ncTarga" class="input" placeholder="es. GS756LX" style="text-transform:uppercase"></div>
+<div class="form-group"><label class="form-label">Note (opzionale)</label><input type="text" id="ncNote" class="input" placeholder="Problemi, ritardi..."></div>
+<button class="btn btn-success" onclick="salvaConsegna()">✓ Conferma consegna</button>
+<button class="btn btn-outline" onclick="showTab('oggi')">← Annulla</button>
+<div id="successMsg" class="success-msg" style="display:none"><div class="success-icon">✅</div><div class="success-text">Consegna registrata!</div><div class="success-sub" id="successDetail"></div><button class="btn btn-blue" onclick="resetNuova()" style="margin-top:20px">Registra un'altra</button></div></div>
+
+<div id="tabCompensi" class="screen">
+<div class="kpi-row"><div class="kpi accent wide"><div class="kpi-label">Compenso mese corrente</div><div class="kpi-val" id="kCompenso">€0,00</div><div class="kpi-sub" id="kCompDetail">0 consegne × €3,50</div></div></div>
+<div class="section-title">Storico compensi</div><div id="listaCompensi"></div></div>
+
+<div id="tabProfilo" class="screen">
+<div class="prof-card"><div class="prof-name" id="profNome">—</div><div class="prof-email" id="profEmail">—</div><div class="prof-badges"><span class="prof-badge" id="profCitta">—</span><span class="prof-badge" id="profContratto">—</span><span class="prof-badge" id="profCosto">—</span></div></div>
+<div class="section-title">Le mie statistiche</div>
+<div class="kpi-row"><div class="kpi"><div class="kpi-label">Totale consegne</div><div class="kpi-val" id="profTotC">0</div></div><div class="kpi"><div class="kpi-label">Totale guadagnato</div><div class="kpi-val" id="profTotG">€0</div></div></div></div>
+</div>
+
+<nav class="bottom-nav">
+<button class="nav-tab active" onclick="showTab('oggi')" data-tab="oggi"><span class="nav-tab-icon">📦</span>Oggi</button>
+<button class="nav-tab" onclick="showTab('nuova')" data-tab="nuova"><span class="nav-tab-icon">➕</span>Nuova</button>
+<button class="nav-tab" onclick="showTab('compensi')" data-tab="compensi"><span class="nav-tab-icon">💰</span>Compensi</button>
+<button class="nav-tab" onclick="showTab('profilo')" data-tab="profilo"><span class="nav-tab-icon">👤</span>Profilo</button>
+</nav></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({apiKey:"AIzaSyCleejDdWN6w41TcBw4fvyAPr_6rxU8Bgs",authDomain:"avr-logistic-dashboard.firebaseapp.com",projectId:"avr-logistic-dashboard",storageBucket:"avr-logistic-dashboard.firebasestorage.app",messagingSenderId:"323721042739",appId:"1:323721042739:web:a9fa1710eeb8cfe3357c46"});
+var auth=firebase.auth(),db=firebase.firestore(),dp=null,mc=[],cc=3.50,fl=[];
+function doLogin(){var e=document.getElementById('loginEmail').value.trim(),p=document.getElementById('loginPw').value;document.getElementById('loginErr').textContent='';if(!e||!p){document.getElementById('loginErr').textContent='Inserisci email e password';return}auth.signInWithEmailAndPassword(e,p).catch(function(r){var m='Errore di accesso';if(r.code==='auth/user-not-found'||r.code==='auth/wrong-password'||r.code==='auth/invalid-credential')m='Email o password non validi';if(r.code==='auth/too-many-requests')m='Troppi tentativi';document.getElementById('loginErr').textContent=m})}
+function showReset(){document.getElementById('loginMain').classList.add('hidden');document.getElementById('resetWrap').classList.add('active');document.getElementById('resetEmail').value=document.getElementById('loginEmail').value}
+function hideReset(){document.getElementById('loginMain').classList.remove('hidden');document.getElementById('resetWrap').classList.remove('active')}
+function doReset(){var e=document.getElementById('resetEmail').value.trim(),m=document.getElementById('resetMsg');if(!e){m.textContent='Inserisci la tua email';return}auth.sendPasswordResetEmail(e).then(function(){m.style.color='#16a34a';m.textContent='Email inviata! Controlla la posta.'}).catch(function(r){m.style.color='#dc2626';m.textContent='Errore: '+r.message})}
+function doLogout(){auth.signOut()}
+auth.onAuthStateChanged(function(u){if(u){document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='flex';init(u.email)}else{document.getElementById('loginView').style.display='flex';document.getElementById('appView').style.display='none';dp=null}});
+document.getElementById('loginPw').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin()});
+
+async function init(email){var s=await db.collection('driverAnagrafica').where('email','==',email.toLowerCase()).get();if(!s.empty){dp=s.docs[0].data();dp.id=s.docs[0].id;cc=dp.costoConsegna||3.50}else{dp={cognome:email.split('@')[0].toUpperCase(),nome:'',citta:'??',contratto:'—'}}
+document.getElementById('driverName').textContent=dp.cognome+' '+(dp.nome||'');document.getElementById('driverCity').textContent='Driver — '+cn(dp.citta);
+document.getElementById('profNome').textContent=dp.cognome+' '+(dp.nome||'');document.getElementById('profEmail').textContent=email;document.getElementById('profCitta').textContent=cn(dp.citta);document.getElementById('profContratto').textContent=dp.contratto||'—';document.getElementById('profCosto').textContent='€'+cc.toFixed(2)+'/consegna';
+await loadFl();await loadMc();rOggi();rComp();rProf()}
+
+async function loadFl(){var s=await db.collection('filiali').get();fl=s.docs.map(function(d){return Object.assign({id:d.id},d.data())});var sel=document.getElementById('ncFiliale');sel.innerHTML='<option value="">Seleziona filiale...</option>';var my=fl;if(dp&&dp.citta&&dp.citta!=='??'){var f=fl.filter(function(x){return x.area===dp.citta});if(f.length>0)my=f}my.sort(function(a,b){return(a.codice||0)-(b.codice||0)});my.forEach(function(f){var o=document.createElement('option');o.value=f.codice;o.textContent=f.codice+(f.nome?' — '+f.nome:'')+' ('+(f.area||'')+')';sel.appendChild(o)})}
+
+async function loadMc(){var dn=(dp.cognome||'').toUpperCase();if(!dn)return;try{var s=await db.collection('consegne').where('driver','>=',dn).where('driver','<=',dn+'\uf8ff').orderBy('driver').limit(5000).get();mc=s.docs.map(function(d){var x=d.data();x.id=d.id;if(x.data&&x.data.toDate)x.data=x.data.toDate();return x})}catch(e){mc=[]}
+try{var s2=await db.collection('consegneDriver').where('driverEmail','==',auth.currentUser.email).orderBy('data','desc').limit(500).get();s2.docs.forEach(function(d){var x=d.data();x.id=d.id;x._src='drv';if(x.data&&x.data.toDate)x.data=x.data.toDate();mc.push(x)})}catch(e){}
+mc.sort(function(a,b){var da=a.data instanceof Date?a.data:new Date(a.data);var db2=b.data instanceof Date?b.data:new Date(b.data);return db2-da})}
+
+function rOggi(){var og=new Date().toISOString().slice(0,10),ms=og.substring(0,7);var co=mc.filter(function(c){var d=c.data instanceof Date?c.data.toISOString().slice(0,10):(c.data||'').substring(0,10);return d===og});var cm=mc.filter(function(c){var d=c.data instanceof Date?c.data.toISOString().slice(0,7):(c.data||'').substring(0,7);return d===ms});
+document.getElementById('kOggi').textContent=co.length;document.getElementById('kMese').textContent=cm.length;document.getElementById('kMeseEuro').textContent='€'+(cm.length*cc).toFixed(2).replace('.',',');
+var rec=mc.slice(0,20),el=document.getElementById('listaOggi');if(!rec.length){el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><p>Nessuna consegna ancora</p></div>';return}
+var last='',h='';rec.forEach(function(c){var d=c.data instanceof Date?c.data:new Date(c.data);var ds=d.toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'});if(ds!==last){h+='<div class="date-label">'+ds+'</div>';last=ds}var im=parseFloat(c.importo)||0;var sr=c._src==='drv'?' · 📱':'';h+='<div class="c-card"><div class="c-info"><div class="c-name">'+(c.cliente||'N/D')+'</div><div class="c-det">Fil. '+(c.filiale||'?')+' · '+(c.fascia||'')+sr+'</div></div><div style="text-align:right"><div class="c-imp">€'+im.toFixed(2)+'</div><span class="badge-sm badge-ok">OK</span></div></div>'});el.innerHTML=h}
+
+function rComp(){var mesi={};mc.forEach(function(c){var d=c.data instanceof Date?c.data:new Date(c.data);var m=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');if(!mesi[m])mesi[m]=0;mesi[m]++});var sorted=Object.entries(mesi).sort(function(a,b){return b[0].localeCompare(a[0])});var now=new Date(),mcur=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'),ccur=mesi[mcur]||0;
+document.getElementById('kCompenso').textContent='€'+(ccur*cc).toFixed(2).replace('.',',');document.getElementById('kCompDetail').textContent=ccur+' consegne × €'+cc.toFixed(2);
+var el=document.getElementById('listaCompensi'),mn=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+if(!sorted.length){el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><p>Nessun compenso</p></div>';return}
+el.innerHTML=sorted.map(function(e){var p=e[0].split('-'),l=mn[parseInt(p[1])-1]+' '+p[0],v=e[1]*cc;return'<div class="comp-row"><div><div class="comp-mese">'+l+'</div><div class="comp-cnt">'+e[1]+' consegne</div></div><div class="comp-val">€'+v.toFixed(2)+'</div></div>'}).join('')}
+
+function rProf(){document.getElementById('profTotC').textContent=mc.length;document.getElementById('profTotG').textContent='€'+(mc.length*cc).toFixed(0)}
+
+async function salvaConsegna(){var fil=document.getElementById('ncFiliale').value,cli=document.getElementById('ncCliente').value.trim(),imp=parseFloat(document.getElementById('ncImporto').value)||0,fas=document.getElementById('ncFascia').value,tar=document.getElementById('ncTarga').value.trim().toUpperCase(),note=document.getElementById('ncNote').value.trim();
+if(!fil){showToast('Seleziona la filiale');return}if(!cli){showToast('Inserisci il cliente');return}
+var now=new Date(),fd=fl.find(function(f){return String(f.codice)===fil});
+var rec={filiale:fil,data:firebase.firestore.Timestamp.fromDate(now),mese:now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'),cliente:cli,importo:imp,fascia:fas,targa:tar,note:note,driver:(dp.cognome||'').toUpperCase(),driverEmail:auth.currentUser.email,area:fd?fd.area:(dp.citta||'??'),provincia:fd?fd.area:(dp.citta||'??'),consegnata:true,fonte:'driver_app',registrataAt:firebase.firestore.FieldValue.serverTimestamp()};
+try{await db.collection('consegneDriver').add(rec);await db.collection('consegne').add(rec);document.getElementById('successDetail').textContent=cli+' — Fil. '+fil+' — €'+imp.toFixed(2);document.querySelector('#tabNuova .section-title').style.display='none';document.querySelectorAll('#tabNuova .form-group, #tabNuova .btn').forEach(function(e){e.style.display='none'});document.getElementById('successMsg').style.display='block';await loadMc();rOggi();rComp();rProf()}catch(e){showToast('Errore: '+e.message)}}
+
+function resetNuova(){document.getElementById('ncCliente').value='';document.getElementById('ncImporto').value='';document.getElementById('ncNote').value='';document.getElementById('successMsg').style.display='none';document.querySelector('#tabNuova .section-title').style.display='';document.querySelectorAll('#tabNuova .form-group, #tabNuova .btn').forEach(function(e){e.style.display=''})}
+
+function showTab(n){document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active')});document.getElementById('tab'+n.charAt(0).toUpperCase()+n.slice(1)).classList.add('active');document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===n)});if(n==='oggi')rOggi();if(n==='compensi')rComp();if(n==='profilo')rProf();if(n==='nuova')resetNuova()}
+
+function cn(c){return{CT:'Catania',ME:'Messina',EN:'Enna',SR:'Siracusa',PA:'Palermo'}[c]||c||'—'}
+function showToast(m){var e=document.createElement('div');e.className='toast';e.textContent=m;document.body.appendChild(e);setTimeout(function(){e.style.opacity='0';setTimeout(function(){e.remove()},300)},3000)}
+</script>
+</body></html>
