@@ -86,7 +86,8 @@ function initMeseSelector() {
     state.meseCorrente = sel.value;
 }
 
-function onMeseChange() {
+async function onMeseChange() {
     state.meseCorrente = document.getElementById('meseSelector').value;
+    await loadConsegnePerMese();
     refreshCurrentModule();
 }
