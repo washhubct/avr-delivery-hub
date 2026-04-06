@@ -285,25 +285,36 @@
         <!-- ═══ FATTURAZIONE ═══ -->
         <section id="screen-fatturazione" class="screen" style="display:none">
             <div class="card">
-                <h3 class="card-title">Calcolo fatturato mensile</h3>
-                <p class="card-desc">Calcolo automatico basato sul prezziario AVR Logistic.</p>
+                <h3 class="card-title">Fatturazione per filiale</h3>
+                <p class="card-desc">Formato fattura Fratelli Arena — diviso per filiale con consegne &lt;€250 (€6,90) e ≥€250,01 (€10,00).</p>
                 <div class="kpi-grid" style="margin:16px 0">
-                    <div class="kpi-card"><div class="kpi-label">Consegne ordinarie</div><div class="kpi-value" id="fatOrdinarie">—</div></div>
-                    <div class="kpi-card accent"><div class="kpi-label">Fatturato ordinarie</div><div class="kpi-value" id="fatFattOrdinarie">—</div></div>
-                    <div class="kpi-card"><div class="kpi-label">Consegne speciali</div><div class="kpi-value" id="fatSpeciali">—</div></div>
-                    <div class="kpi-card accent"><div class="kpi-label">Fatturato speciali</div><div class="kpi-value" id="fatFattSpeciali">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Consegne &lt;€250 (×€6,90)</div><div class="kpi-value" id="fatOrdinarie">—</div></div>
+                    <div class="kpi-card accent"><div class="kpi-label">Fatturato &lt;€250</div><div class="kpi-value" id="fatFattOrdinarie">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Consegne ≥€250,01 (×€10)</div><div class="kpi-value" id="fatSpeciali">—</div></div>
+                    <div class="kpi-card accent"><div class="kpi-label">Fatturato ≥€250,01</div><div class="kpi-value" id="fatFattSpeciali">—</div></div>
                 </div>
                 <div class="table-wrap">
                     <table class="data-table">
-                        <thead><tr><th>Area</th><th>Gruppo</th><th>≥€250</th><th>&lt;€250</th><th>Speciali</th><th>Fatt. ord.</th><th>Fatt. spec.</th><th>Totale</th></tr></thead>
+                        <thead><tr>
+                            <th>Filiale</th><th>Area</th>
+                            <th style="text-align:right">&lt;€250</th><th style="text-align:right">Fatt. (×€6,90)</th>
+                            <th style="text-align:right">≥€250,01</th><th style="text-align:right">Fatt. (×€10)</th>
+                            <th style="text-align:right">Tot. consegne</th><th style="text-align:right">Tot. fatturato</th>
+                        </tr></thead>
                         <tbody id="tblFattBody"></tbody>
                         <tfoot><tr class="totals-row">
                             <td colspan="2"><strong>TOTALE</strong></td>
-                            <td id="fatTotMagg"></td><td id="fatTotMin"></td><td id="fatTotSpec"></td><td id="fatTotFattOrd"></td><td id="fatTotFattSpec"></td><td id="fatTotTot"></td>
+                            <td id="fatTotSotto" style="text-align:right"></td>
+                            <td id="fatTotFattSotto" style="text-align:right"></td>
+                            <td id="fatTotSopra" style="text-align:right"></td>
+                            <td id="fatTotFattSopra" style="text-align:right"></td>
+                            <td id="fatTotConsegne" style="text-align:right"></td>
+                            <td id="fatTotTotale" style="text-align:right"></td>
                         </tr></tfoot>
                     </table>
                 </div>
-                <div style="margin-top:16px"><button class="btn btn-primary" onclick="exportFatturazione()">📄 Esporta per Decò</button></div>
+                <div id="fatRiepilogo"></div>
+                <div style="margin-top:16px"><button class="btn btn-primary" onclick="exportFatturazione()">📄 Esporta per fattura</button></div>
             </div>
         </section>
 
