@@ -7,7 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚚</text></svg>">
+    <link rel="icon" href="apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
 </head>
 <body>
     <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
@@ -16,7 +17,7 @@
     <aside id="sidebar" class="sidebar">
         <div class="sidebar-header">
             <div class="logo">
-                <span class="logo-icon">🚚</span>
+                <img src="avr-logo.png" alt="AVR" style="height:36px">
                 <div>
                     <div class="logo-title">DELIVERY HUB</div>
                     <div class="logo-subtitle">AVR Logistic</div>
@@ -97,7 +98,7 @@
         <!-- ═══ LOGIN ═══ -->
         <section id="loginScreen" class="screen login-screen">
             <div class="login-card">
-                <div class="login-logo">🚚</div>
+                <div class="login-logo"><img src="avr-logo.png" alt="AVR Logistic" style="height:60px"></div>
                 <h2>DELIVERY HUB</h2>
                 <p class="login-subtitle">Gestionale Consegne — AVR Logistic</p>
                 <input type="email" id="loginEmail" placeholder="Email" class="input">
@@ -197,17 +198,9 @@
         <section id="screen-anagrafica-driver" class="screen" style="display:none">
             <div class="card">
                 <h3 class="card-title">Anagrafica driver</h3>
-               <div class="toolbar">
-    <button class="btn btn-primary" onclick="openAddDriver()">+ Aggiungi driver</button>
-    <select id="filterDriverCitta" class="input filter-select" onchange="renderAnagraficaDriver()">
-        <option value="">Tutte le città</option>
-        <option value="CT">Catania</option>
-        <option value="ME">Messina</option>
-        <option value="EN">Enna</option>
-        <option value="SR">Siracusa</option>
-        <option value="PA">Palermo</option>
-    </select>
-</div>
+                <div class="toolbar">
+                    <button class="btn btn-primary" onclick="openAddDriver()">+ Aggiungi driver</button>
+                </div>
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr><th>Cognome</th><th>Nome</th><th>Città</th><th>Contratto</th><th>€/consegna</th><th>Stato</th><th>Azioni</th></tr></thead>

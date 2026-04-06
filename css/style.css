@@ -42,7 +42,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:
 .login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - var(--topbar-h));min-height:calc(100dvh - var(--topbar-h));padding:24px;background:radial-gradient(ellipse at 30% 20%,rgba(34,197,94,0.06) 0%,transparent 50%),radial-gradient(ellipse at 70% 80%,rgba(6,182,212,0.04) 0%,transparent 50%)}
 .login-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-xl);padding:48px 40px;width:100%;max-width:400px;box-shadow:var(--shadow-lg),var(--shadow-glow);text-align:center;position:relative;overflow:hidden}
 .login-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gradient-1)}
-.login-logo{width:64px;height:64px;background:var(--gradient-1);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 20px;box-shadow:0 8px 30px rgba(34,197,94,0.25)}
+.login-logo{width:80px;height:80px;background:var(--bg-sidebar);border-radius:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 30px rgba(0,0,0,0.3)}
 .login-card h2{font-size:24px;font-weight:800;letter-spacing:2px;margin-bottom:4px;text-transform:uppercase;background:var(--gradient-1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .login-subtitle{color:var(--text-muted);font-size:14px;margin-bottom:32px}
 .login-card .input{width:100%;margin-bottom:14px;background:var(--bg-input);border-color:var(--border);color:var(--text)}
