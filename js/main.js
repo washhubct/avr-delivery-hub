@@ -16,7 +16,7 @@ async function loadAllData() {
 
 async function loadConsegne() {
     try {
-        const snap = await db.collection('consegne').orderBy('data', 'desc').limit(15000).get();
+      const snap = await db.collection('consegne').orderBy('data', 'desc').limit(10000).get();
         state.consegne = snap.docs.map(doc => {
             const d = doc.data();
             d.id = doc.id;
