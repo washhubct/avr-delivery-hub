@@ -1,20 +1,38 @@
-// DELIVERY HUB v2 — Auth Module with role detection
+// DELIVERY HUB v2 — Auth Module with role levels
+
+var SUPER_ADMIN_EMAILS = [
+    'amministrazione@avrlogisticarl.com'
+];
+
+var STAFF_EMAILS = [
+    'michela@avrlogisticarl.com',
+    'alessandra@avrlogisticarl.com'
+];
+
+function getUserRole(email) {
+    var e = email.toLowerCase();
+    if (SUPER_ADMIN_EMAILS.indexOf(e) >= 0) return 'superadmin';
+    if (STAFF_EMAILS.indexOf(e) >= 0) return 'staff';
+    return 'driver';
+}
 
 function doLogin() {
-    const email = document.getElementById('loginEmail').value.trim();
-    const pw = document.getElementById('loginPassword').value;
-    const errEl = document.getElementById('loginError');
+    var email = document.getElementById('loginEmail').value.trim();
+    var pw = document.getElementById('loginPassword').value;
+    var errEl = document.getElementById('loginError');
     errEl.textContent = '';
     if (!email || !pw) { errEl.textContent = 'Inserisci email e password'; return; }
     document.getElementById('btnLogin').disabled = true;
     document.getElementById('btnLogin').textContent = 'Accesso...';
 
     auth.signInWithEmailAndPassword(email, pw)
-        .catch(err => {
-            errEl.textContent = err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password'
-                ? 'Credenziali non valide' : 'Errore: ' + err.message;
+        .catch(function(err) {
+            var msg = 'Errore di accesso';
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = 'Credenziali non valide';
+            if (err.code === 'auth/too-many-requests') msg = 'Troppi tentativi, riprova tra poco';
+            errEl.textContent = msg;
         })
-        .finally(() => {
+        .finally(function() {
             document.getElementById('btnLogin').disabled = false;
             document.getElementById('btnLogin').textContent = 'Accedi';
         });
@@ -23,30 +41,41 @@ function doLogin() {
 function doLogout() { auth.signOut(); }
 
 function initAuth() {
-    auth.onAuthStateChanged(async user => {
+    auth.onAuthStateChanged(async function(user) {
         state.user = user;
         if (user) {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('sidebar').style.display = 'flex';
 
-            // Detect role
-            const isAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
-            state.userRole = isAdmin ? 'admin' : 'driver';
+            var role = getUserRole(user.email);
+            state.userRole = role;
 
-            if (isAdmin) {
+            if (role === 'superadmin' || role === 'staff') {
                 document.getElementById('navAdmin').style.display = 'block';
                 document.getElementById('navDriver').style.display = 'none';
-                document.getElementById('userName').textContent = 'Admin';
-                document.getElementById('userRole').textContent = user.email;
+
+                var adminOnlyItems = document.querySelectorAll('.nav-superadmin');
+                adminOnlyItems.forEach(function(el) {
+                    el.style.display = role === 'superadmin' ? 'block' : 'none';
+                });
+
+                if (role === 'superadmin') {
+                    document.getElementById('userName').textContent = 'Amministratore';
+                    document.getElementById('userRole').textContent = user.email;
+                } else {
+                    var name = user.email.split('@')[0];
+                    name = name.charAt(0).toUpperCase() + name.slice(1);
+                    document.getElementById('userName').textContent = name;
+                    document.getElementById('userRole').textContent = 'Staff';
+                }
             } else {
                 document.getElementById('navAdmin').style.display = 'none';
                 document.getElementById('navDriver').style.display = 'block';
-                // Find driver profile by email
-                const driverDoc = await db.collection('driverAnagrafica').where('email', '==', user.email).get();
+                var driverDoc = await db.collection('driverAnagrafica').where('email', '==', user.email).get();
                 if (!driverDoc.empty) {
                     state.driverProfile = { id: driverDoc.docs[0].id, ...driverDoc.docs[0].data() };
-                    document.getElementById('userName').textContent = `${state.driverProfile.cognome} ${state.driverProfile.nome}`;
-                    document.getElementById('userRole').textContent = `Driver — ${state.aree[state.driverProfile.citta]?.nome || state.driverProfile.citta}`;
+                    document.getElementById('userName').textContent = state.driverProfile.cognome + ' ' + state.driverProfile.nome;
+                    document.getElementById('userRole').textContent = 'Driver — ' + (state.aree[state.driverProfile.citta] ? state.aree[state.driverProfile.citta].nome : state.driverProfile.citta);
                 } else {
                     document.getElementById('userName').textContent = user.email;
                     document.getElementById('userRole').textContent = 'Driver';
@@ -55,30 +84,37 @@ function initAuth() {
 
             initMeseSelector();
             await loadAllData();
-            navigateTo(isAdmin ? 'dashboard' : 'driver-consegne');
+
+            if (role === 'superadmin') {
+                navigateTo('dashboard');
+            } else if (role === 'staff') {
+                navigateTo('consegne');
+            } else {
+                navigateTo('driver-consegne');
+            }
         } else {
             document.getElementById('loginScreen').style.display = 'flex';
             document.getElementById('sidebar').style.display = 'none';
-            document.querySelectorAll('.screen').forEach(s => {
+            document.querySelectorAll('.screen').forEach(function(s) {
                 if (s.id !== 'loginScreen') s.style.display = 'none';
             });
         }
     });
 
-    document.getElementById('loginPassword').addEventListener('keydown', e => {
+    document.getElementById('loginPassword').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') doLogin();
     });
 }
 
 function initMeseSelector() {
-    const sel = document.getElementById('meseSelector');
+    var sel = document.getElementById('meseSelector');
     sel.innerHTML = '';
-    const mesi = getMesiOptions();
-    const now = new Date();
-    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const def = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
-    mesi.forEach(m => {
-        const opt = document.createElement('option');
+    var mesi = getMesiOptions();
+    var now = new Date();
+    var prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    var def = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
+    mesi.forEach(function(m) {
+        var opt = document.createElement('option');
         opt.value = m.value; opt.textContent = m.label;
         if (m.value === def) opt.selected = true;
         sel.appendChild(opt);
