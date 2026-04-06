@@ -1,149 +1,187 @@
-// DELIVERY HUB — Fatturazione Module
+// DELIVERY HUB v2 — Fatturazione per Filiale (formato fattura Fratelli Arena)
 
 function renderFatturazione() {
-    const mese = state.meseCorrente;
-    const consegneMese = state.consegne.filter(c => meseFromDate(c.data) === mese);
+    var mese = state.meseCorrente;
+    if (!mese) return;
+    var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
 
-    // Calcoli globali
-    let totOrdinarie = 0, totSpeciali = 0;
-    let fattOrdinarie = 0, fattSpeciali = 0;
-
-    // Per area
-    const areeOrdine = ['CT', 'EN', 'ME', 'SR', 'PA'];
-    const areeData = {};
-    areeOrdine.forEach(a => {
-        areeData[a] = { maggiori: 0, minori: 0, speciali: 0, fattOrd: 0, fattSpec: 0 };
-    });
-
-    consegneMese.forEach(c => {
-        const area = c.area || areaFromProvincia(c.provincia);
-        if (!areeData[area]) areeData[area] = { maggiori: 0, minori: 0, speciali: 0, fattOrd: 0, fattSpec: 0 };
-
-        const prezzo = calcolaPrezzo(c.importo);
-        const tipo = classificaConsegna(c.importo);
-
-        if (tipo === 'speciale') {
-            totSpeciali++;
-            fattSpeciali += prezzo;
-            areeData[area].speciali++;
-            areeData[area].fattSpec += prezzo;
-            areeData[area].maggiori++;
+    // Raggruppa per filiale
+    var filialiData = {};
+    cm.forEach(function(c) {
+        var fil = String(c.filiale || '?').replace(/\.0$/, '');
+        if (!filialiData[fil]) {
+            filialiData[fil] = { 
+                filiale: fil, 
+                area: c.area || c.provincia || '?',
+                sotto250: 0,    // consegne con importo < 250.01 (a €6,90)
+                sopra250: 0     // consegne con importo >= 250.01 (a €10,00)
+            };
+        }
+        var importo = parseFloat(c.importo) || 0;
+        if (importo >= 250.01) {
+            filialiData[fil].sopra250++;
         } else {
-            totOrdinarie++;
-            fattOrdinarie += prezzo;
-            if (isConsegnaMaggiore(c.importo)) {
-                areeData[area].maggiori++;
-            } else {
-                areeData[area].minori++;
-            }
-            areeData[area].fattOrd += prezzo;
+            filialiData[fil].sotto250++;
         }
     });
 
-    // KPI
-    document.getElementById('fatOrdinarie').textContent = formatNumber(totOrdinarie);
-    document.getElementById('fatFattOrdinarie').textContent = formatCurrency(fattOrdinarie);
-    document.getElementById('fatSpeciali').textContent = formatNumber(totSpeciali);
-    document.getElementById('fatFattSpeciali').textContent = formatCurrency(fattSpeciali);
-
-    // Tabella per area
-    const tbody = document.getElementById('tblFattBody');
-    let html = '';
-    let tMagg = 0, tMin = 0, tSpec = 0, tFOrd = 0, tFSpec = 0, tTot = 0;
-
-    areeOrdine.forEach(area => {
-        const d = areeData[area];
-        const gruppo = state.aree[area]?.gruppo || '—';
-        const totArea = d.fattOrd + d.fattSpec;
-
-        tMagg += d.maggiori;
-        tMin += d.minori;
-        tSpec += d.speciali;
-        tFOrd += d.fattOrd;
-        tFSpec += d.fattSpec;
-        tTot += totArea;
-
-        html += `<tr>
-            <td><strong>${area}</strong> — ${state.aree[area]?.nome || area}</td>
-            <td>${gruppo}</td>
-            <td>${d.maggiori}</td>
-            <td>${d.minori}</td>
-            <td>${d.speciali}</td>
-            <td style="text-align:right">${formatCurrency(d.fattOrd)}</td>
-            <td style="text-align:right">${formatCurrency(d.fattSpec)}</td>
-            <td style="text-align:right"><strong>${formatCurrency(totArea)}</strong></td>
-        </tr>`;
+    // Ordina per area poi per codice filiale
+    var areeOrdine = ['CT', 'EN', 'ME', 'SR', 'PA'];
+    var righe = Object.values(filialiData).sort(function(a, b) {
+        var idxA = areeOrdine.indexOf(a.area);
+        var idxB = areeOrdine.indexOf(b.area);
+        if (idxA === -1) idxA = 99;
+        if (idxB === -1) idxB = 99;
+        if (idxA !== idxB) return idxA - idxB;
+        return parseInt(a.filiale) - parseInt(b.filiale);
     });
 
-    tbody.innerHTML = html;
-    document.getElementById('fatTotMagg').textContent = tMagg;
-    document.getElementById('fatTotMin').textContent = tMin;
-    document.getElementById('fatTotSpec').textContent = tSpec;
-    document.getElementById('fatTotFattOrd').textContent = formatCurrency(tFOrd);
-    document.getElementById('fatTotFattSpec').textContent = formatCurrency(tFSpec);
-    document.getElementById('fatTotTot').innerHTML = `<strong>${formatCurrency(tTot)}</strong>`;
+    // Calcola totali
+    var totSotto = 0, totSopra = 0, totFattSotto = 0, totFattSopra = 0;
+    righe.forEach(function(r) {
+        r.fattSotto = r.sotto250 * 6.90;
+        r.fattSopra = r.sopra250 * 10.00;
+        r.fattTotale = r.fattSotto + r.fattSopra;
+        r.consegneTotale = r.sotto250 + r.sopra250;
+        totSotto += r.sotto250;
+        totSopra += r.sopra250;
+        totFattSotto += r.fattSotto;
+        totFattSopra += r.fattSopra;
+    });
+
+    var totImponibile = totFattSotto + totFattSopra;
+    var iva = totImponibile * 0.22;
+    var totLordo = totImponibile + iva;
+
+    // KPI
+    document.getElementById('fatOrdinarie').textContent = formatNumber(totSotto);
+    document.getElementById('fatFattOrdinarie').textContent = formatCurrency(totFattSotto);
+    document.getElementById('fatSpeciali').textContent = formatNumber(totSopra);
+    document.getElementById('fatFattSpeciali').textContent = formatCurrency(totFattSopra);
+
+    // Tabella per filiale
+    var lastArea = '';
+    var html = '';
+    righe.forEach(function(r) {
+        // Riga separatore area
+        if (r.area !== lastArea) {
+            var areaName = state.aree[r.area] ? state.aree[r.area].nome : r.area;
+            var gruppo = state.aree[r.area] ? state.aree[r.area].gruppo : '';
+            html += '<tr style="background:rgba(34,197,94,0.05)"><td colspan="8" style="padding:10px 12px;font-weight:700;color:var(--accent);font-size:13px;text-transform:uppercase;letter-spacing:1px">' + r.area + ' — ' + areaName + '<span style="font-weight:400;color:var(--text-muted);margin-left:8px;font-size:11px;letter-spacing:0">' + gruppo + '</span></td></tr>';
+            lastArea = r.area;
+        }
+
+        html += '<tr>' +
+            '<td><strong>FILIALE ' + r.filiale + '</strong></td>' +
+            '<td style="text-align:center">' + r.area + '</td>' +
+            '<td style="text-align:right">' + r.sotto250 + '</td>' +
+            '<td style="text-align:right">' + formatCurrency(r.fattSotto) + '</td>' +
+            '<td style="text-align:right">' + r.sopra250 + '</td>' +
+            '<td style="text-align:right">' + formatCurrency(r.fattSopra) + '</td>' +
+            '<td style="text-align:right"><strong>' + r.consegneTotale + '</strong></td>' +
+            '<td style="text-align:right"><strong>' + formatCurrency(r.fattTotale) + '</strong></td>' +
+        '</tr>';
+    });
+
+    document.getElementById('tblFattBody').innerHTML = html;
+
+    // Totali footer
+    document.getElementById('fatTotSotto').textContent = totSotto;
+    document.getElementById('fatTotFattSotto').textContent = formatCurrency(totFattSotto);
+    document.getElementById('fatTotSopra').textContent = totSopra;
+    document.getElementById('fatTotFattSopra').textContent = formatCurrency(totFattSopra);
+    document.getElementById('fatTotConsegne').innerHTML = '<strong>' + (totSotto + totSopra) + '</strong>';
+    document.getElementById('fatTotTotale').innerHTML = '<strong>' + formatCurrency(totImponibile) + '</strong>';
+
+    // Riepilogo fattura
+    document.getElementById('fatRiepilogo').innerHTML = 
+        '<div style="margin-top:20px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px">' +
+            '<h4 style="margin-bottom:12px;color:var(--text)">Riepilogo Fattura</h4>' +
+            '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">' +
+                '<span style="color:var(--text-muted)">Totale imponibile</span>' +
+                '<span style="font-weight:600">' + formatCurrency(totImponibile) + '</span>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">' +
+                '<span style="color:var(--text-muted)">IVA 22%</span>' +
+                '<span style="font-weight:600">' + formatCurrency(iva) + '</span>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;padding:12px 0;font-size:18px">' +
+                '<span style="font-weight:700;color:var(--accent)">Totale da pagare</span>' +
+                '<span style="font-weight:800;color:var(--accent)">' + formatCurrency(totLordo) + '</span>' +
+            '</div>' +
+        '</div>';
 }
 
 function exportFatturazione() {
-    const mese = state.meseCorrente;
-    const consegneMese = state.consegne.filter(c => meseFromDate(c.data) === mese);
+    var mese = state.meseCorrente;
+    var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
+    if (cm.length === 0) { toast('Nessun dato', 'warning'); return; }
 
-    if (consegneMese.length === 0) {
-        toast('Nessun dato per questo mese', 'warning');
-        return;
-    }
-
-    // Build export data similar to Decò format
-    const areeOrdine = ['CT', 'EN', 'ME', 'SR', 'PA'];
-    const rows = [
-        ['RIEPILOGO FATTURAZIONE — ' + meseLabel(mese)],
-        [],
-        ['AREA', 'FILIALE', '≥€250', '<€250', 'CONSEGNE SPECIALI', 'FATT. ORDINARIE', 'FATT. SPECIALI', 'TOTALE']
-    ];
-
-    areeOrdine.forEach(area => {
-        // Get filiali for this area
-        const filialiArea = {};
-        consegneMese.forEach(c => {
-            const a = c.area || areaFromProvincia(c.provincia);
-            if (a !== area) return;
-            const fil = String(c.filiale || '???');
-            if (!filialiArea[fil]) filialiArea[fil] = { magg: 0, min: 0, spec: 0, fattOrd: 0, fattSpec: 0 };
-            
-            const prezzo = calcolaPrezzo(c.importo);
-            const tipo = classificaConsegna(c.importo);
-            
-            if (tipo === 'speciale') {
-                filialiArea[fil].spec++;
-                filialiArea[fil].fattSpec += prezzo;
-                filialiArea[fil].magg++;
-            } else if (isConsegnaMaggiore(c.importo)) {
-                filialiArea[fil].magg++;
-                filialiArea[fil].fattOrd += prezzo;
-            } else {
-                filialiArea[fil].min++;
-                filialiArea[fil].fattOrd += prezzo;
-            }
-        });
-
-        if (Object.keys(filialiArea).length === 0) return;
-
-        rows.push([area + ' — ' + (state.aree[area]?.nome || '')]);
-
-        Object.entries(filialiArea).sort((a,b) => a[0].localeCompare(b[0])).forEach(([fil, d]) => {
-            rows.push([
-                '', fil, d.magg, d.min, d.spec,
-                d.fattOrd.toFixed(2), d.fattSpec.toFixed(2),
-                (d.fattOrd + d.fattSpec).toFixed(2)
-            ]);
-        });
-        rows.push([]);
+    // Raggruppa per filiale
+    var filialiData = {};
+    cm.forEach(function(c) {
+        var fil = String(c.filiale || '?').replace(/\.0$/, '');
+        if (!filialiData[fil]) {
+            filialiData[fil] = { filiale: fil, area: c.area || '?', sotto250: 0, sopra250: 0 };
+        }
+        var importo = parseFloat(c.importo) || 0;
+        if (importo >= 250.01) {
+            filialiData[fil].sopra250++;
+        } else {
+            filialiData[fil].sotto250++;
+        }
     });
 
-    // Generate xlsx
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, 'Fatturazione');
-    XLSX.writeFile(wb, `fatturazione_${mese}.xlsx`);
-    toast('File scaricato: fatturazione_' + mese + '.xlsx', 'success');
+    var areeOrdine = ['CT', 'EN', 'ME', 'SR', 'PA'];
+    var righe = Object.values(filialiData).sort(function(a, b) {
+        var idxA = areeOrdine.indexOf(a.area); if (idxA === -1) idxA = 99;
+        var idxB = areeOrdine.indexOf(b.area); if (idxB === -1) idxB = 99;
+        if (idxA !== idxB) return idxA - idxB;
+        return parseInt(a.filiale) - parseInt(b.filiale);
+    });
+
+    var rows = [
+        ['FATTURAZIONE — ' + meseLabel(mese)],
+        ['Formato fattura Fratelli Arena / Palermo Retail'],
+        [],
+        ['Prodotto', 'Quantità', 'Prezzo unitario', 'Importo (netto)', 'IVA']
+    ];
+
+    var totImponibile = 0;
+    righe.forEach(function(r) {
+        // Riga consegne < 250
+        if (r.sotto250 > 0) {
+            var netto1 = r.sotto250 * 6.90;
+            rows.push(['FILIALE ' + r.filiale, r.sotto250, '6,90', netto1.toFixed(2), '22%']);
+            totImponibile += netto1;
+        }
+        // Riga consegne >= 250.01
+        if (r.sopra250 > 0) {
+            var netto2 = r.sopra250 * 10.00;
+            rows.push(['FILIALE ' + r.filiale + ' CONSEGNE 250,01', r.sopra250, '10,00', netto2.toFixed(2), '22%']);
+            totImponibile += netto2;
+        }
+    });
+
+    var iva = totImponibile * 0.22;
+    rows.push([]);
+    rows.push(['Totale imponibile', '', '', totImponibile.toFixed(2), '']);
+    rows.push(['IVA 22%', '', '', iva.toFixed(2), '']);
+    rows.push(['TOTALE DA PAGARE', '', '', (totImponibile + iva).toFixed(2), '']);
+
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    
+    // Imposta larghezza colonne
+    ws['!cols'] = [
+        { wch: 35 },
+        { wch: 12 },
+        { wch: 15 },
+        { wch: 18 },
+        { wch: 8 }
+    ];
+    
+    XLSX.utils.book_append_sheet(wb, ws, 'Fattura');
+    XLSX.writeFile(wb, 'fattura_' + mese + '.xlsx');
+    toast('File fattura scaricato', 'success');
 }
