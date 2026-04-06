@@ -9,6 +9,7 @@ const MODULE_TITLES = {
     filiali: 'Filiali',
     riconciliazione: 'Riconciliazione',
     fatturazione: 'Fatturazione',
+    'report-finanziario': 'Report Finanziario',
     import: 'Importa dati',
     'driver-consegne': 'Le mie consegne',
     'driver-compensi': 'I miei compensi',
@@ -38,6 +39,7 @@ function refreshCurrentModule() {
         case 'danni': renderDanni(); break;
         case 'filiali': renderFiliali(); break;
         case 'fatturazione': renderFatturazione(); break;
+        case 'report-finanziario': renderReportFinanziario(); break;
         case 'driver-consegne': renderDriverConsegne(); break;
         case 'driver-compensi': renderDriverCompensi(); break;
     }
