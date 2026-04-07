@@ -1,8 +1,9 @@
-// DELIVERY HUB v2 — Compensi Driver (con supporto rate danni)
+// DELIVERY HUB v2 — Compensi Driver (con ricerca e rate danni)
 
 function renderCompensi() {
     var mese = state.meseCorrente;
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
+    var searchTerm = document.getElementById('searchCompensi') ? document.getElementById('searchCompensi').value.toUpperCase().trim() : '';
 
     var driverData = {};
     cm.forEach(function(c) {
@@ -22,7 +23,6 @@ function renderCompensi() {
         var citta = anagrafica ? anagrafica.citta : '—';
         var lordo = data.count * costo;
 
-        // Usa calcolaDanniMese che supporta le rate
         var danniDriver = typeof calcolaDanniMese === 'function' ? calcolaDanniMese(drv, mese) : 0;
 
         var netto = lordo - danniDriver;
@@ -35,6 +35,10 @@ function renderCompensi() {
     });
 
     rows.sort(function(a, b) { return b.count - a.count; });
+
+    if (searchTerm) {
+        rows = rows.filter(function(r) { return r.drv.toUpperCase().indexOf(searchTerm) >= 0; });
+    }
 
     document.getElementById('compTotale').textContent = formatCurrency(totLordo);
     document.getElementById('compDanni').textContent = formatCurrency(totDanni);
@@ -49,7 +53,7 @@ function renderCompensi() {
             '<td style="color:' + (r.danni > 0 ? 'var(--danger)' : 'var(--text-muted)') + '">' + (r.danni > 0 ? '-' + formatCurrency(r.danni) : '—') + '</td>' +
             '<td><strong>' + formatCurrency(r.netto) + '</strong></td>' +
         '</tr>';
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Nessun dato per questo mese</td></tr>';
+    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Nessun risultato</td></tr>';
 
     document.getElementById('compTotConsegne').textContent = totConsegne;
     document.getElementById('compTotLordo').textContent = formatCurrency(totLordo);
