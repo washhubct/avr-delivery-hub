@@ -202,6 +202,7 @@
             <div class="card">
                 <h3 class="card-title">Anagrafica driver</h3>
                 <div class="toolbar">
+                    <input type="text" id="searchAnagrafica" class="input search-input" placeholder="Cerca driver per nome o cognome..." oninput="renderAnagraficaDriver()">
                     <button class="btn btn-primary" onclick="openAddDriver()">+ Aggiungi driver</button>
                 </div>
                 <div class="table-wrap">
@@ -222,6 +223,9 @@
                     <div class="kpi-card"><div class="kpi-label">Totale compensi</div><div class="kpi-value" id="compTotale">—</div></div>
                     <div class="kpi-card"><div class="kpi-label">Totale danni</div><div class="kpi-value" id="compDanni">—</div></div>
                     <div class="kpi-card accent"><div class="kpi-label">Netto da pagare</div><div class="kpi-value" id="compNetto">—</div></div>
+                </div>
+                <div class="toolbar">
+                    <input type="text" id="searchCompensi" class="input search-input" placeholder="Cerca driver..." oninput="renderCompensi()">
                 </div>
                 <div class="table-wrap">
                     <table class="data-table">
