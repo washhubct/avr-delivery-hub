@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>DELIVERY HUB — AVR Logistic</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="apple-touch-icon.png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -52,7 +52,7 @@
                     <span class="nav-icon">💰</span> Compensi
                 </a>
                 <a class="nav-item" data-module="danni" onclick="navigateTo('danni')">
-                   <span class="nav-icon">🔧</span> Multe / Danni
+                    <span class="nav-icon">🔧</span> Danni / Furgoni
                 </a>
                 <a class="nav-item" data-module="filiali" onclick="navigateTo('filiali')">
                     <span class="nav-icon">🏪</span> Filiali
@@ -218,7 +218,6 @@
             <div class="card">
                 <h3 class="card-title">Compensi driver — riepilogo mensile</h3>
                 <p class="card-desc">Calcolo automatico: consegne × €3,50 netti per ogni driver, con detrazione danni.</p>
-                <div class="toolbar"><input type="text" id="searchCompensi" class="input search-input" placeholder="Cerca driver..." oninput="renderCompensi()"></div>
                 <div class="kpi-grid" style="margin:16px 0">
                     <div class="kpi-card"><div class="kpi-label">Totale compensi</div><div class="kpi-value" id="compTotale">—</div></div>
                     <div class="kpi-card"><div class="kpi-label">Totale danni</div><div class="kpi-value" id="compDanni">—</div></div>
@@ -245,7 +244,7 @@
         <!-- ═══ DANNI / FURGONI ═══ -->
         <section id="screen-danni" class="screen" style="display:none">
             <div class="card">
-                <h3 class="card-title">Registro multe e danni</h3>
+                <h3 class="card-title">Registro danni</h3>
                 <p class="card-desc">Gestisci danni ai furgoni. Gli importi vengono detratti automaticamente dal compenso del driver responsabile.</p>
                 <div class="toolbar">
                     <button class="btn btn-primary" onclick="openAddDanno()">+ Registra danno</button>
