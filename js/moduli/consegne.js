@@ -42,11 +42,26 @@ function getFilteredConsegne() {
     const search = (document.getElementById('searchConsegne')?.value || '').toLowerCase();
     const filterArea = document.getElementById('filterArea')?.value || '';
     const filterFiliale = document.getElementById('filterFiliale')?.value || '';
+    const dataDa = document.getElementById('filterDataDa')?.value || '';
+    const dataA = document.getElementById('filterDataA')?.value || '';
+
+    // Parse date filters
+    var dataDaObj = dataDa ? new Date(dataDa + 'T00:00:00') : null;
+    var dataAObj = dataA ? new Date(dataA + 'T23:59:59') : null;
 
     var result = state.consegne.filter(c => {
-        // Month filter
-        const m = meseFromDate(c.data);
-        if (m !== mese) return false;
+        // Month filter (skip if date range is set)
+        if (!dataDa && !dataA) {
+            const m = meseFromDate(c.data);
+            if (m !== mese) return false;
+        }
+
+        // Date range filter
+        if (dataDaObj || dataAObj) {
+            var cDate = c.data instanceof Date ? c.data : new Date(c.data);
+            if (dataDaObj && cDate < dataDaObj) return false;
+            if (dataAObj && cDate > dataAObj) return false;
+        }
 
         // Area filter
         if (filterArea) {
@@ -74,6 +89,12 @@ function getFilteredConsegne() {
     });
 
     return result;
+}
+
+function resetDateFilter() {
+    document.getElementById('filterDataDa').value = '';
+    document.getElementById('filterDataA').value = '';
+    filterConsegne();
 }
 
 function updateFilialeFilter() {
