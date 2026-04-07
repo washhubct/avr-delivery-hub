@@ -116,7 +116,8 @@ function calcolaRata() {
             var d = new Date(now.getFullYear(), now.getMonth() + i, 1);
             mesi.push(mn[d.getMonth()] + ' ' + d.getFullYear());
         }
-        document.getElementById('rataDettaglio').textContent = 'Detratto da: ' + mesi.join(', ');
+        var detEl = document.getElementById('rataDettaglio');
+        if (detEl) detEl.textContent = 'Detratto da: ' + mesi.join(', ');
     } else {
         preview.style.display = 'none';
     }
