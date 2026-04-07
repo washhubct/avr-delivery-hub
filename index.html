@@ -54,6 +54,12 @@
                 <a class="nav-item" data-module="danni" onclick="navigateTo('danni')">
                     <span class="nav-icon">🔧</span> Danni / Furgoni
                 </a>
+                <a class="nav-item" data-module="ritorni" onclick="navigateTo('ritorni')">
+                    <span class="nav-icon">🔄</span> Ritorni
+                </a>
+                <a class="nav-item" data-module="segnalazioni" onclick="navigateTo('segnalazioni')">
+                    <span class="nav-icon">⚠️</span> Segnalazioni
+                </a>
                 <a class="nav-item" data-module="filiali" onclick="navigateTo('filiali')">
                     <span class="nav-icon">🏪</span> Filiali
                 </a>
@@ -267,6 +273,80 @@
                     <table class="data-table">
                         <thead><tr><th>Data</th><th>Driver</th><th>Targa</th><th>Descrizione</th><th>Importo</th><th>Stato</th><th>Azioni</th></tr></thead>
                         <tbody id="tblDanni"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ RITORNI ═══ -->
+        <section id="screen-ritorni" class="screen" style="display:none">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Ritorni mese</div>
+                    <div class="kpi-value" id="rtTotRitorni">—</div>
+                </div>
+                <div class="kpi-card accent">
+                    <div class="kpi-label">Da fatturare (×€6,90)</div>
+                    <div class="kpi-value" id="rtTotFattura">—</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Costo driver</div>
+                    <div class="kpi-value" id="rtTotCostoDriver">—</div>
+                </div>
+                <div class="kpi-card accent">
+                    <div class="kpi-label">Margine ritorni</div>
+                    <div class="kpi-value" id="rtTotMargine">—</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3 class="card-title">Registro ritorni</h3>
+                <div class="toolbar">
+                    <input type="text" id="searchRitorni" class="input search-input" placeholder="Cerca driver, filiale, cliente..." oninput="renderRitorni()">
+                    <select id="filterRitorniStato" class="input filter-select" onchange="renderRitorni()">
+                        <option value="">Tutti gli stati</option>
+                        <option value="da_fatturare">Da fatturare</option>
+                        <option value="fatturato">Fatturato</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Data</th><th>Driver</th><th>Filiale</th><th>Motivo</th><th>N°</th><th>Cliente</th><th>Fattura (€6,90)</th><th>Stato</th><th>Azioni</th>
+                        </tr></thead>
+                        <tbody id="tblRitorni"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ SEGNALAZIONI ═══ -->
+        <section id="screen-segnalazioni" class="screen" style="display:none">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Segnalazioni aperte</div>
+                    <div class="kpi-value" id="segAperte">—</div>
+                </div>
+                <div class="kpi-card accent">
+                    <div class="kpi-label">Risolte questo mese</div>
+                    <div class="kpi-value" id="segRisolte">—</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3 class="card-title">Segnalazioni driver</h3>
+                <div class="toolbar">
+                    <input type="text" id="searchSegnalazioni" class="input search-input" placeholder="Cerca driver, filiale..." oninput="renderSegnalazioniAdmin()">
+                    <select id="filterSegStato" class="input filter-select" onchange="renderSegnalazioniAdmin()">
+                        <option value="">Tutti gli stati</option>
+                        <option value="aperta">Aperte</option>
+                        <option value="risolta">Risolte</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Data</th><th>Driver</th><th>Tipo</th><th>Filiale</th><th>Descrizione</th><th>Stato</th><th>Azioni</th>
+                        </tr></thead>
+                        <tbody id="tblSegnalazioni"></tbody>
                     </table>
                 </div>
             </div>
@@ -546,6 +626,8 @@
     <script src="js/moduli/anagrafica-driver.js"></script>
     <script src="js/moduli/compensi.js"></script>
     <script src="js/moduli/danni.js"></script>
+    <script src="js/moduli/ritorni.js"></script>
+    <script src="js/moduli/segnalazioni-admin.js"></script>
     <script src="js/moduli/filiali.js"></script>
     <script src="js/moduli/riconciliazione.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
