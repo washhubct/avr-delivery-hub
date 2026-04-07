@@ -98,10 +98,12 @@ function openAddDanno() {
 }
 
 function calcolaRata() {
-    var importo = parseFloat(document.getElementById('danImporto').value) || 0;
-    var numRate = parseInt(document.getElementById('danRate').value) || 1;
+    var importoEl = document.getElementById('danImporto');
+    var rateEl = document.getElementById('danRate');
     var preview = document.getElementById('rataPreview');
-
+    if (!importoEl || !rateEl || !preview) return;
+    var importo = parseFloat(importoEl.value) || 0;
+    var numRate = parseInt(rateEl.value) || 1;
     if (numRate > 1 && importo > 0) {
         var rata = Math.ceil((importo / numRate) * 100) / 100;
         preview.style.display = 'block';
