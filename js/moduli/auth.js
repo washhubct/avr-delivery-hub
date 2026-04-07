@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Auth Module with role levels
+// DELIVERY HUB v2 — Auth Module with roles + auto-logout a mezzanotte
 
 var SUPER_ADMIN_EMAILS = [
     'amministrazione@avrlogisticarl.com'
@@ -92,6 +92,13 @@ function initAuth() {
             } else {
                 navigateTo('driver-consegne');
             }
+
+            // Auto-logout a mezzanotte
+            var now = new Date();
+            var midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+            var msToMidnight = midnight - now;
+            setTimeout(function() { auth.signOut(); location.reload(); }, msToMidnight);
+
         } else {
             document.getElementById('loginScreen').style.display = 'flex';
             document.getElementById('sidebar').style.display = 'none';
