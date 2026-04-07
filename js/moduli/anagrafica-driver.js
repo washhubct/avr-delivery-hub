@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Anagrafica Driver (con ricerca)
+// DELIVERY HUB v2 — Anagrafica Driver (con ricerca + creazione accesso app)
 
 function renderAnagraficaDriver() {
     const tbody = document.getElementById('tblAnagraficaDriver');
@@ -54,8 +54,11 @@ function openAddDriver() {
             </select>
         </div>
         <div class="form-group"><label>€ per consegna</label><input type="number" id="drCosto" class="input" value="3.50" step="0.10"></div>
-        <div class="form-group"><label>Email (per accesso driver app)</label><input type="email" id="drEmail" class="input" placeholder="opzionale"></div>
-        <button class="btn btn-primary" onclick="saveDriver()" style="width:100%;margin-top:8px">Salva</button>
+        <div class="form-group"><label>Email (per accesso driver app)</label><input type="email" id="drEmail" class="input" placeholder="obbligatoria per accesso app"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-primary" onclick="saveDriverAndCreateAccess()" style="flex:1">Salva + Crea accesso app</button>
+        </div>
+        <button class="btn" onclick="saveDriver()" style="width:100%;margin-top:6px">Salva senza accesso app</button>
     `);
 }
 
@@ -84,6 +87,36 @@ async function saveDriver(editId) {
     } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
 
+async function saveDriverAndCreateAccess() {
+    var email = document.getElementById('drEmail')?.value.trim().toLowerCase();
+    if (!email) { toast('Inserisci l\'email per creare l\'accesso app', 'error'); return; }
+    await saveDriver();
+    await creaAccessoDriver(email);
+}
+
+async function creaAccessoDriver(email) {
+    try {
+        var secondaryApp;
+        try { secondaryApp = firebase.app('tempAuth'); }
+        catch (e) { secondaryApp = firebase.initializeApp(firebase.app().options, 'tempAuth'); }
+        var secondaryAuth = secondaryApp.auth();
+        var tempPw = 'TempAVR_' + Math.random().toString(36).slice(2, 10) + '!';
+        await secondaryAuth.createUserWithEmailAndPassword(email, tempPw);
+        await secondaryAuth.signOut();
+        await auth.sendPasswordResetEmail(email);
+        toast('Accesso creato e email di reset inviata a ' + email, 'success');
+    } catch (e) {
+        if (e.code === 'auth/email-already-in-use') {
+            try {
+                await auth.sendPasswordResetEmail(email);
+                toast('Utente già esistente — email di reset inviata', 'success');
+            } catch (e2) { toast('Errore invio reset: ' + e2.message, 'error'); }
+        } else {
+            toast('Errore creazione accesso: ' + e.message, 'error');
+        }
+    }
+}
+
 async function editDriver(id) {
     const d = state.driverList.find(x => x.id === id);
     if (!d) return;
@@ -103,7 +136,15 @@ async function editDriver(id) {
         <div class="form-group"><label>€ per consegna</label><input type="number" id="drCosto" class="input" value="${d.costoConsegna||3.50}" step="0.10"></div>
         <div class="form-group"><label>Email</label><input type="email" id="drEmail" class="input" value="${d.email||''}"></div>
         <button class="btn btn-primary" onclick="saveDriver('${id}')" style="width:100%;margin-top:8px">Aggiorna</button>
+        ${d.email ? `<button class="btn" onclick="reinviaResetPassword('${d.email}')" style="width:100%;margin-top:6px">📧 Reinvia password di accesso</button>` : `<button class="btn" onclick="creaAccessoDriver(document.getElementById('drEmail').value.trim().toLowerCase())" style="width:100%;margin-top:6px">🔑 Crea accesso app</button>`}
     `);
+}
+
+async function reinviaResetPassword(email) {
+    try {
+        await auth.sendPasswordResetEmail(email);
+        toast('Email di reset inviata a ' + email, 'success');
+    } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
 
 async function toggleDriverAttivo(id) {
@@ -116,7 +157,6 @@ async function toggleDriverAttivo(id) {
     renderAnagraficaDriver();
 }
 
-// Popola driver da lista precaricata
 async function popolaDriver() {
     if (state.driverList.length > 0) {
         if (!confirm('Ci sono già driver in anagrafica. Vuoi aggiungere quelli mancanti?')) return;
