@@ -304,8 +304,9 @@
                     <input type="text" id="searchRitorni" class="input search-input" placeholder="Cerca driver, filiale, cliente..." oninput="renderRitorni()">
                     <select id="filterRitorniStato" class="input filter-select" onchange="renderRitorni()">
                         <option value="">Tutti gli stati</option>
-                        <option value="da_fatturare">Da fatturare</option>
-                        <option value="fatturato">Fatturato</option>
+                        <option value="da_fatturare">In attesa</option>
+                        <option value="accettato">Accettati</option>
+                        <option value="rifiutato">Rifiutati</option>
                     </select>
                 </div>
                 <div class="table-wrap">
