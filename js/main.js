@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Main App (sempre dati freschi da Firestore)
+// DELIVERY HUB v2 — Main App (ottimizzato per velocità)
 
 async function loadAllData() {
     try {
@@ -6,7 +6,9 @@ async function loadAllData() {
             loadConsegnePerMese(),
             loadFiliali(),
             loadDriverAnagrafica(),
-            loadDanni()
+            loadDanni(),
+            loadReportDriver(),
+            loadRitorniMese()
         ]);
     } catch (e) {
         console.error('Load error:', e);
@@ -78,9 +80,54 @@ async function loadDanni() {
     }
 }
 
+// Pre-carica report driver per il mese (usato da compensi)
+async function loadReportDriver() {
+    var mese = state.meseCorrente;
+    if (!mese) return;
+    try {
+        var snap = await db.collection('reportDriver')
+            .where('mese', '==', mese)
+            .get();
+        state.reportDriver = snap.docs.map(function(doc) {
+            var d = doc.data();
+            d.id = doc.id;
+            return d;
+        });
+        console.log('Loaded ' + state.reportDriver.length + ' report driver');
+    } catch (e) {
+        console.warn('ReportDriver load:', e);
+        state.reportDriver = [];
+    }
+}
+
+// Pre-carica ritorni per il mese
+async function loadRitorniMese() {
+    var mese = state.meseCorrente;
+    if (!mese) return;
+    try {
+        var snap = await db.collection('ritorni')
+            .where('mese', '==', mese)
+            .get();
+        state.ritorniMese = snap.docs.map(function(doc) {
+            var d = doc.data();
+            d.id = doc.id;
+            if (d.data && d.data.toDate) d.data = d.data.toDate();
+            return d;
+        });
+        console.log('Loaded ' + state.ritorniMese.length + ' ritorni');
+    } catch (e) {
+        console.warn('Ritorni load:', e);
+        state.ritorniMese = [];
+    }
+}
+
 async function onMeseChange() {
     state.meseCorrente = document.getElementById('meseSelector').value;
-    await loadConsegnePerMese();
+    await Promise.all([
+        loadConsegnePerMese(),
+        loadReportDriver(),
+        loadRitorniMese()
+    ]);
     refreshCurrentModule();
 }
 
@@ -89,7 +136,6 @@ function forceRefresh() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Pulisci cache vecchia automaticamente
     try {
         var keys = Object.keys(localStorage);
         keys.forEach(function(k) { if (k.indexOf('dhub_') === 0) localStorage.removeItem(k); });
