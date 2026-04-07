@@ -78,6 +78,5 @@ const state = {
 };
 
 const ADMIN_EMAILS = [
-    'info@parkinglungomare.it',
     'amministrazione@avrlogisticarl.com'
 ];
