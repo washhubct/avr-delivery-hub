@@ -43,8 +43,16 @@ async function renderRitorni() {
             var dataStr = ts.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'});
             var num = d.numRitorni || 0;
             var fattura = num * 6.90;
-            var statoBadge = d.stato === 'fatturato' ? 'badge-ok' : 'badge-warn';
-            var statoLabel = d.stato === 'fatturato' ? 'Fatturato' : 'Da fatturare';
+            var statoBadge = d.stato === 'accettato' ? 'badge-ok' : d.stato === 'rifiutato' ? 'badge-err' : 'badge-warn';
+            var statoLabel = d.stato === 'accettato' ? 'Accettato' : d.stato === 'rifiutato' ? 'Rifiutato' : 'In attesa';
+
+            var azioni = '';
+            if (d.stato !== 'accettato' && d.stato !== 'rifiutato') {
+                azioni = '<button class="btn btn-sm" style="color:var(--success)" onclick="gestisciRitorno(\'' + d.id + '\',\'accettato\')">✓</button> ' +
+                         '<button class="btn btn-sm btn-danger" onclick="gestisciRitorno(\'' + d.id + '\',\'rifiutato\')">✕</button>';
+            } else if (d.stato === 'rifiutato') {
+                azioni = '<button class="btn btn-sm" style="color:var(--success)" onclick="gestisciRitorno(\'' + d.id + '\',\'accettato\')">✓</button>';
+            }
 
             return '<tr>' +
                 '<td>' + dataStr + '</td>' +
@@ -55,22 +63,23 @@ async function renderRitorni() {
                 '<td>' + (d.cliente || '—') + '</td>' +
                 '<td style="text-align:right">' + formatCurrency(fattura) + '</td>' +
                 '<td><span class="badge ' + statoBadge + '">' + statoLabel + '</span></td>' +
-                '<td>' +
-                    (d.stato !== 'fatturato' ? '<button class="btn btn-sm" onclick="marcaRitornoFatturato(\'' + d.id + '\')">✓</button>' : '') +
-                '</td>' +
+                '<td>' + azioni + '</td>' +
             '</tr>';
         }).join('');
 }
 
-async function marcaRitornoFatturato(id) {
-    if (!confirm('Segnare questo ritorno come fatturato?')) return;
+async function gestisciRitorno(id, nuovoStato) {
+    var label = nuovoStato === 'accettato' ? 'accettare' : 'rifiutare';
+    if (!confirm('Vuoi ' + label + ' questo ritorno?')) return;
     try {
         await db.collection('ritorni').doc(id).update({
-            stato: 'fatturato',
-            fatturatoDa: state.user.email,
-            fatturatoIl: firebase.firestore.FieldValue.serverTimestamp()
+            stato: nuovoStato,
+            gestito: true,
+            gestitoDa: state.user.email,
+            gestitoIl: firebase.firestore.FieldValue.serverTimestamp()
         });
-        toast('Ritorno segnato come fatturato', 'success');
+        toast('Ritorno ' + nuovoStato, 'success');
+        await loadRitorniMese();
         renderRitorni();
     } catch (e) {
         toast('Errore: ' + e.message, 'error');
