@@ -6,34 +6,26 @@ async function renderRitorni() {
     var filterStato = document.getElementById('filterRitorniStato') ? document.getElementById('filterRitorniStato').value : '';
     var tbody = document.getElementById('tblRitorni');
 
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:40px">Caricamento...</td></tr>';
+    var rows = [];
+    var totRitorni = 0, totFattura = 0, totCostoDriver = 0;
 
-    try {
-        var snap = await db.collection('ritorni').orderBy('timestamp', 'desc').limit(500).get();
-        var rows = [];
-        var totRitorni = 0, totFattura = 0, totCostoDriver = 0;
+    (state.ritorniMese || []).forEach(function(d) {
+        // Filtro ricerca
+        if (searchTerm) {
+            var haystack = ((d.driver || '') + ' ' + (d.filialeNome || '') + ' ' + (d.filiale || '') + ' ' + (d.cliente || '')).toUpperCase();
+            if (haystack.indexOf(searchTerm) < 0) return;
+        }
+        // Filtro stato
+        if (filterStato && d.stato !== filterStato) return;
 
-        snap.forEach(function(doc) {
-            var d = doc.data();
-            d.id = doc.id;
-            // Filtro mese
-            if (d.mese !== mese) return;
-            // Filtro ricerca
-            if (searchTerm) {
-                var haystack = ((d.driver || '') + ' ' + (d.filialeNome || '') + ' ' + (d.filiale || '') + ' ' + (d.cliente || '')).toUpperCase();
-                if (haystack.indexOf(searchTerm) < 0) return;
-            }
-            // Filtro stato
-            if (filterStato && d.stato !== filterStato) return;
-
-            var num = d.numRitorni || 0;
-            var fattura = num * 6.90;
-            var costoDriver = d.costoDriver || (num * 3.50);
-            totRitorni += num;
-            totFattura += fattura;
-            totCostoDriver += costoDriver;
-            rows.push(d);
-        });
+        var num = d.numRitorni || 0;
+        var fattura = num * 6.90;
+        var costoDriver = d.costoDriver || (num * 3.50);
+        totRitorni += num;
+        totFattura += fattura;
+        totCostoDriver += costoDriver;
+        rows.push(d);
+    });
 
         // KPI
         document.getElementById('rtTotRitorni').textContent = totRitorni;
@@ -68,10 +60,6 @@ async function renderRitorni() {
                 '</td>' +
             '</tr>';
         }).join('');
-
-    } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--danger)">Errore: ' + e.message + '</td></tr>';
-    }
 }
 
 async function marcaRitornoFatturato(id) {
