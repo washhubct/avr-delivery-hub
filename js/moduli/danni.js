@@ -107,8 +107,8 @@ function calcolaRata() {
     if (numRate > 1 && importo > 0) {
         var rata = Math.ceil((importo / numRate) * 100) / 100;
         preview.style.display = 'block';
-        document.getElementById('rataImporto').textContent = formatCurrency(rata);
-
+        var rataEl2 = document.getElementById('rataImporto');
+        if (rataEl2) rataEl2.textContent = formatCurrency(rata);
         var now = new Date();
         var mesi = [];
         var mn = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
