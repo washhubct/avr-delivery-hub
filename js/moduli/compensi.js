@@ -1,40 +1,74 @@
-// DELIVERY HUB v2 — Compensi Driver (con ricerca e rate danni)
+// DELIVERY HUB v2 — Compensi Driver (con ricerca, rate danni e confronto consegne driver)
 
-function renderCompensi() {
+async function renderCompensi() {
     var mese = state.meseCorrente;
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     var searchTerm = document.getElementById('searchCompensi') ? document.getElementById('searchCompensi').value.toUpperCase().trim() : '';
 
+    // Carica report driver per il mese
+    var driverReports = {};
+    try {
+        var snap = await db.collection('reportDriver').where('mese', '==', mese).get();
+        snap.forEach(function(doc) {
+            var d = doc.data();
+            var drv = (d.driver || '').toUpperCase().trim();
+            if (!drv) return;
+            if (!driverReports[drv]) driverReports[drv] = 0;
+            driverReports[drv] += (d.numConsegne || 0);
+        });
+    } catch (e) {
+        console.warn('Errore caricamento report driver:', e.message);
+    }
+
+    // Dati Decò
     var driverData = {};
     cm.forEach(function(c) {
         var drv = normalizeDriverName(c.driver);
         if (!drv) return;
-        if (!driverData[drv]) driverData[drv] = { count: 0, citta: '' };
+        if (!driverData[drv]) driverData[drv] = { count: 0 };
         driverData[drv].count++;
     });
 
+    // Unisci driver da entrambe le fonti
+    Object.keys(driverReports).forEach(function(drv) {
+        if (!driverData[drv]) driverData[drv] = { count: 0 };
+    });
+
     var rows = [];
-    var totConsegne = 0, totLordo = 0, totDanni = 0, totNetto = 0;
+    var totConsegne = 0, totConsegneDriver = 0, totLordo = 0, totDanni = 0, totNetto = 0;
 
     Object.entries(driverData).forEach(function(entry) {
         var drv = entry[0], data = entry[1];
         var anagrafica = findDriverAnagrafica(drv);
         var costo = anagrafica ? (anagrafica.costoConsegna || state.costoPerConsegna) : state.costoPerConsegna;
         var citta = anagrafica ? anagrafica.citta : '—';
-        var lordo = data.count * costo;
+        var consegneDecò = data.count;
+        var consegneDriver = driverReports[drv] || 0;
+        var diff = consegneDriver - consegneDecò;
+        var lordo = consegneDecò * costo;
 
         var danniDriver = typeof calcolaDanniMese === 'function' ? calcolaDanniMese(drv, mese) : 0;
 
         var netto = lordo - danniDriver;
-        totConsegne += data.count;
+        totConsegne += consegneDecò;
+        totConsegneDriver += consegneDriver;
         totLordo += lordo;
         totDanni += danniDriver;
         totNetto += netto;
 
-        rows.push({ drv: drv, citta: citta, count: data.count, lordo: lordo, danni: danniDriver, netto: netto });
+        rows.push({
+            drv: drv,
+            citta: citta,
+            consegneDecò: consegneDecò,
+            consegneDriver: consegneDriver,
+            diff: diff,
+            lordo: lordo,
+            danni: danniDriver,
+            netto: netto
+        });
     });
 
-    rows.sort(function(a, b) { return b.count - a.count; });
+    rows.sort(function(a, b) { return b.consegneDecò - a.consegneDecò; });
 
     if (searchTerm) {
         rows = rows.filter(function(r) { return r.drv.toUpperCase().indexOf(searchTerm) >= 0; });
@@ -45,17 +79,26 @@ function renderCompensi() {
     document.getElementById('compNetto').textContent = formatCurrency(totNetto);
 
     document.getElementById('tblCompensi').innerHTML = rows.map(function(r) {
-        return '<tr>' +
+        var diffColor = r.diff === 0 ? 'var(--text-muted)' : (r.diff > 0 ? 'var(--warning)' : 'var(--danger)');
+        var diffText = r.diff === 0 ? '—' : (r.diff > 0 ? '+' + r.diff : r.diff);
+        var diffBg = r.diff !== 0 ? 'background:rgba(245,158,11,0.04);' : '';
+
+        return '<tr style="' + diffBg + '">' +
             '<td><strong>' + r.drv + '</strong></td>' +
             '<td><span class="badge badge-info">' + r.citta + '</span></td>' +
-            '<td>' + r.count + '</td>' +
+            '<td>' + r.consegneDecò + '</td>' +
+            '<td>' + (r.consegneDriver > 0 ? r.consegneDriver : '<span style="color:var(--text-light)">—</span>') + '</td>' +
+            '<td style="color:' + diffColor + ';font-weight:700">' + diffText + '</td>' +
             '<td>' + formatCurrency(r.lordo) + '</td>' +
             '<td style="color:' + (r.danni > 0 ? 'var(--danger)' : 'var(--text-muted)') + '">' + (r.danni > 0 ? '-' + formatCurrency(r.danni) : '—') + '</td>' +
             '<td><strong>' + formatCurrency(r.netto) + '</strong></td>' +
         '</tr>';
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Nessun risultato</td></tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">Nessun risultato</td></tr>';
 
     document.getElementById('compTotConsegne').textContent = totConsegne;
+    document.getElementById('compTotConsegneDriver').textContent = totConsegneDriver;
+    var totDiff = totConsegneDriver - totConsegne;
+    document.getElementById('compTotDiff').textContent = totDiff === 0 ? '—' : (totDiff > 0 ? '+' + totDiff : totDiff);
     document.getElementById('compTotLordo').textContent = formatCurrency(totLordo);
     document.getElementById('compTotDanniTab').textContent = totDanni > 0 ? '-' + formatCurrency(totDanni) : '—';
     document.getElementById('compTotNettoTab').innerHTML = '<strong>' + formatCurrency(totNetto) + '</strong>';
@@ -86,7 +129,7 @@ function exportCompensi() {
     var rows = [
         ['COMPENSI DRIVER — ' + meseLabel(mese)],
         [],
-        ['Driver', 'Città', 'Consegne', 'Lordo (€3,50×n)', 'Danni (rata mese)', 'Netto']
+        ['Driver', 'Città', 'Consegne Decò', 'Consegne Driver', 'Diff.', 'Lordo (€3,50×n)', 'Danni (rata mese)', 'Netto']
     ];
 
     var driverData = {};
@@ -102,7 +145,7 @@ function exportCompensi() {
         var ana = findDriverAnagrafica(drv);
         var lordo = count * (ana ? (ana.costoConsegna || state.costoPerConsegna) : state.costoPerConsegna);
         var danni = typeof calcolaDanniMese === 'function' ? calcolaDanniMese(drv, mese) : 0;
-        rows.push([drv, ana ? ana.citta : '—', count, lordo.toFixed(2), danni.toFixed(2), (lordo - danni).toFixed(2)]);
+        rows.push([drv, ana ? ana.citta : '—', count, '', '', lordo.toFixed(2), danni.toFixed(2), (lordo - danni).toFixed(2)]);
     });
 
     var wb = XLSX.utils.book_new();
