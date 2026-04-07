@@ -33,6 +33,7 @@ function renderAnagraficaDriver() {
         <td>
             <button class="btn btn-sm" onclick="editDriver('${d.id}')">✏️</button>
             <button class="btn btn-sm btn-danger" onclick="toggleDriverAttivo('${d.id}')">⏸️</button>
+            <button class="btn btn-sm btn-danger" onclick="eliminaDriver('${d.id}','${d.cognome} ${d.nome||''}')">🗑️</button>
         </td>
     </tr>`).join('');
 }
@@ -155,6 +156,17 @@ async function toggleDriverAttivo(id) {
     toast(`Driver ${newState ? 'attivato' : 'disattivato'}`, 'success');
     await loadDriverAnagrafica();
     renderAnagraficaDriver();
+}
+
+async function eliminaDriver(id, nome) {
+    if (!confirm('Sei sicuro di voler eliminare ' + nome + ' dall\'anagrafica?\n\nQuesta azione è irreversibile.')) return;
+    if (!confirm('Conferma eliminazione di ' + nome + '?')) return;
+    try {
+        await db.collection('driverAnagrafica').doc(id).delete();
+        toast('Driver ' + nome + ' eliminato', 'success');
+        await loadDriverAnagrafica();
+        renderAnagraficaDriver();
+    } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
 
 async function popolaDriver() {
