@@ -89,5 +89,10 @@ function forceRefresh() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Pulisci cache vecchia automaticamente
+    try {
+        var keys = Object.keys(localStorage);
+        keys.forEach(function(k) { if (k.indexOf('dhub_') === 0) localStorage.removeItem(k); });
+    } catch(e) {}
     initAuth();
 });
