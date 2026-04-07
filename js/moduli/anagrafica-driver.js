@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Anagrafica Driver
+// DELIVERY HUB v2 — Anagrafica Driver (con ricerca)
 
 function renderAnagraficaDriver() {
     const tbody = document.getElementById('tblAnagraficaDriver');
@@ -6,7 +6,23 @@ function renderAnagraficaDriver() {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px">Nessun driver. Clicca "Popola driver" per caricare la lista preconfigurata.</td></tr>';
         return;
     }
-    const sorted = [...state.driverList].sort((a,b) => (a.citta||'').localeCompare(b.citta||'') || (a.cognome||'').localeCompare(b.cognome||''));
+
+    var searchTerm = document.getElementById('searchAnagrafica') ? document.getElementById('searchAnagrafica').value.toUpperCase().trim() : '';
+
+    var sorted = [...state.driverList].sort((a,b) => (a.citta||'').localeCompare(b.citta||'') || (a.cognome||'').localeCompare(b.cognome||''));
+
+    if (searchTerm) {
+        sorted = sorted.filter(function(d) {
+            var full = ((d.cognome || '') + ' ' + (d.nome || '')).toUpperCase();
+            return full.indexOf(searchTerm) >= 0;
+        });
+    }
+
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px">Nessun risultato per "' + searchTerm + '"</td></tr>';
+        return;
+    }
+
     tbody.innerHTML = sorted.map(d => `<tr>
         <td><strong>${d.cognome}</strong></td>
         <td>${d.nome}</td>
