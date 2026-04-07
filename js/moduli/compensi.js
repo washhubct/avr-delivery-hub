@@ -5,20 +5,14 @@ async function renderCompensi() {
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     var searchTerm = document.getElementById('searchCompensi') ? document.getElementById('searchCompensi').value.toUpperCase().trim() : '';
 
-    // Carica report driver per il mese
+    // Usa report driver pre-caricati
     var driverReports = {};
-    try {
-        var snap = await db.collection('reportDriver').where('mese', '==', mese).get();
-        snap.forEach(function(doc) {
-            var d = doc.data();
-            var drv = (d.driver || '').toUpperCase().trim();
-            if (!drv) return;
-            if (!driverReports[drv]) driverReports[drv] = 0;
-            driverReports[drv] += (d.numConsegne || 0);
-        });
-    } catch (e) {
-        console.warn('Errore caricamento report driver:', e.message);
-    }
+    (state.reportDriver || []).forEach(function(d) {
+        var drv = (d.driver || '').toUpperCase().trim();
+        if (!drv) return;
+        if (!driverReports[drv]) driverReports[drv] = 0;
+        driverReports[drv] += (d.numConsegne || 0);
+    });
 
     // Dati Decò
     var driverData = {};
