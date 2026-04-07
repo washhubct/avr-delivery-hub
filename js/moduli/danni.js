@@ -1,4 +1,11 @@
-// DELIVERY HUB v2 — Danni / Furgoni con rateizzazione e documenti
+// DELIVERY HUB v2 — Multe / Danni con rateizzazione, documenti e normalizzazione accenti
+
+function normalizzaNome(s) {
+    return (s || '').toUpperCase().trim()
+        .replace(/[ÀÁÂÃ]/g,'A').replace(/[ÈÉÊË]/g,'E')
+        .replace(/[ÌÍÎÏ]/g,'I').replace(/[ÒÓÔÕ]/g,'O')
+        .replace(/[ÙÚÛÜ]/g,'U');
+}
 
 function renderDanni() {
     var tbody = document.getElementById('tblDanni');
@@ -45,7 +52,7 @@ function openAddDanno() {
         .map(function(d) { return '<option value="' + d.cognome + '">' + d.cognome + ' ' + d.nome + ' (' + d.citta + ')</option>'; })
         .join('');
 
-    openModal('Registra danno', 
+    openModal('Registra danno',
         '<div class="form-group"><label>Data danno</label><input type="date" id="danData" class="input" value="' + new Date().toISOString().slice(0, 10) + '"></div>' +
         '<div class="form-group"><label>Driver responsabile</label>' +
             '<select id="danDriver" class="input"><option value="">Seleziona...</option>' + driverOpts + '</select></div>' +
@@ -99,8 +106,7 @@ function calcolaRata() {
         var rata = Math.ceil((importo / numRate) * 100) / 100;
         preview.style.display = 'block';
         document.getElementById('rataImporto').textContent = formatCurrency(rata);
-        
-        // Calcola mesi
+
         var now = new Date();
         var mesi = [];
         var mn = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
@@ -114,7 +120,6 @@ function calcolaRata() {
     }
 }
 
-// Aggiorna preview quando cambia importo
 document.addEventListener('input', function(e) {
     if (e.target.id === 'danImporto') calcolaRata();
 });
@@ -124,7 +129,6 @@ async function saveDanno(editId) {
     var numRate = parseInt(document.getElementById('danRate').value) || 1;
     var importoRata = numRate > 1 ? Math.ceil((importo / numRate) * 100) / 100 : importo;
 
-    // Genera piano rate
     var pianoRate = [];
     var now = new Date();
     for (var i = 0; i < numRate; i++) {
@@ -159,7 +163,6 @@ async function saveDanno(editId) {
     if (!data.importo) { toast('Inserisci l\'importo', 'error'); return; }
 
     try {
-        // Upload documenti se presenti
         var fileInput = document.getElementById('danFiles');
         if (fileInput && fileInput.files.length > 0) {
             var files = fileInput.files;
@@ -209,18 +212,16 @@ function dettaglioDanno(id) {
         '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--text-muted)">Stato</span><strong>' + (d.stato || 'aperto') + '</strong></div>' +
     '</div>';
 
-    // Descrizione
     if (d.descrizione) {
         html += '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">' +
             '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">DESCRIZIONE</div>' +
             '<div style="font-size:13px">' + d.descrizione + '</div></div>';
     }
 
-    // Piano rate
     if (d.numRate && d.numRate > 1 && d.pianoRate) {
         html += '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:16px">' +
             '<div style="font-size:13px;font-weight:700;margin-bottom:8px">Piano rateizzazione (' + d.numRate + ' rate)</div>';
-        
+
         var mn = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
         d.pianoRate.forEach(function(rata, i) {
             var parts = rata.mese.split('-');
@@ -236,7 +237,6 @@ function dettaglioDanno(id) {
         html += '</div>';
     }
 
-    // Documenti
     if (d.documenti && d.documenti.length > 0) {
         html += '<div style="border-top:1px solid var(--border);padding-top:16px">' +
             '<div style="font-size:13px;font-weight:700;margin-bottom:8px">Documenti allegati</div>';
@@ -266,7 +266,7 @@ async function editDanno(id) {
         return '<option value="' + t + '" ' + (d.tipoSinistro === t ? 'selected' : '') + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>';
     }).join('');
 
-    openModal('Modifica danno', 
+    openModal('Modifica danno',
         '<div class="form-group"><label>Data</label><input type="date" id="danData" class="input" value="' + dataVal + '"></div>' +
         '<div class="form-group"><label>Driver</label><select id="danDriver" class="input">' + driverOpts + '</select></div>' +
         '<div class="form-group"><label>Targa</label><input type="text" id="danTarga" class="input" value="' + (d.targa || '') + '" style="text-transform:uppercase"></div>' +
@@ -297,23 +297,21 @@ async function changeDannoStato(id) {
     renderDanni();
 }
 
-// Calcola danni rateizzati per un driver in un mese specifico
 function calcolaDanniMese(driverName, mese) {
     var totale = 0;
+    var nomeNorm = normalizzaNome(driverName);
     state.danniList.forEach(function(d) {
         if (d.stato === 'annullato') return;
-        var drv = (d.driver || '').toUpperCase().trim();
-        if (drv !== driverName.toUpperCase().trim()) return;
+        var drvNorm = normalizzaNome(d.driver);
+        if (drvNorm !== nomeNorm) return;
 
         if (d.numRate && d.numRate > 1 && d.pianoRate) {
-            // Rateizzato: cerca la rata per questo mese
             d.pianoRate.forEach(function(rata) {
                 if (rata.mese === mese && !rata.pagato) {
                     totale += rata.importo;
                 }
             });
         } else {
-            // Pagamento unico: nel mese del danno
             var meseDanno = d.mese || (d.data ? d.data.substring(0, 7) : '');
             if (meseDanno === mese) {
                 totale += (d.importo || 0);
