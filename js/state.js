@@ -1,9 +1,8 @@
 // DELIVERY HUB v2 — State Management
-
 const state = {
     user: null,
-    userRole: 'admin', // 'admin' or 'driver'
-    driverProfile: null, // if logged in as driver
+    userRole: 'admin',
+    driverProfile: null,
     currentModule: 'dashboard',
     meseCorrente: null,
     
@@ -11,12 +10,13 @@ const state = {
     filiali: [],
     driverList: [],
     danniList: [],
+    reportDriver: [],
+    ritorniMese: [],
     dataDeco: null,
     
     consegnePage: 1,
     consegnePerPage: 50,
     filialiMap: {},
-
     aree: {
         'CT': { nome: 'Catania', gruppo: 'Fratelli Arena' },
         'ME': { nome: 'Messina', gruppo: 'Fratelli Arena' },
@@ -24,11 +24,7 @@ const state = {
         'SR': { nome: 'Siracusa', gruppo: 'Fratelli Arena' },
         'PA': { nome: 'Palermo', gruppo: 'Palermo Retail' }
     },
-
-    // Compenso driver
     costoPerConsegna: 3.50,
-
-    // Prezziario Decò
     prezziOrdinarie: { base: 6.90, sopra250: 10.00 },
     prezziSpeciali: [
         { min: 400, max: 500, prezzo: 20.70 },
@@ -42,11 +38,9 @@ const state = {
         { min: 3100, max: 4000, prezzo: 250.00 },
         { min: 4100, max: 7000, prezzo: 300.00 }
     ],
-
-    // Driver precaricati
     driverPreload: [
         { cognome: 'VISCONTI', nome: 'ALESSANDRO', citta: 'PA', contratto: 'CO.CO.CO' },
-        { cognome: 'ARICÒ', nome: 'AGOSTINO', citta: 'PA', contratto: 'CO.CO.CO' },
+        { cognome: 'ARICO', nome: 'AGOSTINO', citta: 'PA', contratto: 'CO.CO.CO' },
         { cognome: 'GALEAZZO', nome: 'GIACOMO', citta: 'PA', contratto: 'CO.CO.CO' },
         { cognome: 'ROTOLO', nome: 'ALESSANDRO', citta: 'PA', contratto: 'CO.CO.CO' },
         { cognome: 'TUMMINIA', nome: 'MATTIA', citta: 'PA', contratto: 'CO.CO.CO' },
@@ -62,13 +56,13 @@ const state = {
         { cognome: 'MESSINA', nome: 'LUCA', citta: 'CT', contratto: 'CO.CO.CO' },
         { cognome: 'VINCI', nome: 'VITO', citta: 'CT', contratto: 'CO.CO.CO' },
         { cognome: 'LA PORTA', nome: 'MARCO WALTER', citta: 'CT', contratto: 'CO.CO.CO' },
-        { cognome: 'BRUNO', nome: 'NICOLÒ', citta: 'CT', contratto: 'CO.CO.CO' },
-        { cognome: 'ZAPPALÀ', nome: 'MICAEL', citta: 'CT', contratto: 'CO.CO.CO' },
+        { cognome: 'BRUNO', nome: 'NICOLO', citta: 'CT', contratto: 'CO.CO.CO' },
+        { cognome: 'ZAPPALA', nome: 'MICAEL', citta: 'CT', contratto: 'CO.CO.CO' },
         { cognome: 'SCABOTTI', nome: 'DANIELE', citta: 'CT', contratto: 'CO.CO.CO' },
         { cognome: 'DAL PIN', nome: 'DARIO UMBERTO', citta: 'CT', contratto: 'CO.CO.CO' },
         { cognome: 'MASSIMINO', nome: 'ANTONINO', citta: 'CT', contratto: 'CO.CO.CO' },
         { cognome: 'SIYAMBALA GAMAGE', nome: 'SHRENUKA', citta: 'CT', contratto: 'CO.CO.CO' },
-        { cognome: 'PITTÀ', nome: 'SALVATORE', citta: 'CT', contratto: 'CO.CO.CO' },
+        { cognome: 'PITTA', nome: 'SALVATORE', citta: 'CT', contratto: 'CO.CO.CO' },
         { cognome: 'BELLUARDO', nome: 'IGNAZIO', citta: 'SR', contratto: 'CO.CO.CO' },
         { cognome: 'ZOCCO', nome: 'GIORDANO', citta: 'SR', contratto: 'CO.CO.CO' },
         { cognome: 'CANNARELLA', nome: 'CARLO', citta: 'SR', contratto: 'CO.CO.CO' },
@@ -76,7 +70,6 @@ const state = {
         { cognome: 'DI PRIMA', nome: 'SIMONE', citta: 'EN', contratto: 'CO.CO.CO' }
     ]
 };
-
 const ADMIN_EMAILS = [
     'amministrazione@avrlogisticarl.com'
 ];
