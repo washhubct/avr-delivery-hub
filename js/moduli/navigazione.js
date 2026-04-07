@@ -1,5 +1,4 @@
 // DELIVERY HUB v2 — Navigation
-
 const MODULE_TITLES = {
     dashboard: 'Dashboard',
     consegne: 'Consegne',
@@ -11,11 +10,11 @@ const MODULE_TITLES = {
     fatturazione: 'Fatturazione',
     'report-finanziario': 'Report Finanziario',
     import: 'Importa dati',
+    'log-accessi': 'Log Accessi',
     'driver-consegne': 'Le mie consegne',
     'driver-compensi': 'I miei compensi',
     'driver-bustepaga': 'Buste paga'
 };
-
 function navigateTo(module) {
     state.currentModule = module;
     document.querySelectorAll('.nav-item').forEach(n =>
@@ -29,7 +28,6 @@ function navigateTo(module) {
     closeSidebar();
     refreshCurrentModule();
 }
-
 function refreshCurrentModule() {
     switch (state.currentModule) {
         case 'dashboard': renderDashboard(); break;
@@ -40,18 +38,17 @@ function refreshCurrentModule() {
         case 'filiali': renderFiliali(); break;
         case 'fatturazione': renderFatturazione(); break;
         case 'report-finanziario': renderReportFinanziario(); break;
+        case 'log-accessi': renderLogAccessi(); break;
         case 'driver-consegne': renderDriverConsegne(); break;
         case 'driver-compensi': renderDriverCompensi(); break;
     }
 }
-
 function toggleSidebar() {
     const sb = document.getElementById('sidebar');
     const ov = document.getElementById('sidebarOverlay');
     if (sb.classList.contains('open')) { closeSidebar(); }
     else { sb.classList.add('open'); ov.classList.add('visible'); }
 }
-
 function closeSidebar() {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('visible');
