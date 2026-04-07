@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Auth Module with roles + auto-logout a mezzanotte
+// DELIVERY HUB v2 — Auth Module with roles + auto-logout a mezzanotte + log accessi
 
 var SUPER_ADMIN_EMAILS = [
     'amministrazione@avrlogisticarl.com'
@@ -14,6 +14,25 @@ function getUserRole(email) {
     if (SUPER_ADMIN_EMAILS.indexOf(e) >= 0) return 'superadmin';
     if (STAFF_EMAILS.indexOf(e) >= 0) return 'staff';
     return 'driver';
+}
+
+// Registra accesso in Firestore
+async function logAccesso(user, role) {
+    try {
+        var ua = navigator.userAgent || '';
+        var isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
+        await db.collection('accessLog').add({
+            email: user.email,
+            uid: user.uid,
+            ruolo: role,
+            dispositivo: isMobile ? 'Mobile' : 'Desktop',
+            browser: ua.length > 120 ? ua.substring(0, 120) : ua,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            data: new Date().toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'})
+        });
+    } catch (e) {
+        console.warn('Errore log accesso:', e.message);
+    }
 }
 
 function doLogin() {
@@ -49,6 +68,9 @@ function initAuth() {
 
             var role = getUserRole(user.email);
             state.userRole = role;
+
+            // Log accesso
+            await logAccesso(user, role);
 
             if (role === 'superadmin' || role === 'staff') {
                 document.getElementById('navAdmin').style.display = 'block';
