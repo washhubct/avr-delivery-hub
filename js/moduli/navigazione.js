@@ -5,6 +5,8 @@ const MODULE_TITLES = {
     'anagrafica-driver': 'Anagrafica Driver',
     compensi: 'Compensi Driver',
     danni: 'Danni / Furgoni',
+    ritorni: 'Ritorni',
+    segnalazioni: 'Segnalazioni Driver',
     filiali: 'Filiali',
     riconciliazione: 'Riconciliazione',
     fatturazione: 'Fatturazione',
@@ -35,6 +37,8 @@ function refreshCurrentModule() {
         case 'anagrafica-driver': renderAnagraficaDriver(); break;
         case 'compensi': renderCompensi(); break;
         case 'danni': renderDanni(); break;
+        case 'ritorni': renderRitorni(); break;
+        case 'segnalazioni': renderSegnalazioniAdmin(); break;
         case 'filiali': renderFiliali(); break;
         case 'fatturazione': renderFatturazione(); break;
         case 'report-finanziario': renderReportFinanziario(); break;
