@@ -187,6 +187,13 @@
                 </select>
                 <select id="filterFiliale" class="input filter-select" onchange="filterConsegne()"><option value="">Tutte le filiali</option></select>
             </div>
+            <div class="toolbar">
+                <label style="font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:1px">DAL</label>
+                <input type="date" id="filterDataDa" class="input" onchange="filterConsegne()" style="width:160px">
+                <label style="font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:1px">AL</label>
+                <input type="date" id="filterDataA" class="input" onchange="filterConsegne()" style="width:160px">
+                <button class="btn btn-sm" onclick="resetDateFilter()">✕ Reset date</button>
+            </div>
             <div class="card">
                 <div class="table-wrap">
                     <table class="data-table" id="tblConsegne">
