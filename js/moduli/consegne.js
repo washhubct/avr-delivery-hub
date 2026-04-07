@@ -43,7 +43,7 @@ function getFilteredConsegne() {
     const filterArea = document.getElementById('filterArea')?.value || '';
     const filterFiliale = document.getElementById('filterFiliale')?.value || '';
 
-    return state.consegne.filter(c => {
+    var result = state.consegne.filter(c => {
         // Month filter
         const m = meseFromDate(c.data);
         if (m !== mese) return false;
@@ -65,6 +65,15 @@ function getFilteredConsegne() {
 
         return true;
     });
+
+    // Ordina per data crescente (dal 1° al 30/31 del mese)
+    result.sort(function(a, b) {
+        var dateA = a.data instanceof Date ? a.data : new Date(a.data);
+        var dateB = b.data instanceof Date ? b.data : new Date(b.data);
+        return dateA - dateB;
+    });
+
+    return result;
 }
 
 function updateFilialeFilter() {
