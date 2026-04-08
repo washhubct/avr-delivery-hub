@@ -140,8 +140,7 @@ function initMeseSelector() {
     sel.innerHTML = '';
     var mesi = getMesiOptions();
     var now = new Date();
-    var prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    var def = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
+    var def = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
     mesi.forEach(function(m) {
         var opt = document.createElement('option');
         opt.value = m.value; opt.textContent = m.label;
