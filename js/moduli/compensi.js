@@ -17,7 +17,7 @@ async function renderCompensi() {
     // Dati Decò
     var driverData = {};
     cm.forEach(function(c) {
-        var drv = normalizeDriverName(c.driver);
+        var drv = normalizeDriverName(c.driver || c.rider);
         if (!drv) return;
         if (!driverData[drv]) driverData[drv] = { count: 0 };
         driverData[drv].count++;
@@ -128,7 +128,7 @@ function exportCompensi() {
 
     var driverData = {};
     cm.forEach(function(c) {
-        var drv = normalizeDriverName(c.driver);
+        var drv = normalizeDriverName(c.driver || c.rider);
         if (!drv) return;
         if (!driverData[drv]) driverData[drv] = 0;
         driverData[drv]++;
