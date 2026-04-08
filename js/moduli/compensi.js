@@ -101,7 +101,23 @@ async function renderCompensi() {
 function normalizeDriverName(name) {
     if (!name) return null;
     var n = name.toUpperCase().trim();
-    if (n === 'RITIRO PDV' || n === 'N/D' || n === '') return null;
+    if (n === 'RITIRO PDV' || n === 'PDV' || n === 'N/D' || n === '' || n === '-' || n === 'INTERNA' || n === 'UNICA' || n === 'CORRCATANIA') return null;
+    // Alias: nomi diversi usati nei fogli Decò → cognome anagrafica
+    var alias = {
+        'FELIX': 'SIYAMBALA GAMAGE',
+        'DALPIN': 'DAL PIN',
+        'SCABOTI': 'SCABOTTI',
+        'DI GIROGI': 'DI GIORGI',
+        "PITTA'": 'PITTA',
+        "ZAPPALA'": 'ZAPPALA',
+        "ARICO'": 'ARICO',
+        'GAETANO': null,
+        'SERGIO': null,
+        'ROBERTO': null
+    };
+    if (alias.hasOwnProperty(n)) return alias[n];
+    // Normalizza apostrofi
+    n = n.replace(/['\u2019`]/g, '');
     return n;
 }
 
