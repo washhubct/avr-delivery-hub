@@ -28,7 +28,7 @@ function renderConsegne() {
             <td>${c.citta || '—'}</td>
             <td style="text-align:right;font-variant-numeric:tabular-nums">${formatCurrency(c.importo)}</td>
             <td>${c.fascia || '—'}</td>
-            <td>${c.driver || '—'}</td>
+            <td>${c.driver || c.rider || '—'}</td>
             <td><span class="badge ${tipoClass}">${tipoLabel}</span></td>
         </tr>`;
     }).join('');
@@ -74,7 +74,7 @@ function getFilteredConsegne() {
 
         // Search filter
         if (search) {
-            const haystack = [c.cliente, c.driver, c.filiale, c.citta, c.provincia].join(' ').toLowerCase();
+            const haystack = [c.cliente, c.driver || c.rider, c.filiale, c.citta, c.provincia].join(' ').toLowerCase();
             if (!haystack.includes(search)) return false;
         }
 
