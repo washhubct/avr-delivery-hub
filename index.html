@@ -180,6 +180,27 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card" id="cardInterne" style="display:none">
+                <h3 class="card-title" style="color:var(--warning)">📦 Consegne Interne (non AVR)</h3>
+                <p class="card-desc">Consegne effettuate da personale interno della filiale — non fatturabili e non compensabili driver AVR.</p>
+                <div class="kpi-grid" style="margin-bottom:16px">
+                    <div class="kpi-card" style="border-color:rgba(217,119,6,0.3)">
+                        <div class="kpi-label" style="color:var(--warning)">Consegne interne</div>
+                        <div class="kpi-value" id="kpiInterneTot">0</div>
+                    </div>
+                    <div class="kpi-card" style="border-color:rgba(217,119,6,0.3)">
+                        <div class="kpi-label" style="color:var(--warning)">Filiali coinvolte</div>
+                        <div class="kpi-value" id="kpiInterneFiliali">0</div>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Filiale</th><th>Area</th><th>Driver interno</th><th>Consegne</th></tr></thead>
+                        <tbody id="tblInterne"></tbody>
+                    </table>
+                </div>
+            </div>
         </section>
 
         <!-- ═══ CONSEGNE ═══ -->
