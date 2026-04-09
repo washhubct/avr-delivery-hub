@@ -1,82 +1,161 @@
-// DELIVERY HUB v2 — Dashboard with margins
+// DELIVERY HUB v2 — Dashboard (con supporto tipoDriver avr/interna)
 
 function renderDashboard() {
-    const mese = state.meseCorrente;
-    if (!mese) return;
-    const cm = state.consegne.filter(c => meseFromDate(c.data) === mese);
+    var mese = state.meseCorrente;
+    var allConsegne = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
 
-    const totale = cm.length;
-    const maggiori = cm.filter(c => isConsegnaMaggiore(c.importo)).length;
-    let fattTotale = 0, countSpeciali = 0;
-    cm.forEach(c => {
-        fattTotale += calcolaPrezzo(c.importo);
-        if (classificaConsegna(c.importo) === 'speciale') countSpeciali++;
+    // Separa AVR da interne
+    var consegneAvr = allConsegne.filter(function(c) { return c.tipoDriver !== 'interna'; });
+    var consegneInt = allConsegne.filter(function(c) { return c.tipoDriver === 'interna'; });
+
+    // ═══ KPI (solo AVR) ═══
+    var totale = consegneAvr.length;
+    var maggiori = 0, minori = 0, speciali = 0;
+    var fatturato = 0;
+
+    consegneAvr.forEach(function(c) {
+        var imp = c.importo || 0;
+        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
+            speciali++;
+            fatturato += 6.90;
+        } else if (imp >= 250) {
+            maggiori++;
+            fatturato += 10.00;
+        } else {
+            minori++;
+            fatturato += 6.90;
+        }
     });
-    const costoDriver = totale * state.costoPerConsegna;
-    const margine = fattTotale - costoDriver;
-    const marginePct = fattTotale > 0 ? Math.round((margine / fattTotale) * 100) : 0;
 
-    document.getElementById('kpiConsegneMese').textContent = formatNumber(totale);
-    document.getElementById('kpiConsegneDetail').textContent = `${maggiori} ≥€250 · ${totale - maggiori} <€250 · ${countSpeciali} speciali`;
-    document.getElementById('kpiFatturato').textContent = formatCurrency(fattTotale);
-    document.getElementById('kpiFatturatoDetail').textContent = 'Imponibile (+ IVA 22%)';
+    var costoDriver = totale * (state.costoPerConsegna || 3.50);
+    var margine = fatturato - costoDriver;
+
+    document.getElementById('kpiConsegneMese').textContent = totale;
+    document.getElementById('kpiConsegneDetail').innerHTML = maggiori + ' ≥€250 · ' + minori + ' <€250 · ' + speciali + ' speciali';
+    document.getElementById('kpiFatturato').textContent = formatCurrency(fatturato);
+    document.getElementById('kpiFatturatoDetail').textContent = maggiori + '×€10 + ' + (minori + speciali) + '×€6,90';
     document.getElementById('kpiCostoDriver').textContent = formatCurrency(costoDriver);
-    document.getElementById('kpiCostoDriverDetail').textContent = `${totale} × €${state.costoPerConsegna.toFixed(2)}`;
+    document.getElementById('kpiCostoDriverDetail').textContent = totale + ' × €' + ((state.costoPerConsegna || 3.50).toFixed(2).replace('.', ','));
     document.getElementById('kpiMargine').textContent = formatCurrency(margine);
-    document.getElementById('kpiMargineDetail').textContent = `${marginePct}% margine lordo`;
+    var margPerc = fatturato > 0 ? ((margine / fatturato) * 100).toFixed(1) : '0';
+    document.getElementById('kpiMargineDetail').textContent = margPerc + '% del fatturato';
 
-    // Tabella aree
-    const areeOrdine = ['CT', 'EN', 'ME', 'SR', 'PA'];
-    const areeData = {};
-    areeOrdine.forEach(a => { areeData[a] = { filiali: new Set(), magg: 0, min: 0, fatt: 0 }; });
-    cm.forEach(c => {
-        const a = c.area || areaFromProvincia(c.provincia);
-        if (!areeData[a]) areeData[a] = { filiali: new Set(), magg: 0, min: 0, fatt: 0 };
-        areeData[a].filiali.add(c.filiale);
-        isConsegnaMaggiore(c.importo) ? areeData[a].magg++ : areeData[a].min++;
-        areeData[a].fatt += calcolaPrezzo(c.importo);
+    // ═══ Consegne per area (solo AVR) ═══
+    var aree = {};
+    var AREA_NAMES = { 'CT': 'Catania', 'ME': 'Messina', 'SR': 'Siracusa', 'PA': 'Palermo', 'EN': 'Enna' };
+
+    consegneAvr.forEach(function(c) {
+        var area = c.area || '?';
+        if (!aree[area]) aree[area] = { filiali: new Set(), maggiori: 0, minori: 0, fatturato: 0 };
+        aree[area].filiali.add(c.filiale);
+        var imp = c.importo || 0;
+        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
+            aree[area].minori++;
+            aree[area].fatturato += 6.90;
+        } else if (imp >= 250) {
+            aree[area].maggiori++;
+            aree[area].fatturato += 10.00;
+        } else {
+            aree[area].minori++;
+            aree[area].fatturato += 6.90;
+        }
     });
 
-    let html = '', tFil = 0, tMagg = 0, tMin = 0, tCons = 0, tFatt = 0, tCosto = 0, tMarg = 0;
-    areeOrdine.forEach(a => {
-        const d = areeData[a]; const tot = d.magg + d.min;
-        const costo = tot * state.costoPerConsegna; const marg = d.fatt - costo;
-        tFil += d.filiali.size; tMagg += d.magg; tMin += d.min; tCons += tot; tFatt += d.fatt; tCosto += costo; tMarg += marg;
-        html += `<tr>
-            <td><strong>${a}</strong> — ${state.aree[a]?.nome||a}<br><span style="font-size:11px;color:var(--text-light)">${state.aree[a]?.gruppo||''}</span></td>
-            <td>${d.filiali.size}</td><td>${d.magg}</td><td>${d.min}</td><td><strong>${tot}</strong></td>
-            <td>${formatCurrency(d.fatt)}</td><td>${formatCurrency(costo)}</td>
-            <td style="color:${marg>=0?'var(--success)':'var(--danger)'}">${formatCurrency(marg)}</td></tr>`;
+    var tblAree = document.getElementById('tblAree');
+    var rowsHtml = '';
+    var tFiliali = 0, tMagg = 0, tMin = 0, tTot = 0, tFatt = 0, tCosto = 0, tMarg = 0;
+
+    Object.keys(aree).sort().forEach(function(area) {
+        var a = aree[area];
+        var tot = a.maggiori + a.minori;
+        var nFil = a.filiali.size;
+        var costo = tot * (state.costoPerConsegna || 3.50);
+        var marg = a.fatturato - costo;
+        tFiliali += nFil; tMagg += a.maggiori; tMin += a.minori; tTot += tot;
+        tFatt += a.fatturato; tCosto += costo; tMarg += marg;
+
+        rowsHtml += '<tr>'
+            + '<td><strong>' + area + '</strong> — ' + (AREA_NAMES[area] || area)
+            + '<div style="font-size:11px;color:var(--text-muted)">Fratelli Arena</div></td>'
+            + '<td>' + nFil + '</td>'
+            + '<td>' + a.maggiori + '</td>'
+            + '<td>' + a.minori + '</td>'
+            + '<td><strong>' + tot + '</strong></td>'
+            + '<td>' + formatCurrency(a.fatturato) + '</td>'
+            + '<td>' + formatCurrency(costo) + '</td>'
+            + '<td style="color:' + (marg >= 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:600">' + formatCurrency(marg) + '</td>'
+            + '</tr>';
     });
-    document.getElementById('tblAree').innerHTML = html;
-    document.getElementById('totFiliali').textContent = tFil;
+    tblAree.innerHTML = rowsHtml;
+
+    document.getElementById('totFiliali').textContent = tFiliali;
     document.getElementById('totMaggiori').textContent = tMagg;
     document.getElementById('totMinori').textContent = tMin;
-    document.getElementById('totConsegne').innerHTML = `<strong>${tCons}</strong>`;
+    document.getElementById('totConsegne').innerHTML = '<strong>' + tTot + '</strong>';
     document.getElementById('totFatturato').textContent = formatCurrency(tFatt);
     document.getElementById('totCostoDriver').textContent = formatCurrency(tCosto);
-    document.getElementById('totMargine').innerHTML = `<strong style="color:${tMarg>=0?'var(--success)':'var(--danger)'}">${formatCurrency(tMarg)}</strong>`;
+    document.getElementById('totMargine').innerHTML = '<strong style="color:' + (tMarg >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + formatCurrency(tMarg) + '</strong>';
 
-    // Top filiali
-    const fData = {};
-    cm.forEach(c => {
-        const k = c.filiale || '?';
-        if (!fData[k]) fData[k] = { count: 0, fatt: 0, area: c.area || c.provincia };
-        fData[k].count++; fData[k].fatt += calcolaPrezzo(c.importo);
+    // ═══ Top 10 filiali (solo AVR) ═══
+    var byFiliale = {};
+    consegneAvr.forEach(function(c) {
+        var key = c.filiale || '?';
+        if (!byFiliale[key]) byFiliale[key] = { nome: c.filialeNome || key, area: c.area || '?', count: 0, fatturato: 0 };
+        byFiliale[key].count++;
+        var imp = c.importo || 0;
+        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
+            byFiliale[key].fatturato += 6.90;
+        } else {
+            byFiliale[key].fatturato += imp >= 250 ? 10 : 6.90;
+        }
     });
-    document.getElementById('tblTopFiliali').innerHTML = Object.entries(fData)
-        .sort((a,b) => b[1].count - a[1].count).slice(0, 10)
-        .map(([f, d]) => `<tr><td><strong>${f}</strong></td><td>${d.area}</td><td>${d.count}</td><td>${formatCurrency(d.fatt)}</td></tr>`).join('');
 
-    // Top driver
-    const drData = {};
-    cm.forEach(c => {
-        const drv = (c.driver || '').toUpperCase().trim();
-        if (!drv || drv === 'RITIRO PDV') return;
-        if (!drData[drv]) drData[drv] = { count: 0, filiali: new Set() };
-        drData[drv].count++; drData[drv].filiali.add(c.filiale);
+    var topFil = Object.entries(byFiliale).sort(function(a, b) { return b[1].count - a[1].count; }).slice(0, 10);
+    document.getElementById('tblTopFiliali').innerHTML = topFil.map(function(e) {
+        return '<tr><td>' + e[0] + ' ' + e[1].nome + '</td><td><span class="badge">' + e[1].area + '</span></td><td>' + e[1].count + '</td><td>' + formatCurrency(e[1].fatturato) + '</td></tr>';
+    }).join('');
+
+    // ═══ Performance driver (solo AVR) ═══
+    var byDriver = {};
+    consegneAvr.forEach(function(c) {
+        var drv = normalizeDriverName(c.driver || c.rider);
+        if (!drv) return;
+        if (!byDriver[drv]) byDriver[drv] = { count: 0, filiali: new Set() };
+        byDriver[drv].count++;
+        byDriver[drv].filiali.add(c.filiale);
     });
-    document.getElementById('tblTopDriver').innerHTML = Object.entries(drData)
-        .sort((a,b) => b[1].count - a[1].count)
-        .map(([d, v]) => `<tr><td><strong>${d}</strong></td><td>${v.count}</td><td>${formatCurrency(v.count * state.costoPerConsegna)}</td><td>${v.filiali.size}</td></tr>`).join('');
+
+    var topDrv = Object.entries(byDriver).sort(function(a, b) { return b[1].count - a[1].count; }).slice(0, 10);
+    document.getElementById('tblTopDriver').innerHTML = topDrv.map(function(e) {
+        var compenso = e[1].count * (state.costoPerConsegna || 3.50);
+        return '<tr><td>' + e[0] + '</td><td>' + e[1].count + '</td><td>' + formatCurrency(compenso) + '</td><td>' + e[1].filiali.size + '</td></tr>';
+    }).join('');
+
+    // ═══ Consegne Interne ═══
+    var cardInterne = document.getElementById('cardInterne');
+    if (consegneInt.length > 0) {
+        cardInterne.style.display = '';
+        document.getElementById('kpiInterneTot').textContent = consegneInt.length;
+
+        var intByFiliale = {};
+        consegneInt.forEach(function(c) {
+            var key = (c.filiale || '?') + '_' + (c.rider || c.driver || '?').toUpperCase();
+            if (!intByFiliale[key]) intByFiliale[key] = {
+                filiale: c.filiale, filialeNome: c.filialeNome || '', area: c.area || '?',
+                driver: (c.rider || c.driver || '—').toUpperCase(), count: 0
+            };
+            intByFiliale[key].count++;
+        });
+
+        var intFiliali = new Set();
+        consegneInt.forEach(function(c) { intFiliali.add(c.filiale); });
+        document.getElementById('kpiInterneFiliali').textContent = intFiliali.size;
+
+        var intRows = Object.values(intByFiliale).sort(function(a, b) { return b.count - a.count; });
+        document.getElementById('tblInterne').innerHTML = intRows.map(function(r) {
+            return '<tr><td>' + r.filiale + ' ' + r.filialeNome + '</td><td><span class="badge">' + r.area + '</span></td><td>' + r.driver + '</td><td>' + r.count + '</td></tr>';
+        }).join('');
+    } else {
+        cardInterne.style.display = 'none';
+    }
 }
