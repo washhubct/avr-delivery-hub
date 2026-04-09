@@ -159,3 +159,84 @@ function renderDashboard() {
         cardInterne.style.display = 'none';
     }
 }
+
+function exportConsegneInterne() {
+    var mese = state.meseCorrente;
+    var allConsegne = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
+    var consegneInt = allConsegne.filter(function(c) { return c.tipoDriver === 'interna'; });
+
+    if (consegneInt.length === 0) { toast('Nessuna consegna interna', 'warning'); return; }
+
+    // Ordina per filiale, poi data
+    consegneInt.sort(function(a, b) {
+        var fa = (a.filiale || '').localeCompare(b.filiale || '');
+        if (fa !== 0) return fa;
+        var da = a.data instanceof Date ? a.data.getTime() : 0;
+        var db2 = b.data instanceof Date ? b.data.getTime() : 0;
+        return da - db2;
+    });
+
+    var rows = [
+        ['CONSEGNE INTERNE (NON AVR) — ' + meseLabel(mese)],
+        ['Consegne effettuate da personale interno filiale, non da driver AVR Logistic'],
+        [],
+        ['Data', 'Filiale', 'Nome Filiale', 'Area', 'Cliente', 'Città', 'Indirizzo', 'Importo', 'Driver Interno', 'Prestazione']
+    ];
+
+    consegneInt.forEach(function(c) {
+        var dataStr = '';
+        if (c.data instanceof Date) {
+            dataStr = c.data.toLocaleDateString('it-IT');
+        } else if (typeof c.data === 'string') {
+            dataStr = new Date(c.data).toLocaleDateString('it-IT');
+        }
+        rows.push([
+            dataStr,
+            c.filiale || '',
+            c.filialeNome || '',
+            c.area || '',
+            c.cognome || c.cliente || '',
+            c.citta || '',
+            c.indirizzo || '',
+            c.importo || 0,
+            (c.rider || c.driver || '—').toUpperCase(),
+            c.prestazione || ''
+        ]);
+    });
+
+    // Riga totale
+    rows.push([]);
+    rows.push(['TOTALE CONSEGNE INTERNE:', consegneInt.length]);
+
+    // Riepilogo per filiale
+    rows.push([]);
+    rows.push(['RIEPILOGO PER FILIALE']);
+    rows.push(['Filiale', 'Nome', 'Area', 'N. Consegne', 'Driver interni']);
+
+    var riepilogo = {};
+    consegneInt.forEach(function(c) {
+        var f = c.filiale || '?';
+        if (!riepilogo[f]) riepilogo[f] = { nome: c.filialeNome || '', area: c.area || '', count: 0, drivers: new Set() };
+        riepilogo[f].count++;
+        var drv = (c.rider || c.driver || '').toUpperCase().trim();
+        if (drv) riepilogo[f].drivers.add(drv);
+    });
+
+    Object.keys(riepilogo).sort().forEach(function(f) {
+        var r = riepilogo[f];
+        rows.push([f, r.nome, r.area, r.count, Array.from(r.drivers).join(', ') || '—']);
+    });
+
+    var wb = XLSX.utils.book_new();
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Larghezze colonne
+    ws['!cols'] = [
+        { wch: 12 }, { wch: 8 }, { wch: 16 }, { wch: 6 }, { wch: 22 },
+        { wch: 14 }, { wch: 30 }, { wch: 10 }, { wch: 16 }, { wch: 12 }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Consegne Interne');
+    XLSX.writeFile(wb, 'consegne_interne_' + mese + '.xlsx');
+    toast('File scaricato', 'success');
+}
