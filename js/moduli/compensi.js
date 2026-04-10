@@ -101,19 +101,21 @@ async function renderCompensi() {
 function normalizeDriverName(name) {
     if (!name) return null;
     var n = name.toUpperCase().trim();
-    if (n === 'RITIRO PDV' || n === 'PDV' || n === 'N/D' || n === '' || n === '-' || n === 'INTERNA' || n === 'UNICA' || n === 'CORRCATANIA') return null;
+    // Escludi driver non AVR
+    var escludi = ['RITIRO PDV','PDV','PV','N/D','','-','INTERNA','UNICA',
+        'GAETANO','SERGIO','ROBERTO','CAPUTO','DI BENEDETTO','GIANMARCO',
+        'PICADACI','PRIVITERA','TEST1APP'];
+    if (escludi.indexOf(n) >= 0) return null;
     // Alias: nomi diversi usati nei fogli Decò → cognome anagrafica
     var alias = {
         'FELIX': 'SIYAMBALA GAMAGE',
         'DALPIN': 'DAL PIN',
         'SCABOTI': 'SCABOTTI',
         'DI GIROGI': 'DI GIORGI',
+        'CORRCATANIA': 'LA PORTA',
         "PITTA'": 'PITTA',
         "ZAPPALA'": 'ZAPPALA',
-        "ARICO'": 'ARICO',
-        'GAETANO': null,
-        'SERGIO': null,
-        'ROBERTO': null
+        "ARICO'": 'ARICO'
     };
     if (alias.hasOwnProperty(n)) return alias[n];
     // Normalizza apostrofi
