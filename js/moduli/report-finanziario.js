@@ -12,17 +12,41 @@ var COSTI_VOCI = [
     { key: 'altro', label: 'Altro', default: 0 }
 ];
 
+var ALIAS_RF = {
+    'FELIX': 'SIYAMBALA GAMAGE',
+    'DALPIN': 'DAL PIN',
+    'SCABOTI': 'SCABOTTI',
+    'DI GIROGI': 'DI GIORGI',
+    "PITTA'": 'PITTA',
+    "ZAPPALA'": 'ZAPPALA',
+    "ARICO'": 'ARICO'
+};
+
+var ESCLUDI_RF = ['RITIRO PDV', 'PDV', 'GAETANO', 'SERGIO', 'ROBERTO', 'INTERNA', 'UNICA', 'CORRCATANIA', '-', ''];
+
+function normalizeDriverRF(name) {
+    if (!name) return null;
+    var n = name.toUpperCase().trim().replace(/['\u2019`]/g, "'");
+    if (ESCLUDI_RF.indexOf(n) >= 0 || !n) return null;
+    if (ALIAS_RF[n]) return ALIAS_RF[n];
+    n = n.replace(/'/g, '');
+    return n;
+}
+
 async function renderReportFinanziario() {
     var mese = state.meseCorrente;
     if (!mese) return;
 
     // === RICAVI (automatici dalle consegne) ===
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
-    var totConsegne = cm.length;
+
+    // Filtra solo AVR per il conteggio consegne fatturabili
+    var cmAvr = cm.filter(function(c) { return c.tipoDriver !== 'interna'; });
+    var totConsegne = cmAvr.length;
 
     // Calcola fatturato per gruppo
     var filialiPerGruppo = { arena: { sotto: 0, sopra: 0 }, palermo: { sotto: 0, sopra: 0 } };
-    cm.forEach(function(c) {
+    cmAvr.forEach(function(c) {
         var area = c.area || c.provincia || '?';
         var gruppo = (area === 'PA') ? 'palermo' : 'arena';
         var importo = parseFloat(c.importo) || 0;
@@ -38,7 +62,7 @@ async function renderReportFinanziario() {
 
     // Consegne speciali (importo >= 400)
     var specialiImponibile = 0;
-    cm.forEach(function(c) {
+    cmAvr.forEach(function(c) {
         var imp = parseFloat(c.importo) || 0;
         if (imp >= 400) specialiImponibile += calcolaPrezzoSpeciale(imp);
     });
@@ -64,9 +88,9 @@ async function renderReportFinanziario() {
     // Compensi driver automatici
     var compensiDriver = 0;
     var driverData = {};
-    cm.forEach(function(c) {
-        var drv = (c.driver || '').toUpperCase().trim();
-        if (!drv || drv === 'RITIRO PDV') return;
+    cmAvr.forEach(function(c) {
+        var drv = normalizeDriverRF(c.driver || c.rider);
+        if (!drv) return;
         if (!driverData[drv]) driverData[drv] = 0;
         driverData[drv]++;
     });
@@ -133,7 +157,6 @@ function rigaRicavo(label, imponibile) {
 
 function plRow(label, value, isCosto) {
     var color = isCosto ? 'var(--danger)' : 'var(--text)';
-    var prefix = isCosto ? '-' : '';
     return '<div style="display:flex;justify-content:space-between;padding:4px 0">' +
         '<span style="color:var(--text-muted)">' + label + '</span>' +
         '<span style="color:' + color + ';font-weight:600">' + (isCosto ? formatCurrency(Math.abs(value)) : formatCurrency(value)) + '</span></div>';
@@ -169,7 +192,7 @@ function openEditCosti() {
     var html = '<p style="margin-bottom:16px;color:var(--text-muted);font-size:13px">Inserisci i costi per <strong>' + meseLabel(mese) + '</strong>. I compensi driver sono calcolati automaticamente.</p>';
 
     COSTI_VOCI.forEach(function(v) {
-        if (v.auto) return; // skip auto-calculated
+        if (v.auto) return;
         html += '<div class="form-group" style="margin-bottom:10px">' +
             '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">' + v.label + '</label>' +
             '<input type="number" id="costo_' + v.key + '" class="input" value="' + (v.default || 0) + '" step="0.01" style="margin-bottom:0">' +
@@ -180,7 +203,6 @@ function openEditCosti() {
 
     openModal('Costi mensili — ' + meseLabel(mese), html);
 
-    // Preload existing values
     loadCostiMese(mese).then(function(data) {
         if (!data) return;
         COSTI_VOCI.forEach(function(v) {
@@ -214,7 +236,6 @@ async function renderStoricoFinanziario() {
         var mesiConCosti = {};
         snap.docs.forEach(function(d) { mesiConCosti[d.id] = d.data(); });
 
-        // Genera lista mesi (ultimi 12)
         var mesi = [];
         var now = new Date();
         for (var i = 0; i < 12; i++) {
@@ -230,7 +251,6 @@ async function renderStoricoFinanziario() {
             var parts = m.split('-');
             var label = mn[parseInt(parts[1]) - 1] + ' ' + parts[0];
 
-            // Conta consegne per questo mese (dalla cache o stima)
             var costi = mesiConCosti[m] || {};
             var hasCosti = Object.keys(costi).length > 0;
 
@@ -240,7 +260,6 @@ async function renderStoricoFinanziario() {
             }
 
             if (m === state.meseCorrente) {
-                // Usa i dati correnti
                 var fatturato = document.getElementById('rfFatturato').textContent;
                 var costiTot = document.getElementById('rfCosti').textContent;
                 var rev = document.getElementById('rfRevenue').textContent;
