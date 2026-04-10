@@ -17,12 +17,14 @@ var ALIAS_RF = {
     'DALPIN': 'DAL PIN',
     'SCABOTI': 'SCABOTTI',
     'DI GIROGI': 'DI GIORGI',
+    'CORRCATANIA': 'LA PORTA',
     "PITTA'": 'PITTA',
     "ZAPPALA'": 'ZAPPALA',
     "ARICO'": 'ARICO'
 };
 
-var ESCLUDI_RF = ['RITIRO PDV', 'PDV', 'GAETANO', 'SERGIO', 'ROBERTO', 'INTERNA', 'UNICA', 'CORRCATANIA', '-', ''];
+var ESCLUDI_RF = ['RITIRO PDV', 'PDV', 'PV', 'GAETANO', 'SERGIO', 'ROBERTO', 'INTERNA', 'UNICA',
+    'CAPUTO', 'DI BENEDETTO', 'GIANMARCO', 'PICADACI', 'PRIVITERA', 'TEST1APP', '-', ''];
 
 function normalizeDriverRF(name) {
     if (!name) return null;
