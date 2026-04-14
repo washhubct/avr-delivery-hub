@@ -1,12 +1,74 @@
-// DELIVERY HUB v2 — Dashboard (con supporto tipoDriver avr/interna)
+// DELIVERY HUB v2 — Dashboard (con classificazione AVR/interna da anagrafica)
+
+function buildDriverAvrSet() {
+    // Costruisce un Set con tutti i cognomi driver AVR (da anagrafica Firestore + preload)
+    var set = new Set();
+
+    // Da anagrafica Firestore
+    if (state.driverList && state.driverList.length > 0) {
+        state.driverList.forEach(function(d) {
+            if (d.cognome) set.add(d.cognome.toUpperCase().trim());
+            // Aggiungi anche cognome+nome per match più preciso
+            if (d.cognome && d.nome) {
+                set.add((d.cognome + ' ' + d.nome).toUpperCase().trim());
+                set.add((d.nome + ' ' + d.cognome).toUpperCase().trim());
+            }
+        });
+    }
+
+    // Fallback da preload in state
+    if (state.driverPreload) {
+        state.driverPreload.forEach(function(d) {
+            if (d.cognome) set.add(d.cognome.toUpperCase().trim());
+            if (d.cognome && d.nome) {
+                set.add((d.cognome + ' ' + d.nome).toUpperCase().trim());
+                set.add((d.nome + ' ' + d.cognome).toUpperCase().trim());
+            }
+        });
+    }
+
+    return set;
+}
+
+function isDriverAvr(riderName, avrSet) {
+    if (!riderName) return false;
+    var name = riderName.toUpperCase().trim();
+    if (!name) return false;
+
+    // Match esatto
+    if (avrSet.has(name)) return true;
+
+    // Match parziale: controlla se il cognome AVR è contenuto nel nome rider
+    var found = false;
+    avrSet.forEach(function(avrName) {
+        if (found) return;
+        // Controlla solo cognomi (parole singole o doppie tipo "LI NOCE")
+        if (name.indexOf(avrName) >= 0) found = true;
+        // Controlla anche se il cognome AVR è contenuto
+        if (avrName.indexOf(' ') < 0 && name.split(/\s+/).indexOf(avrName) >= 0) found = true;
+    });
+
+    return found;
+}
 
 function renderDashboard() {
     var mese = state.meseCorrente;
     var allConsegne = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
 
-    // Separa AVR da interne
-    var consegneAvr = allConsegne.filter(function(c) { return c.tipoDriver !== 'interna'; });
-    var consegneInt = allConsegne.filter(function(c) { return c.tipoDriver === 'interna'; });
+    // Costruisci set driver AVR da anagrafica
+    var avrSet = buildDriverAvrSet();
+
+    // Separa AVR da interne usando l'anagrafica reale
+    var consegneAvr = allConsegne.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        return isDriverAvr(rider, avrSet);
+    });
+    var consegneInt = allConsegne.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        // Se non ha rider, non è né AVR né interna — skip
+        if (!rider.trim()) return false;
+        return !isDriverAvr(rider, avrSet);
+    });
 
     // ═══ KPI (solo AVR) ═══
     var totale = consegneAvr.length;
@@ -163,11 +225,15 @@ function renderDashboard() {
 function exportConsegneInterne() {
     var mese = state.meseCorrente;
     var allConsegne = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
-    var consegneInt = allConsegne.filter(function(c) { return c.tipoDriver === 'interna'; });
+    var avrSet = buildDriverAvrSet();
+    var consegneInt = allConsegne.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        if (!rider.trim()) return false;
+        return !isDriverAvr(rider, avrSet);
+    });
 
     if (consegneInt.length === 0) { toast('Nessuna consegna interna', 'warning'); return; }
 
-    // Ordina per filiale, poi data
     consegneInt.sort(function(a, b) {
         var fa = (a.filiale || '').localeCompare(b.filiale || '');
         if (fa !== 0) return fa;
@@ -204,11 +270,9 @@ function exportConsegneInterne() {
         ]);
     });
 
-    // Riga totale
     rows.push([]);
     rows.push(['TOTALE CONSEGNE INTERNE:', consegneInt.length]);
 
-    // Riepilogo per filiale
     rows.push([]);
     rows.push(['RIEPILOGO PER FILIALE']);
     rows.push(['Filiale', 'Nome', 'Area', 'N. Consegne', 'Driver interni']);
@@ -230,7 +294,6 @@ function exportConsegneInterne() {
     var wb = XLSX.utils.book_new();
     var ws = XLSX.utils.aoa_to_sheet(rows);
 
-    // Larghezze colonne
     ws['!cols'] = [
         { wch: 12 }, { wch: 8 }, { wch: 16 }, { wch: 6 }, { wch: 22 },
         { wch: 14 }, { wch: 30 }, { wch: 10 }, { wch: 16 }, { wch: 12 }
