@@ -1,9 +1,16 @@
-// DELIVERY HUB v2 — Compensi Driver (con ricerca, rate danni e confronto consegne driver)
+// DELIVERY HUB v2 — Compensi Driver (allineato con logica alias dashboard)
 
 async function renderCompensi() {
     var mese = state.meseCorrente;
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     var searchTerm = document.getElementById('searchCompensi') ? document.getElementById('searchCompensi').value.toUpperCase().trim() : '';
+
+    // Filtra solo AVR usando la stessa logica del dashboard
+    var avrSet = buildDriverAvrSet();
+    var cmAvr = cm.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        return isDriverAvr(rider, avrSet);
+    });
 
     // Usa report driver pre-caricati
     var driverReports = {};
@@ -14,9 +21,9 @@ async function renderCompensi() {
         driverReports[drv] += (d.numConsegne || 0);
     });
 
-    // Dati Decò
+    // Dati Decò (solo AVR)
     var driverData = {};
-    cm.forEach(function(c) {
+    cmAvr.forEach(function(c) {
         var drv = normalizeDriverName(c.driver || c.rider);
         if (!drv) return;
         if (!driverData[drv]) driverData[drv] = { count: 0 };
@@ -101,24 +108,16 @@ async function renderCompensi() {
 function normalizeDriverName(name) {
     if (!name) return null;
     var n = name.toUpperCase().trim();
-    // Escludi driver non AVR
     var escludi = ['RITIRO PDV','PDV','PV','N/D','','-','INTERNA','UNICA',
         'GAETANO','SERGIO','ROBERTO','CAPUTO','DI BENEDETTO','GIANMARCO',
         'PICADACI','PRIVITERA','TEST1APP'];
     if (escludi.indexOf(n) >= 0) return null;
-    // Alias: nomi diversi usati nei fogli Decò → cognome anagrafica
-    var alias = {
-        'FELIX': 'SIYAMBALA GAMAGE',
-        'DALPIN': 'DAL PIN',
-        'SCABOTI': 'SCABOTTI',
-        'DI GIROGI': 'DI GIORGI',
-        'CORRCATANIA': 'LA PORTA',
-        "PITTA'": 'PITTA',
-        "ZAPPALA'": 'ZAPPALA',
-        "ARICO'": 'ARICO'
-    };
-    if (alias.hasOwnProperty(n)) return alias[n];
-    // Normalizza apostrofi
+    // Usa la stessa mappa alias del dashboard
+    if (typeof DRIVER_ALIAS !== 'undefined') {
+        if (DRIVER_ALIAS[n]) return DRIVER_ALIAS[n];
+        var noSpaces = n.replace(/\s+/g, '');
+        if (DRIVER_ALIAS[noSpaces]) return DRIVER_ALIAS[noSpaces];
+    }
     n = n.replace(/['\u2019`]/g, '');
     return n;
 }
@@ -138,6 +137,12 @@ function exportCompensi() {
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     if (cm.length === 0) { toast('Nessun dato', 'warning'); return; }
 
+    var avrSet = buildDriverAvrSet();
+    var cmAvr = cm.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        return isDriverAvr(rider, avrSet);
+    });
+
     var rows = [
         ['COMPENSI DRIVER — ' + meseLabel(mese)],
         [],
@@ -145,7 +150,7 @@ function exportCompensi() {
     ];
 
     var driverData = {};
-    cm.forEach(function(c) {
+    cmAvr.forEach(function(c) {
         var drv = normalizeDriverName(c.driver || c.rider);
         if (!drv) return;
         if (!driverData[drv]) driverData[drv] = 0;
