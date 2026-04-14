@@ -1,20 +1,27 @@
-// DELIVERY HUB v2 — Fatturazione per Filiale (formato fattura Fratelli Arena)
+// DELIVERY HUB v2 — Fatturazione per Filiale (solo consegne AVR — allineato con dashboard)
 
 function renderFatturazione() {
     var mese = state.meseCorrente;
     if (!mese) return;
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
 
-    // Raggruppa per filiale
+    // Filtra solo AVR usando la stessa logica del dashboard
+    var avrSet = buildDriverAvrSet();
+    var cmAvr = cm.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        return isDriverAvr(rider, avrSet);
+    });
+
+    // Raggruppa per filiale (solo AVR)
     var filialiData = {};
-    cm.forEach(function(c) {
+    cmAvr.forEach(function(c) {
         var fil = String(c.filiale || '?').replace(/\.0$/, '');
         if (!filialiData[fil]) {
             filialiData[fil] = { 
                 filiale: fil, 
                 area: c.area || c.provincia || '?',
-                sotto250: 0,    // consegne con importo < 250.01 (a €6,90)
-                sopra250: 0     // consegne con importo >= 250.01 (a €10,00)
+                sotto250: 0,
+                sopra250: 0
             };
         }
         var importo = parseFloat(c.importo) || 0;
@@ -63,7 +70,6 @@ function renderFatturazione() {
     var lastArea = '';
     var html = '';
     righe.forEach(function(r) {
-        // Riga separatore area
         if (r.area !== lastArea) {
             var areaName = state.aree[r.area] ? state.aree[r.area].nome : r.area;
             var gruppo = state.aree[r.area] ? state.aree[r.area].gruppo : '';
@@ -117,9 +123,16 @@ function exportFatturazione() {
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     if (cm.length === 0) { toast('Nessun dato', 'warning'); return; }
 
+    // Filtra solo AVR
+    var avrSet = buildDriverAvrSet();
+    var cmAvr = cm.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        return isDriverAvr(rider, avrSet);
+    });
+
     // Raggruppa per filiale
     var filialiData = {};
-    cm.forEach(function(c) {
+    cmAvr.forEach(function(c) {
         var fil = String(c.filiale || '?').replace(/\.0$/, '');
         if (!filialiData[fil]) {
             filialiData[fil] = { filiale: fil, area: c.area || '?', sotto250: 0, sopra250: 0 };
@@ -149,13 +162,11 @@ function exportFatturazione() {
 
     var totImponibile = 0;
     righe.forEach(function(r) {
-        // Riga consegne < 250
         if (r.sotto250 > 0) {
             var netto1 = r.sotto250 * 6.90;
             rows.push(['FILIALE ' + r.filiale, r.sotto250, '6,90', netto1.toFixed(2), '22%']);
             totImponibile += netto1;
         }
-        // Riga consegne >= 250.01
         if (r.sopra250 > 0) {
             var netto2 = r.sopra250 * 10.00;
             rows.push(['FILIALE ' + r.filiale + ' CONSEGNE 250,01', r.sopra250, '10,00', netto2.toFixed(2), '22%']);
@@ -171,16 +182,9 @@ function exportFatturazione() {
 
     var wb = XLSX.utils.book_new();
     var ws = XLSX.utils.aoa_to_sheet(rows);
-    
-    // Imposta larghezza colonne
     ws['!cols'] = [
-        { wch: 35 },
-        { wch: 12 },
-        { wch: 15 },
-        { wch: 18 },
-        { wch: 8 }
+        { wch: 35 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 8 }
     ];
-    
     XLSX.utils.book_append_sheet(wb, ws, 'Fattura');
     XLSX.writeFile(wb, 'fattura_' + mese + '.xlsx');
     toast('File fattura scaricato', 'success');
