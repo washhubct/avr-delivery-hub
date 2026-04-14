@@ -1,14 +1,38 @@
-// DELIVERY HUB v2 — Dashboard (con classificazione AVR/interna da anagrafica)
+// DELIVERY HUB v2 — Dashboard (classificazione AVR/interna DEFINITIVA con alias)
+
+// Mappa alias: nomi come appaiono nei fogli → cognome anagrafica AVR
+var DRIVER_ALIAS = {
+    'FELIX': 'SIYAMBALA GAMAGE',
+    'SIYAMBALAGAMAGE': 'SIYAMBALA GAMAGE',
+    'SIYAMBALA GAMAGESHRENUKA': 'SIYAMBALA GAMAGE',
+    'LINOCE': 'LI NOCE',
+    'DALPIN': 'DAL PIN',
+    'CORRCATANIA': 'LA PORTA',
+    'CORR CATANIA': 'LA PORTA',
+    'CORR.CATANIA': 'LA PORTA',
+    'CORR. CATANIA': 'LA PORTA',
+    'SCABOTI': 'SCABOTTI',
+    'DIGIORGI': 'DI GIORGI',
+    'DIGIROGI': 'DI GIORGI',
+    'DI GIROGI': 'DI GIORGI',
+    'DICANDIA': 'DI CANDIA',
+    'DIPRIMA': 'DI PRIMA',
+    'LAPORTA': 'LA PORTA',
+    'DIMAGGIO': 'DI MAGGIO',
+    'LAROCCA': 'LA ROCCA',
+    'LOPRESTI': 'LO PRESTI'
+};
 
 function buildDriverAvrSet() {
-    // Costruisce un Set con tutti i cognomi driver AVR (da anagrafica Firestore + preload)
     var set = new Set();
 
     // Da anagrafica Firestore
     if (state.driverList && state.driverList.length > 0) {
         state.driverList.forEach(function(d) {
-            if (d.cognome) set.add(d.cognome.toUpperCase().trim());
-            // Aggiungi anche cognome+nome per match più preciso
+            if (d.cognome) {
+                set.add(d.cognome.toUpperCase().trim());
+                set.add(d.cognome.toUpperCase().trim().replace(/\s+/g, ''));
+            }
             if (d.cognome && d.nome) {
                 set.add((d.cognome + ' ' + d.nome).toUpperCase().trim());
                 set.add((d.nome + ' ' + d.cognome).toUpperCase().trim());
@@ -19,13 +43,21 @@ function buildDriverAvrSet() {
     // Fallback da preload in state
     if (state.driverPreload) {
         state.driverPreload.forEach(function(d) {
-            if (d.cognome) set.add(d.cognome.toUpperCase().trim());
+            if (d.cognome) {
+                set.add(d.cognome.toUpperCase().trim());
+                set.add(d.cognome.toUpperCase().trim().replace(/\s+/g, ''));
+            }
             if (d.cognome && d.nome) {
                 set.add((d.cognome + ' ' + d.nome).toUpperCase().trim());
                 set.add((d.nome + ' ' + d.cognome).toUpperCase().trim());
             }
         });
     }
+
+    // Aggiungi tutti gli alias come riconosciuti
+    Object.keys(DRIVER_ALIAS).forEach(function(alias) {
+        set.add(alias.toUpperCase().trim());
+    });
 
     return set;
 }
@@ -38,34 +70,45 @@ function isDriverAvr(riderName, avrSet) {
     // Match esatto
     if (avrSet.has(name)) return true;
 
-    // Match parziale: controlla se il cognome AVR è contenuto nel nome rider
+    // Match senza spazi (es. LINOCE, DALPIN, DIGIORGI)
+    var noSpaces = name.replace(/\s+/g, '');
+    if (avrSet.has(noSpaces)) return true;
+
+    // Check alias diretto
+    if (DRIVER_ALIAS[name] || DRIVER_ALIAS[noSpaces]) return true;
+
+    // Match parziale: controlla se un cognome AVR è contenuto nel nome rider
     var found = false;
     avrSet.forEach(function(avrName) {
         if (found) return;
-        // Controlla solo cognomi (parole singole o doppie tipo "LI NOCE")
+        if (avrName.length < 3) return;
         if (name.indexOf(avrName) >= 0) found = true;
-        // Controlla anche se il cognome AVR è contenuto
-        if (avrName.indexOf(' ') < 0 && name.split(/\s+/).indexOf(avrName) >= 0) found = true;
     });
 
     return found;
+}
+
+function normalizeRiderForDisplay(riderName) {
+    if (!riderName) return '—';
+    var name = riderName.toUpperCase().trim();
+    var noSpaces = name.replace(/\s+/g, '');
+    if (DRIVER_ALIAS[name]) return DRIVER_ALIAS[name];
+    if (DRIVER_ALIAS[noSpaces]) return DRIVER_ALIAS[noSpaces];
+    return name;
 }
 
 function renderDashboard() {
     var mese = state.meseCorrente;
     var allConsegne = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
 
-    // Costruisci set driver AVR da anagrafica
     var avrSet = buildDriverAvrSet();
 
-    // Separa AVR da interne usando l'anagrafica reale
     var consegneAvr = allConsegne.filter(function(c) {
         var rider = c.driver || c.rider || '';
         return isDriverAvr(rider, avrSet);
     });
     var consegneInt = allConsegne.filter(function(c) {
         var rider = c.driver || c.rider || '';
-        // Se non ha rider, non è né AVR né interna — skip
         if (!rider.trim()) return false;
         return !isDriverAvr(rider, avrSet);
     });
@@ -177,11 +220,16 @@ function renderDashboard() {
         return '<tr><td>' + e[0] + ' ' + e[1].nome + '</td><td><span class="badge">' + e[1].area + '</span></td><td>' + e[1].count + '</td><td>' + formatCurrency(e[1].fatturato) + '</td></tr>';
     }).join('');
 
-    // ═══ Performance driver (solo AVR) ═══
+    // ═══ Performance driver (solo AVR) — con normalizzazione nomi ═══
     var byDriver = {};
     consegneAvr.forEach(function(c) {
-        var drv = normalizeDriverName(c.driver || c.rider);
-        if (!drv) return;
+        var rawName = c.driver || c.rider || '';
+        var drv = normalizeRiderForDisplay(rawName);
+        if (!drv || drv === '—') return;
+        if (typeof normalizeDriverName === 'function') {
+            var nd = normalizeDriverName(rawName);
+            if (nd) drv = nd;
+        }
         if (!byDriver[drv]) byDriver[drv] = { count: 0, filiali: new Set() };
         byDriver[drv].count++;
         byDriver[drv].filiali.add(c.filiale);
