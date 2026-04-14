@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Report Finanziario (P&L mensile)
+// DELIVERY HUB v2 — Report Finanziario (P&L mensile — allineato con logica alias dashboard)
 
 var COSTI_VOCI = [
     { key: 'compensiDriver', label: 'Compensi driver (bonifici)', auto: true },
@@ -12,38 +12,18 @@ var COSTI_VOCI = [
     { key: 'altro', label: 'Altro', default: 0 }
 ];
 
-var ALIAS_RF = {
-    'FELIX': 'SIYAMBALA GAMAGE',
-    'DALPIN': 'DAL PIN',
-    'SCABOTI': 'SCABOTTI',
-    'DI GIROGI': 'DI GIORGI',
-    'CORRCATANIA': 'LA PORTA',
-    "PITTA'": 'PITTA',
-    "ZAPPALA'": 'ZAPPALA',
-    "ARICO'": 'ARICO'
-};
-
-var ESCLUDI_RF = ['RITIRO PDV', 'PDV', 'PV', 'GAETANO', 'SERGIO', 'ROBERTO', 'INTERNA', 'UNICA',
-    'CAPUTO', 'DI BENEDETTO', 'GIANMARCO', 'PICADACI', 'PRIVITERA', 'TEST1APP', '-', ''];
-
-function normalizeDriverRF(name) {
-    if (!name) return null;
-    var n = name.toUpperCase().trim().replace(/['\u2019`]/g, "'");
-    if (ESCLUDI_RF.indexOf(n) >= 0 || !n) return null;
-    if (ALIAS_RF[n]) return ALIAS_RF[n];
-    n = n.replace(/'/g, '');
-    return n;
-}
-
 async function renderReportFinanziario() {
     var mese = state.meseCorrente;
     if (!mese) return;
 
-    // === RICAVI (automatici dalle consegne) ===
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
 
-    // Filtra solo AVR per il conteggio consegne fatturabili
-    var cmAvr = cm.filter(function(c) { return c.tipoDriver !== 'interna'; });
+    // Filtra solo AVR usando la stessa logica del dashboard
+    var avrSet = buildDriverAvrSet();
+    var cmAvr = cm.filter(function(c) {
+        var rider = c.driver || c.rider || '';
+        return isDriverAvr(rider, avrSet);
+    });
     var totConsegne = cmAvr.length;
 
     // Calcola fatturato per gruppo
@@ -83,21 +63,21 @@ async function renderReportFinanziario() {
     document.getElementById('rfTotIva').innerHTML = formatCurrency(totIva);
     document.getElementById('rfTotLordo').innerHTML = '<strong>' + formatCurrency(totLordo) + '</strong>';
 
-    // === COSTI (da Firestore o default) ===
+    // === COSTI ===
     var costiDoc = await loadCostiMese(mese);
     var costiData = costiDoc || {};
 
-    // Compensi driver automatici
+    // Compensi driver automatici — usa stessa logica
     var compensiDriver = 0;
     var driverData = {};
     cmAvr.forEach(function(c) {
-        var drv = normalizeDriverRF(c.driver || c.rider);
+        var drv = normalizeDriverName(c.driver || c.rider);
         if (!drv) return;
         if (!driverData[drv]) driverData[drv] = 0;
         driverData[drv]++;
     });
     Object.keys(driverData).forEach(function(drv) {
-        var ana = findDriverAnagrafica ? findDriverAnagrafica(drv) : null;
+        var ana = typeof findDriverAnagrafica === 'function' ? findDriverAnagrafica(drv) : null;
         var costo = ana ? (ana.costoConsegna || state.costoPerConsegna) : state.costoPerConsegna;
         compensiDriver += driverData[drv] * costo;
     });
@@ -146,7 +126,6 @@ async function renderReportFinanziario() {
             '</div>' +
         '</div>';
 
-    // === STORICO ===
     await renderStoricoFinanziario();
 }
 
@@ -171,8 +150,6 @@ function calcolaPrezzoSpeciale(importo) {
     }
     return 0;
 }
-
-// === COSTI MENSILI (Firestore) ===
 
 async function loadCostiMese(mese) {
     try {
@@ -229,8 +206,6 @@ async function doSaveCosti() {
     closeModal();
     renderReportFinanziario();
 }
-
-// === STORICO ===
 
 async function renderStoricoFinanziario() {
     try {
