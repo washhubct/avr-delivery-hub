@@ -63,6 +63,7 @@ function initAuth() {
     auth.onAuthStateChanged(async function(user) {
         state.user = user;
         if (user) {
+            document.body.classList.remove('is-login');
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('sidebar').style.display = 'flex';
 
@@ -122,6 +123,7 @@ function initAuth() {
             setTimeout(function() { auth.signOut(); location.reload(); }, msToMidnight);
 
         } else {
+            document.body.classList.add('is-login');
             document.getElementById('loginScreen').style.display = 'flex';
             document.getElementById('sidebar').style.display = 'none';
             document.querySelectorAll('.screen').forEach(function(s) {

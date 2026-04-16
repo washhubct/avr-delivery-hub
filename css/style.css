@@ -383,13 +383,18 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: calc(100vh - var(--topbar-h));
-    min-height: calc(100dvh - var(--topbar-h));
+    min-height: 100vh;
+    min-height: 100dvh;
     padding: 24px;
     background:
         radial-gradient(ellipse at 25% 20%, rgba(56, 189, 248, 0.05) 0%, transparent 50%),
         radial-gradient(ellipse at 75% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
 }
+
+/* Nasconde sidebar/topbar quando l'utente non è loggato */
+body.is-login .main-content { margin-left: 0; }
+body.is-login .main-content::before { display: none; }
+body.is-login .topbar { display: none; }
 
 .login-card {
     background: var(--bg-card);
