@@ -1,0 +1,158 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════
+// AVR LOGISTIC DASHBOARD — Firestore Security Rules
+// Project: avr-logistic-dashboard
+//
+// Modello di autorizzazione:
+//   • superadmin → amministrazione@avrlogisticarl.com (accesso completo)
+//   • staff      → michela@, alessandra@ (accesso completo operativo,
+//                  no costi mensili, no log accessi)
+//   • driver     → qualsiasi altro utente autenticato (app driver):
+//                  accede solo ai propri record (filtrati su driverEmail)
+// ═══════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userEmail() {
+      return request.auth.token.email != null
+             ? request.auth.token.email.lower()
+             : '';
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && userEmail() == 'amministrazione@avrlogisticarl.com';
+    }
+
+    function isStaff() {
+      return isSignedIn()
+             && (userEmail() == 'michela@avrlogisticarl.com'
+                 || userEmail() == 'alessandra@avrlogisticarl.com');
+    }
+
+    function isAdminOrStaff() {
+      return isSuperAdmin() || isStaff();
+    }
+
+    function isDriver() {
+      return isSignedIn() && !isAdminOrStaff();
+    }
+
+    function isOwnByEmail() {
+      return resource.data.driverEmail is string
+             && resource.data.driverEmail.lower() == userEmail();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // OPERATIVITÀ AVR — admin + staff R/W
+    // ═══════════════════════════════════════════════════════════
+    match /consegne/{doc} {
+      allow read, write: if isAdminOrStaff();
+    }
+
+    match /filiali/{doc} {
+      allow read, write: if isAdminOrStaff();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DRIVER ANAGRAFICA — admin/staff full; driver legge solo proprio
+    // ═══════════════════════════════════════════════════════════
+    match /driverAnagrafica/{doc} {
+      allow read: if isAdminOrStaff()
+                     || (isDriver()
+                         && resource.data.email is string
+                         && resource.data.email.lower() == userEmail());
+      allow write: if isAdminOrStaff();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // REPORT DRIVER — admin/staff full; driver crea + legge/elimina suoi
+    // ═══════════════════════════════════════════════════════════
+    match /reportDriver/{doc} {
+      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow create: if isSignedIn()
+                       && request.resource.data.driverEmail == userEmail();
+      allow update: if isAdminOrStaff();
+      allow delete: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RITORNI — admin/staff full; driver crea + legge/elimina suoi
+    // ═══════════════════════════════════════════════════════════
+    match /ritorni/{doc} {
+      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow create: if isSignedIn()
+                       && request.resource.data.driverEmail == userEmail();
+      allow update: if isAdminOrStaff();
+      allow delete: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SEGNALAZIONI — admin/staff full; driver crea + legge sue
+    // ═══════════════════════════════════════════════════════════
+    match /segnalazioni/{doc} {
+      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow create: if isSignedIn()
+                       && request.resource.data.driverEmail == userEmail();
+      allow update: if isAdminOrStaff();
+      allow delete: if isAdminOrStaff();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TURNI DRIVER — driver crea all'ingresso; admin/staff legge
+    // ═══════════════════════════════════════════════════════════
+    match /turniDriver/{doc} {
+      allow create: if isSignedIn()
+                       && request.resource.data.email is string
+                       && request.resource.data.email.lower() == userEmail();
+      allow read: if isAdminOrStaff()
+                     || (isDriver()
+                         && resource.data.email is string
+                         && resource.data.email.lower() == userEmail());
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DANNI — admin/staff full; driver legge solo suoi
+    // ═══════════════════════════════════════════════════════════
+    match /danni/{doc} {
+      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow write: if isAdminOrStaff();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // COSTI MENSILI — solo superadmin (dati sensibili)
+    // ═══════════════════════════════════════════════════════════
+    match /costiMensili/{doc} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // LOG ACCESSI — tutti scrivono (auto-log), solo superadmin legge
+    // ═══════════════════════════════════════════════════════════
+    match /accessLog/{doc} {
+      allow create: if isSignedIn();
+      allow read: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    match /driverAccessLog/{doc} {
+      allow create: if isSignedIn();
+      allow read: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEFAULT DENY — qualsiasi altra collezione resta chiusa
+    // ═══════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
