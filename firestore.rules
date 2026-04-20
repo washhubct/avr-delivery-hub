@@ -44,9 +44,13 @@ service cloud.firestore {
       return isSignedIn() && !isAdminOrStaff();
     }
 
+    // Nota: confronto case-sensitive. I client scrivono driverEmail
+    // sempre in lowercase (vedi commit 8f702a6). Rimuovere .lower() sul
+    // lato resource.data è necessario perché Firestore rifiuta le query
+    // list se il filtro non combacia staticamente con la rule.
     function isOwnByEmail() {
       return resource.data.driverEmail is string
-             && resource.data.driverEmail.lower() == userEmail();
+             && resource.data.driverEmail == userEmail();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -57,7 +61,8 @@ service cloud.firestore {
     }
 
     match /filiali/{doc} {
-      allow read, write: if isAdminOrStaff();
+      allow read: if isSignedIn();
+      allow write: if isAdminOrStaff();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -67,8 +72,16 @@ service cloud.firestore {
       allow read: if isAdminOrStaff()
                      || (isDriver()
                          && resource.data.email is string
-                         && resource.data.email.lower() == userEmail());
-      allow write: if isAdminOrStaff();
+                         && resource.data.email == userEmail());
+      allow create, delete: if isAdminOrStaff();
+      allow update: if isAdminOrStaff()
+                       || (isDriver()
+                           && resource.data.email == userEmail()
+                           && request.resource.data.email == resource.data.email
+                           && request.resource.data.diff(resource.data).affectedKeys()
+                              .hasOnly(['codiceFiscale','numeroPatente','scadenzaPatente',
+                                        'telefono','dataNascita','indirizzo',
+                                        'profiloCompletatoIl']));
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -113,11 +126,11 @@ service cloud.firestore {
     match /turniDriver/{doc} {
       allow create: if isSignedIn()
                        && request.resource.data.email is string
-                       && request.resource.data.email.lower() == userEmail();
+                       && request.resource.data.email == userEmail();
       allow read: if isAdminOrStaff()
                      || (isDriver()
                          && resource.data.email is string
-                         && resource.data.email.lower() == userEmail());
+                         && resource.data.email == userEmail());
       allow update, delete: if isSuperAdmin();
     }
 
