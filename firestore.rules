@@ -77,7 +77,8 @@ service cloud.firestore {
     match /reportDriver/{doc} {
       allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
       allow create: if isSignedIn()
-                       && request.resource.data.driverEmail == userEmail();
+                       && request.resource.data.driverEmail is string
+                       && request.resource.data.driverEmail.lower() == userEmail();
       allow update: if isAdminOrStaff();
       allow delete: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
     }
@@ -88,7 +89,8 @@ service cloud.firestore {
     match /ritorni/{doc} {
       allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
       allow create: if isSignedIn()
-                       && request.resource.data.driverEmail == userEmail();
+                       && request.resource.data.driverEmail is string
+                       && request.resource.data.driverEmail.lower() == userEmail();
       allow update: if isAdminOrStaff();
       allow delete: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
     }
@@ -99,7 +101,8 @@ service cloud.firestore {
     match /segnalazioni/{doc} {
       allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
       allow create: if isSignedIn()
-                       && request.resource.data.driverEmail == userEmail();
+                       && request.resource.data.driverEmail is string
+                       && request.resource.data.driverEmail.lower() == userEmail();
       allow update: if isAdminOrStaff();
       allow delete: if isAdminOrStaff();
     }

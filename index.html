@@ -223,6 +223,11 @@
                 <button class="btn btn-primary btn-sm" onclick="filterConsegne()">🔍 Cerca</button>
 <button class="btn btn-sm" onclick="resetDateFilter()">✕ Reset date</button>
             </div>
+            <div id="totaleConsegneFiltrate" style="background:linear-gradient(135deg,#0f1d3d 0%,#1e3a8a 100%);color:#fff;padding:16px 20px;border-radius:12px;margin-bottom:12px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"></div>
+            <style>
+                #totaleConsegneFiltrate .totale-num{font-size:32px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+                #totaleConsegneFiltrate .totale-meta{font-size:13px;opacity:0.85}
+            </style>
             <div class="card">
                 <div class="table-wrap">
                     <table class="data-table" id="tblConsegne">

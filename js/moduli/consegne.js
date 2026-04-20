@@ -3,16 +3,18 @@
 function renderConsegne() {
     const mese = state.meseCorrente;
     const filtered = getFilteredConsegne();
-    
+
     // Update filiale dropdown from current data
     updateFilialeFilter();
-    
+
     // Pagination
     const total = filtered.length;
     const totalPages = Math.ceil(total / state.consegnePerPage);
     const page = Math.min(state.consegnePage, totalPages || 1);
     const start = (page - 1) * state.consegnePerPage;
     const pageData = filtered.slice(start, start + state.consegnePerPage);
+
+    renderTotaleConsegne(filtered);
 
     const tbody = document.getElementById('tblConsegneBody');
     tbody.innerHTML = pageData.map(c => {
@@ -151,4 +153,17 @@ function goToPage(p) {
     state.consegnePage = p;
     renderConsegne();
     document.getElementById('screen-consegne').scrollTop = 0;
+}
+
+function renderTotaleConsegne(filtered) {
+    const el = document.getElementById('totaleConsegneFiltrate');
+    if (!el) return;
+    const n = filtered.length;
+    const importo = filtered.reduce((s, c) => s + (Number(c.importo) || 0), 0);
+    const driverSet = new Set(filtered.map(c => c.driver || c.rider).filter(Boolean));
+    const filialeSet = new Set(filtered.map(c => c.filiale).filter(Boolean));
+    el.innerHTML = `
+        <div class="totale-num">${n}</div>
+        <div class="totale-meta">consegne · ${formatCurrency(importo)} · ${driverSet.size} driver · ${filialeSet.size} filiali</div>
+    `;
 }
