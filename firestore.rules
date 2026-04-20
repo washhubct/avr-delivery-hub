@@ -165,6 +165,14 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // LEADERBOARD — aggregato precalcolato dal dashboard, letto dai driver
+    // ═══════════════════════════════════════════════════════════
+    match /leaderboard/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrStaff();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // DEFAULT DENY — qualsiasi altra collezione resta chiusa
     // ═══════════════════════════════════════════════════════════
     match /{document=**} {
