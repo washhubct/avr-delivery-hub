@@ -2,25 +2,35 @@
 
 // Mappa alias: nomi come appaiono nei fogli → cognome anagrafica AVR
 var DRIVER_ALIAS = {
+    // Varianti nome completo
     'FELIX': 'SIYAMBALA GAMAGE',
     'SIYAMBALAGAMAGE': 'SIYAMBALA GAMAGE',
     'SIYAMBALA GAMAGESHRENUKA': 'SIYAMBALA GAMAGE',
+    // Cognomi con particella (DI, LA, LO, DAL)
     'LINOCE': 'LI NOCE',
     'DALPIN': 'DAL PIN',
-    'CORRCATANIA': 'LA PORTA',
-    'CORR CATANIA': 'LA PORTA',
-    'CORR.CATANIA': 'LA PORTA',
-    'CORR. CATANIA': 'LA PORTA',
-    'SCABOTI': 'SCABOTTI',
     'DIGIORGI': 'DI GIORGI',
     'DIGIROGI': 'DI GIORGI',
     'DI GIROGI': 'DI GIORGI',
     'DICANDIA': 'DI CANDIA',
     'DIPRIMA': 'DI PRIMA',
-    'LAPORTA': 'LA PORTA',
     'DIMAGGIO': 'DI MAGGIO',
     'LAROCCA': 'LA ROCCA',
-    'LOPRESTI': 'LO PRESTI'
+    'LAPORTA': 'LA PORTA',
+    'LOPRESTI': 'LO PRESTI',
+    // Alias corriere/filiale
+    'CORRCATANIA': 'LA PORTA',
+    'CORR CATANIA': 'LA PORTA',
+    'CORR.CATANIA': 'LA PORTA',
+    'CORR. CATANIA': 'LA PORTA',
+    // Typo cognomi semplici
+    'SCABOTI': 'SCABOTTI',
+    // Cognome + nome insieme (VINCI VITO — in anagrafica come cognome VINCI)
+    'VINCI VITO': 'VINCI',
+    'VINCIVITO': 'VINCI',
+    // Apostrofo/accento
+    "ARICO'": 'ARICO',
+    'ARICÒ': 'ARICO'
 };
 
 function buildDriverAvrSet() {
