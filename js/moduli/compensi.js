@@ -28,6 +28,9 @@ async function renderCompensi() {
         if (!driverData[drv]) driverData[drv] = { count: 0 };
     });
 
+    // Consegne senza driver riconoscibile
+    var nonAttribuiti = cm.length - Object.values(driverData).reduce(function(s, d) { return s + d.count; }, 0);
+
     var rows = [];
     var totConsegne = 0, totConsegneDriver = 0, totLordo = 0, totDanni = 0, totNetto = 0;
 
@@ -72,7 +75,17 @@ async function renderCompensi() {
     document.getElementById('compDanni').textContent = formatCurrency(totDanni);
     document.getElementById('compNetto').textContent = formatCurrency(totNetto);
 
+    if (nonAttribuiti > 0) {
+        rows.push({ _nonAttribuiti: true, consegneDecò: nonAttribuiti });
+    }
+
     document.getElementById('tblCompensi').innerHTML = rows.map(function(r) {
+        if (r._nonAttribuiti) {
+            return '<tr style="opacity:0.6">' +
+                '<td><em style="color:var(--warning)">Senza driver *</em></td>' +
+                '<td>—</td><td>' + r.consegneDecò + '</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>' +
+            '</tr>';
+        }
         var diffColor = r.diff === 0 ? 'var(--text-muted)' : (r.diff > 0 ? 'var(--warning)' : 'var(--danger)');
         var diffText = r.diff === 0 ? '—' : (r.diff > 0 ? '+' + r.diff : r.diff);
         var diffBg = r.diff !== 0 ? 'background:rgba(245,158,11,0.04);' : '';
@@ -92,9 +105,10 @@ async function renderCompensi() {
         '</tr>';
     }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">Nessun risultato</td></tr>';
 
-    document.getElementById('compTotConsegne').textContent = totConsegne;
+    var totConsegneTutte = totConsegne + nonAttribuiti;
+    document.getElementById('compTotConsegne').textContent = totConsegneTutte + (nonAttribuiti > 0 ? ' (' + totConsegne + ' attribuiti, ' + nonAttribuiti + ' senza driver)' : '');
     document.getElementById('compTotConsegneDriver').textContent = totConsegneDriver;
-    var totDiff = totConsegneDriver - totConsegne;
+    var totDiff = totConsegneDriver - totConsegneTutte;
     document.getElementById('compTotDiff').textContent = totDiff === 0 ? '—' : (totDiff > 0 ? '+' + totDiff : totDiff);
     document.getElementById('compTotLordo').textContent = formatCurrency(totLordo);
     document.getElementById('compTotDanniTab').textContent = totDanni > 0 ? '-' + formatCurrency(totDanni) : '—';
