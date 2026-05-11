@@ -77,8 +77,11 @@ async function renderCompensi() {
         var diffText = r.diff === 0 ? '—' : (r.diff > 0 ? '+' + r.diff : r.diff);
         var diffBg = r.diff !== 0 ? 'background:rgba(245,158,11,0.04);' : '';
 
+        var inAnagrafica = !!findDriverAnagrafica(r.drv);
+        var nomeDisplay = inAnagrafica ? r.drv : r.drv + ' <span title="Non presente in anagrafica" style="color:var(--warning);cursor:help">*</span>';
+
         return '<tr style="' + diffBg + '">' +
-            '<td><strong>' + r.drv + '</strong></td>' +
+            '<td><strong>' + nomeDisplay + '</strong></td>' +
             '<td><span class="badge badge-info">' + r.citta + '</span></td>' +
             '<td>' + r.consegneDecò + '</td>' +
             '<td>' + (r.consegneDriver > 0 ? r.consegneDriver : '<span style="color:var(--text-light)">—</span>') + '</td>' +
