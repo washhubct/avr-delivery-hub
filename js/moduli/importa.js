@@ -373,27 +373,45 @@ function parseExcelDate(val) {
     return null;
 }
 
+function consegnaDocId(c) {
+    const d = c.data instanceof Date ? c.data : new Date(c.data);
+    const dateStr = d.toISOString().slice(0, 10).replace(/-/g, '');
+    const fil = String(c.filiale || '').replace(/[^a-zA-Z0-9]/g, '');
+    const ref = (c.orderId || c.codiceDomicilio || '').replace(/[^a-zA-Z0-9]/g, '');
+    // Normalize accents before stripping so "Munò" and "Muno" don't collide
+    const cli = (c.cliente || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    const imp = String(Math.round((c.importo || 0) * 100));
+    return `${fil}_${dateStr}_${ref || cli}_${imp}`.slice(0, 100);
+}
+
 async function saveConsegneBatch(consegne) {
-    // Save in batches of 400
+    const dryRun = window.DRY_RUN_IMPORT === true;
     const batchSize = 400;
     for (let i = 0; i < consegne.length; i += batchSize) {
         const batch = db.batch();
         const chunk = consegne.slice(i, i + batchSize);
 
         chunk.forEach(c => {
-            const docRef = db.collection(COLLECTIONS.consegne).doc();
+            const docId = consegnaDocId(c);
+            const docRef = db.collection(COLLECTIONS.consegne).doc(docId);
             const data = {
                 ...c,
                 data: firebase.firestore.Timestamp.fromDate(c.data instanceof Date ? c.data : new Date(c.data)),
                 importedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
-            // Remove non-serializable
             delete data.dateObj;
-            batch.set(docRef, data);
+            if (dryRun) {
+                console.log('[DRY_RUN] set', docRef.path, JSON.stringify({ importo: c.importo, cliente: c.cliente, filiale: c.filiale, mese: c.mese }));
+            } else {
+                batch.set(docRef, data);
+            }
         });
 
-        await batch.commit();
+        if (!dryRun) await batch.commit();
     }
+    if (dryRun) console.log(`[DRY_RUN] ${consegne.length} record — nessuna scrittura su Firestore`);
 }
 
 function autoGenerateFiliali() {
