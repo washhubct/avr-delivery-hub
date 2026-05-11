@@ -5,13 +5,6 @@ async function renderCompensi() {
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     var searchTerm = document.getElementById('searchCompensi') ? document.getElementById('searchCompensi').value.toUpperCase().trim() : '';
 
-    // Filtra solo AVR usando la stessa logica del dashboard
-    var avrSet = buildDriverAvrSet();
-    var cmAvr = cm.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        return isDriverAvr(rider, avrSet);
-    });
-
     // Usa report driver pre-caricati
     var driverReports = {};
     (state.reportDriver || []).forEach(function(d) {
@@ -21,9 +14,9 @@ async function renderCompensi() {
         driverReports[drv] += (d.numConsegne || 0);
     });
 
-    // Dati Decò (solo AVR)
+    // Tutte le consegne del mese — normalizeDriverName esclude già PDV/interni
     var driverData = {};
-    cmAvr.forEach(function(c) {
+    cm.forEach(function(c) {
         var drv = normalizeDriverName(c.driver || c.rider);
         if (!drv) return;
         if (!driverData[drv]) driverData[drv] = { count: 0 };
@@ -137,12 +130,6 @@ function exportCompensi() {
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     if (cm.length === 0) { toast('Nessun dato', 'warning'); return; }
 
-    var avrSet = buildDriverAvrSet();
-    var cmAvr = cm.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        return isDriverAvr(rider, avrSet);
-    });
-
     var rows = [
         ['COMPENSI DRIVER — ' + meseLabel(mese)],
         [],
@@ -150,7 +137,7 @@ function exportCompensi() {
     ];
 
     var driverData = {};
-    cmAvr.forEach(function(c) {
+    cm.forEach(function(c) {
         var drv = normalizeDriverName(c.driver || c.rider);
         if (!drv) return;
         if (!driverData[drv]) driverData[drv] = 0;
