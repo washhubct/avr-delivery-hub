@@ -113,12 +113,12 @@ function renderDashboard() {
         return !isDriverAvr(rider, avrSet);
     });
 
-    // ═══ KPI (solo AVR) ═══
-    var totale = consegneAvr.length;
+    // ═══ KPI (tutte le consegne del mese, indipendente da attribuzione driver) ═══
+    var totale = allConsegne.length;
     var maggiori = 0, minori = 0, speciali = 0;
     var fatturato = 0;
 
-    consegneAvr.forEach(function(c) {
+    allConsegne.forEach(function(c) {
         var imp = c.importo || 0;
         if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
             speciali++;

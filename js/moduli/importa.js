@@ -219,7 +219,10 @@ async function handleImportDeco(files) {
                 continue;
             }
 
-            // Skip totali and header rows
+            // Stop al totale complessivo o alla sezione consegne speciali
+            if (col5.includes('TOTALE COMPLESSIVO') || col5.includes('CONSEGNE SPECIALI')) break;
+
+            // Skip totali e header
             if (col5.includes('TOTALI') || col5.includes('FILIALE') || col5.includes('TOTALE')) continue;
 
             // Filiale data row: col5=filiale code, col6=maggiori, col7=minori
