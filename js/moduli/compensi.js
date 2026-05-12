@@ -5,10 +5,10 @@ async function renderCompensi() {
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     var searchTerm = document.getElementById('searchCompensi') ? document.getElementById('searchCompensi').value.toUpperCase().trim() : '';
 
-    // Usa report driver pre-caricati
+    // Usa report driver pre-caricati — normalizza per escludere interni/test
     var driverReports = {};
     (state.reportDriver || []).forEach(function(d) {
-        var drv = (d.driver || '').toUpperCase().trim();
+        var drv = normalizeDriverName(d.driver || '');
         if (!drv) return;
         if (!driverReports[drv]) driverReports[drv] = 0;
         driverReports[drv] += (d.numConsegne || 0);
@@ -120,7 +120,10 @@ function normalizeDriverName(name) {
     var n = name.toUpperCase().trim();
     var escludi = ['RITIRO PDV','PDV','PV','N/D','','-','INTERNA','UNICA',
         'GAETANO','SERGIO','ROBERTO','CAPUTO','DI BENEDETTO','GIANMARCO',
-        'PICADACI','PRIVITERA','TEST1APP'];
+        'PICADACI','PRIVITERA','TEST1APP',
+        // Decò interni / non driver AVR
+        'AVR','FARO','GIUSEPPE','SERGIO/GIUSEPPE','SERGIOGIUSEPPE',
+        'INTERNO','SERGO','LISCIANDRA','ROMEO'];
     if (escludi.indexOf(n) >= 0) return null;
     // Usa la stessa mappa alias del dashboard
     if (typeof DRIVER_ALIAS !== 'undefined') {

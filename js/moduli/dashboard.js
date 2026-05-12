@@ -30,7 +30,13 @@ var DRIVER_ALIAS = {
     'VINCIVITO': 'VINCI',
     // Apostrofo/accento
     "ARICO'": 'ARICO',
-    'ARICÒ': 'ARICO'
+    'ARICÒ': 'ARICO',
+    // Errori ortografici frequenti
+    'TUMMONIA': 'TUMMINIA',
+    'MESSNA': 'MESSINA',
+    // Corriere Catania → La Porta (tutte le varianti)
+    'CORRIERE CATANIA': 'LA PORTA',
+    'CORRIERECATANIA': 'LA PORTA'
 };
 
 function buildDriverAvrSet() {
