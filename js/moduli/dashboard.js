@@ -129,12 +129,15 @@ function renderDashboard() {
         return !isDriverAvr(rider, avrSet);
     });
 
-    // ═══ KPI (tutte le consegne del mese, indipendente da attribuzione driver) ═══
-    var totale = allConsegne.length;
+    // ═══ KPI — escludi consegne interne (tipoDriver='interna': fatte da Decò, non fatturabili) ═══
+    // AVR/FARO (nostre senza driver specifico) hanno tipoDriver='avr' o rider vuoto → incluse
+    var consegneFatturabili = allConsegne.filter(function(c) { return c.tipoDriver !== 'interna'; });
+    var totale = consegneFatturabili.length;
+    var totaleInterne = allConsegne.length - totale;
     var maggiori = 0, minori = 0, speciali = 0;
     var fatturato = 0;
 
-    allConsegne.forEach(function(c) {
+    consegneFatturabili.forEach(function(c) {
         var imp = c.importo || 0;
         if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
             speciali++;
@@ -148,15 +151,17 @@ function renderDashboard() {
         }
     });
 
-    var costoDriver = totale * (state.costoPerConsegna || 3.50);
+    // Costo driver = solo consegne con driver AVR riconosciuto (non le AVR/FARO senza driver)
+    var costoDriver = consegneAvr.length * (state.costoPerConsegna || 3.50);
     var margine = fatturato - costoDriver;
 
     document.getElementById('kpiConsegneMese').textContent = totale;
-    document.getElementById('kpiConsegneDetail').innerHTML = maggiori + ' ≥€250 · ' + minori + ' <€250 · ' + speciali + ' speciali';
+    document.getElementById('kpiConsegneDetail').innerHTML = maggiori + ' ≥€250 · ' + minori + ' <€250 · ' + speciali + ' speciali'
+        + (totaleInterne > 0 ? ' · <span style="color:var(--text-muted)">' + totaleInterne + ' interne escluse</span>' : '');
     document.getElementById('kpiFatturato').textContent = formatCurrency(fatturato);
     document.getElementById('kpiFatturatoDetail').textContent = maggiori + '×€10 + ' + (minori + speciali) + '×€6,90';
     document.getElementById('kpiCostoDriver').textContent = formatCurrency(costoDriver);
-    document.getElementById('kpiCostoDriverDetail').textContent = totale + ' × €' + ((state.costoPerConsegna || 3.50).toFixed(2).replace('.', ','));
+    document.getElementById('kpiCostoDriverDetail').textContent = consegneAvr.length + ' × €' + ((state.costoPerConsegna || 3.50).toFixed(2).replace('.', ','));
     document.getElementById('kpiMargine').textContent = formatCurrency(margine);
     var margPerc = fatturato > 0 ? ((margine / fatturato) * 100).toFixed(1) : '0';
     document.getElementById('kpiMargineDetail').textContent = margPerc + '% del fatturato';

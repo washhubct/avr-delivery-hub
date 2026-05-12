@@ -123,7 +123,8 @@ function normalizeDriverName(name) {
         'PICADACI','PRIVITERA','TEST1APP',
         // Decò interni / non driver AVR
         'AVR','FARO','GIUSEPPE','SERGIO/GIUSEPPE','SERGIOGIUSEPPE',
-        'INTERNO','SERGO','LISCIANDRA','ROMEO'];
+        'INTERNO','SERGO','LISCIANDRA'];
+    // ROMEO = driver AVR (Messina 516), non escludere
     if (escludi.indexOf(n) >= 0) return null;
     // Usa la stessa mappa alias del dashboard
     if (typeof DRIVER_ALIAS !== 'undefined') {
