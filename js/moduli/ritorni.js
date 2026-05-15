@@ -56,11 +56,11 @@ async function renderRitorni() {
 
             return '<tr>' +
                 '<td>' + dataStr + '</td>' +
-                '<td><strong>' + (d.driver || '—') + '</strong></td>' +
-                '<td>' + (d.filialeNome || d.filiale || '—') + '</td>' +
-                '<td>' + (d.motivoLabel || d.motivo || '—') + '</td>' +
+                '<td><strong>' + escapeHtml(d.driver || '—') + '</strong></td>' +
+                '<td>' + escapeHtml(d.filialeNome || d.filiale || '—') + '</td>' +
+                '<td>' + escapeHtml(d.motivoLabel || d.motivo || '—') + '</td>' +
                 '<td><strong>' + num + '</strong></td>' +
-                '<td>' + (d.cliente || '—') + '</td>' +
+                '<td>' + escapeHtml(d.cliente || '—') + '</td>' +
                 '<td style="text-align:right">' + formatCurrency(fattura) + '</td>' +
                 '<td><span class="badge ' + statoBadge + '">' + statoLabel + '</span></td>' +
                 '<td>' + azioni + '</td>' +

@@ -1,5 +1,10 @@
 // DELIVERY HUB — Utility Functions
 
+function escapeHtml(t) {
+    if (!t) return '';
+    return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
 function formatCurrency(n) {
     if (n == null || isNaN(n)) return '—';
     return '€' + Number(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

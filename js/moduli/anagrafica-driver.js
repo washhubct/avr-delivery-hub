@@ -75,6 +75,8 @@ async function saveDriver(editId) {
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     if (!data.cognome) { toast('Inserisci il cognome', 'error'); return; }
+    const btn = document.querySelector('[onclick="saveDriver()"], [onclick="saveDriver(\'' + (editId || '') + '\')"]');
+    if (btn) btn.disabled = true;
     try {
         if (editId) {
             await db.collection('driverAnagrafica').doc(editId).update(data);
@@ -85,7 +87,12 @@ async function saveDriver(editId) {
         closeModal();
         await loadDriverAnagrafica();
         renderAnagraficaDriver();
-    } catch (e) { toast('Errore: ' + e.message, 'error'); }
+    } catch (e) {
+        toast('Errore: impossibile salvare il driver — riprova', 'error');
+        console.error('saveDriver error:', e);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 async function saveDriverAndCreateAccess() {

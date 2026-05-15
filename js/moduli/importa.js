@@ -445,10 +445,17 @@ function autoGenerateFiliali() {
     state.filiali = Object.values(filialiMap);
 
     // Save to Firestore
-    Object.entries(filialiMap).forEach(([key, data]) => {
-        db.collection(COLLECTIONS.filiali).doc(key).set({
-            ...data,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }).catch(err => console.warn('Filiale save warn:', err));
-    });
+    var saveErrors = 0;
+    await Promise.all(Object.entries(filialiMap).map(async ([key, data]) => {
+        try {
+            await db.collection(COLLECTIONS.filiali).doc(key).set({
+                ...data,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        } catch (err) {
+            saveErrors++;
+            console.warn('Filiale save warn:', key, err);
+        }
+    }));
+    if (saveErrors > 0) toast('Alcune filiali non salvate (' + saveErrors + ') — riprova', 'warning');
 }

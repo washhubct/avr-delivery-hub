@@ -93,7 +93,8 @@ async function renderLogAccessi() {
             '</tr>';
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger)">Errore: ' + e.message + '</td></tr>';
+        console.error('renderLogAccessi error:', e);
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--danger)">Errore caricamento log — riprova</td></tr>';
     }
 }
 

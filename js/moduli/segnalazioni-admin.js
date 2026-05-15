@@ -62,7 +62,8 @@ async function renderSegnalazioniAdmin() {
         }).join('');
 
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--danger)">Errore: ' + e.message + '</td></tr>';
+        console.error('renderSegnalazioniAdmin error:', e);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--danger)">Errore caricamento dati — riprova</td></tr>';
     }
 }
 
@@ -101,15 +102,15 @@ async function dettaglioSegnalazione(id) {
             '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">FILIALE</div>' +
             '<div>' + (d.filialeNome || d.filiale || '—') + '</div>' +
         '</div>' +
-        (d.cliente ? '<div style="margin-bottom:14px"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">CLIENTE</div><div>' + d.cliente + '</div></div>' : '') +
-        (d.indirizzo ? '<div style="margin-bottom:14px"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">INDIRIZZO</div><div>' + d.indirizzo + '</div></div>' : '') +
+        (d.cliente ? '<div style="margin-bottom:14px"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">CLIENTE</div><div>' + escapeHtml(d.cliente) + '</div></div>' : '') +
+        (d.indirizzo ? '<div style="margin-bottom:14px"><div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">INDIRIZZO</div><div>' + escapeHtml(d.indirizzo) + '</div></div>' : '') +
         '<div style="margin-bottom:14px">' +
             '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">DESCRIZIONE</div>' +
-            '<div style="line-height:1.6">' + (d.descrizione || '—') + '</div>' +
+            '<div style="line-height:1.6">' + escapeHtml(d.descrizione || '—') + '</div>' +
         '</div>' +
         '<div style="margin-bottom:14px">' +
             '<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">DATA</div>' +
-            '<div>' + (d.data || '—') + ' · Targa: ' + (d.targa || '—') + '</div>' +
+            '<div>' + escapeHtml(d.data || '—') + ' · Targa: ' + escapeHtml(d.targa || '—') + '</div>' +
         '</div>';
 
         if (d.foto) {

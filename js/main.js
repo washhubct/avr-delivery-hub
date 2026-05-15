@@ -19,7 +19,7 @@ function getCached(collection, mese) {
             console.log('⚡ Cache hit: ' + collection + ' ' + mese + ' (' + data.length + ' docs)');
             return data;
         }
-    } catch (e) {}
+    } catch (e) { console.warn('Cache read error:', e.message); }
     return null;
 }
 
