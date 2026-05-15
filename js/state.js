@@ -33,7 +33,6 @@ const state = {
         { min: 701, max: 800, prezzo: 41.40 },
         { min: 801, max: 900, prezzo: 48.30 },
         { min: 901, max: 1000, prezzo: 55.20 },
-        { min: 1001, max: 1099, prezzo: 62.10 },
         { min: 1100, max: 2000, prezzo: 100.00 },
         { min: 2100, max: 3000, prezzo: 200.00 },
         { min: 3100, max: 4000, prezzo: 250.00 },
