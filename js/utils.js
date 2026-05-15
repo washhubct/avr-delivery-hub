@@ -136,7 +136,7 @@ function fuzzyMatchDriver(rawName) {
     if (!rawName || rawName.length < 5) return null;
     var name = rawName.toUpperCase().trim().replace(/\s+/g, '');
     var threshold = name.length >= 8 ? 2 : 1;
-    var list = (state.driverList && state.driverList.length > 0) ? state.driverList : (state.driverPreload || []);
+    var list = (state.driverList && state.driverList.length > 0) ? state.driverList : [];
     var bestDist = Infinity;
     var bestCognome = null;
     list.forEach(function(d) {
