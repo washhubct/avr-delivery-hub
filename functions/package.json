@@ -1,0 +1,17 @@
+{
+  "name": "avr-delivery-hub-functions",
+  "description": "Firebase Functions — AVR Logistic Delivery Hub",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions --project avr-logistic-dashboard"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0"
+  },
+  "private": true
+}
