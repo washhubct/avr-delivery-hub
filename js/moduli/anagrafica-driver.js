@@ -152,10 +152,17 @@ async function toggleDriverAttivo(id) {
     const d = state.driverList.find(x => x.id === id);
     if (!d) return;
     const newState = d.attivo === false ? true : false;
-    await db.collection('driverAnagrafica').doc(id).update({ attivo: newState });
-    toast(`Driver ${newState ? 'attivato' : 'disattivato'}`, 'success');
-    await loadDriverAnagrafica();
-    renderAnagraficaDriver();
+    const label = newState ? 'attivare' : 'disattivare';
+    if (!confirm(`Vuoi ${label} il driver ${d.cognome} ${d.nome || ''}?`)) return;
+    try {
+        await db.collection('driverAnagrafica').doc(id).update({ attivo: newState });
+        toast(`Driver ${newState ? 'attivato' : 'disattivato'}`, 'success');
+        await loadDriverAnagrafica();
+        renderAnagraficaDriver();
+    } catch (e) {
+        toast('Errore: impossibile aggiornare lo stato del driver', 'error');
+        console.error('toggleDriverAttivo error:', e);
+    }
 }
 
 async function eliminaDriver(id, nome) {

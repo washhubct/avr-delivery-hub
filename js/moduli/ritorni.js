@@ -69,6 +69,7 @@ async function renderRitorni() {
 }
 
 async function gestisciRitorno(id, nuovoStato) {
+    if (!state.user) { toast('Sessione scaduta — ricarica la pagina', 'error'); return; }
     var label = nuovoStato === 'accettato' ? 'accettare' : 'rifiutare';
     if (!confirm('Vuoi ' + label + ' questo ritorno?')) return;
     try {
@@ -82,6 +83,7 @@ async function gestisciRitorno(id, nuovoStato) {
         await loadRitorniMese();
         renderRitorni();
     } catch (e) {
-        toast('Errore: ' + e.message, 'error');
+        toast('Errore: impossibile aggiornare il ritorno — riprova', 'error');
+        console.error('gestisciRitorno error:', e);
     }
 }

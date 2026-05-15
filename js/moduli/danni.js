@@ -170,9 +170,18 @@ async function saveDanno(editId) {
         if (fileInput && fileInput.files.length > 0) {
             var files = fileInput.files;
             var maxFiles = Math.min(files.length, 5);
+            var uploadFalliti = 0;
             for (var f = 0; f < maxFiles; f++) {
+                var file = files[f];
+                if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+                    toast('File "' + file.name + '" ignorato: solo immagini o PDF', 'warning');
+                    continue;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    toast('File "' + file.name + '" ignorato: max 5MB', 'warning');
+                    continue;
+                }
                 try {
-                    var file = files[f];
                     var path = 'danni/' + Date.now() + '_' + file.name;
                     var ref = firebase.storage().ref(path);
                     await ref.put(file);
@@ -185,7 +194,11 @@ async function saveDanno(editId) {
                     });
                 } catch (uploadErr) {
                     console.warn('Upload error:', uploadErr);
+                    uploadFalliti++;
                 }
+            }
+            if (uploadFalliti > 0) {
+                toast(uploadFalliti + ' file non caricati — il danno è stato salvato senza quei documenti', 'warning');
             }
         }
 
@@ -293,11 +306,16 @@ async function changeDannoStato(id) {
     var stati = ['aperto', 'in corso', 'pagato', 'annullato'];
     var currentIdx = stati.indexOf(d.stato || 'aperto');
     var newStato = stati[(currentIdx + 1) % stati.length];
-
-    await db.collection('danni').doc(id).update({ stato: newStato });
-    toast('Stato: ' + newStato, 'success');
-    await loadDanni();
-    renderDanni();
+    if (!confirm('Cambia stato da "' + (d.stato || 'aperto') + '" a "' + newStato + '"?')) return;
+    try {
+        await db.collection('danni').doc(id).update({ stato: newStato });
+        toast('Stato aggiornato: ' + newStato, 'success');
+        await loadDanni();
+        renderDanni();
+    } catch (e) {
+        toast('Errore: impossibile aggiornare lo stato del danno', 'error');
+        console.error('changeDannoStato error:', e);
+    }
 }
 
 function calcolaDanniMese(driverName, mese) {

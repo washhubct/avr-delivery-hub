@@ -148,6 +148,11 @@ function calcolaPrezzoSpeciale(importo) {
     for (var i = 0; i < fasce.length; i++) {
         if (importo >= fasce[i].min && importo <= fasce[i].max) return fasce[i].prezzo;
     }
+    // Importo fuori da tutte le fasce: usa l'ultima fascia disponibile come fallback
+    if (fasce.length > 0 && importo > fasce[fasce.length - 1].max) {
+        console.warn('calcolaPrezzoSpeciale: importo ' + importo + ' supera la fascia massima, uso ultima fascia');
+        return fasce[fasce.length - 1].prezzo;
+    }
     return 0;
 }
 

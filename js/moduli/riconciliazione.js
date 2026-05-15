@@ -9,12 +9,15 @@ async function runRiconciliazione() {
 
     // 1. Carica report driver per questo mese
     var reportSnap;
+    var reportLoadError = false;
     try {
         reportSnap = await db.collection('reportDriver')
             .where('mese', '==', mese)
             .get();
     } catch(e) {
         reportSnap = { docs: [] };
+        reportLoadError = true;
+        console.error('Riconciliazione: errore caricamento reportDriver', e);
     }
 
     var reportDriver = {};
@@ -154,7 +157,11 @@ async function runRiconciliazione() {
         '</tr></tfoot></table></div>';
 
     // Info
-    if (totDriverApp === 0) {
+    if (reportLoadError) {
+        html = '<div style="background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:16px;margin-bottom:16px">' +
+            '<strong style="color:#dc2626">⚠️ Errore caricamento dati app driver</strong>' +
+            '<p style="color:var(--text-muted);font-size:13px;margin-top:4px">Impossibile leggere i report dell\'app driver. La colonna "App driver" mostra 0 per tutti — il confronto non è affidabile. Ricarica la pagina e riprova.</p></div>' + html;
+    } else if (totDriverApp === 0) {
         html += '<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:16px;margin-top:16px">' +
             '<strong style="color:var(--warning)">Nessun report dai driver</strong>' +
             '<p style="color:var(--text-muted);font-size:13px;margin-top:4px">I driver non hanno ancora utilizzato l\'app per registrare le consegne di ' + meseLabel(mese) + '. La colonna "App driver" mostra 0 per tutti.</p></div>';
