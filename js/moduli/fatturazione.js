@@ -25,7 +25,7 @@ function renderFatturazione() {
             };
         }
         var importo = parseFloat(c.importo) || 0;
-        if (importo >= 250.01) {
+        if (importo >= 250.00) {
             filialiData[fil].sopra250++;
         } else {
             filialiData[fil].sotto250++;
@@ -138,7 +138,7 @@ function exportFatturazione() {
             filialiData[fil] = { filiale: fil, area: c.area || '?', sotto250: 0, sopra250: 0 };
         }
         var importo = parseFloat(c.importo) || 0;
-        if (importo >= 250.01) {
+        if (importo >= 250.00) {
             filialiData[fil].sopra250++;
         } else {
             filialiData[fil].sotto250++;

@@ -198,6 +198,9 @@ function openEditCosti() {
 }
 
 async function doSaveCosti() {
+    var btn = document.querySelector('[onclick="doSaveCosti()"]');
+    if (btn && btn.disabled) return;
+    if (btn) btn.disabled = true;
     var mese = state.meseCorrente;
     var data = { mese: mese, updatedAt: new Date().toISOString() };
 
@@ -207,9 +210,16 @@ async function doSaveCosti() {
         if (el) data[v.key] = parseFloat(el.value) || 0;
     });
 
-    await saveCostiMese(mese, data);
-    closeModal();
-    renderReportFinanziario();
+    try {
+        await saveCostiMese(mese, data);
+        closeModal();
+        renderReportFinanziario();
+    } catch (e) {
+        toast('Errore salvataggio costi', 'error');
+        console.error('doSaveCosti error:', e);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 async function renderStoricoFinanziario() {

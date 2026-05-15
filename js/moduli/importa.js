@@ -412,7 +412,14 @@ async function saveConsegneBatch(consegne) {
             }
         });
 
-        if (!dryRun) await batch.commit();
+        if (!dryRun) {
+            try {
+                await batch.commit();
+            } catch (batchErr) {
+                console.error('Batch commit fallito (chunk ' + i + '):', batchErr);
+                throw new Error('Errore durante il salvataggio — importazione interrotta al record ' + (i + 1) + '. Riprova.');
+            }
+        }
     }
     if (dryRun) console.log(`[DRY_RUN] ${consegne.length} record — nessuna scrittura su Firestore`);
 }

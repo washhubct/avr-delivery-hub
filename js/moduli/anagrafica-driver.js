@@ -91,8 +91,14 @@ async function saveDriver(editId) {
 async function saveDriverAndCreateAccess() {
     var email = document.getElementById('drEmail')?.value.trim().toLowerCase();
     if (!email) { toast('Inserisci l\'email per creare l\'accesso app', 'error'); return; }
-    await saveDriver();
-    await creaAccessoDriver(email);
+    var btn = document.querySelector('[onclick="saveDriverAndCreateAccess()"]');
+    if (btn) btn.disabled = true;
+    try {
+        await saveDriver();
+        await creaAccessoDriver(email);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 async function creaAccessoDriver(email) {

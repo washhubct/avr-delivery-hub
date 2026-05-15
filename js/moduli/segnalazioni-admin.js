@@ -67,6 +67,7 @@ async function renderSegnalazioniAdmin() {
 }
 
 async function risolviSegnalazione(id) {
+    if (!state.user) { toast('Sessione scaduta — ricarica la pagina', 'error'); return; }
     if (!confirm('Segnare questa segnalazione come risolta?')) return;
     try {
         await db.collection('segnalazioni').doc(id).update({
@@ -77,7 +78,8 @@ async function risolviSegnalazione(id) {
         toast('Segnalazione risolta', 'success');
         renderSegnalazioniAdmin();
     } catch (e) {
-        toast('Errore: ' + e.message, 'error');
+        toast('Errore: impossibile aggiornare la segnalazione', 'error');
+        console.error('risolviSegnalazione error:', e);
     }
 }
 
