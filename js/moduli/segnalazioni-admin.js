@@ -126,6 +126,7 @@ async function dettaglioSegnalazione(id) {
 
         openModal('Dettaglio segnalazione', html);
     } catch (e) {
-        toast('Errore: ' + e.message, 'error');
+        console.error('dettaglioSegnalazione error:', e);
+        toast('Errore caricamento segnalazione — riprova', 'error');
     }
 }
