@@ -215,6 +215,7 @@ async function loadReportDriver() {
     try {
         var snap = await db.collection('reportDriver')
             .where('mese', '==', mese)
+            .limit(5000)
             .get();
         state.reportDriver = snap.docs.map(function(doc) {
             var d = doc.data();
