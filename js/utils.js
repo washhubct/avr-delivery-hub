@@ -113,6 +113,43 @@ function excelDateToJS(serial) {
     return null;
 }
 
+// Distanza di Levenshtein — numero minimo di edit (insert/delete/sostituzione) tra due stringhe
+function levenshtein(a, b) {
+    var m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    var dp = [];
+    for (var i = 0; i <= m; i++) {
+        dp[i] = [i];
+        for (var j = 1; j <= n; j++) {
+            dp[i][j] = i === 0 ? j :
+                a[i-1] === b[j-1] ? dp[i-1][j-1] :
+                1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+        }
+    }
+    return dp[m][n];
+}
+
+// Fuzzy match: trova il cognome AVR più simile (distanza ≤1 per nomi ≥5 char, ≤2 per ≥8 char)
+// Confronta solo contro cognomi canonici di state.driverList. Ritorna il cognome AVR o null.
+function fuzzyMatchDriver(rawName) {
+    if (!rawName || rawName.length < 5) return null;
+    var name = rawName.toUpperCase().trim().replace(/\s+/g, '');
+    var threshold = name.length >= 8 ? 2 : 1;
+    var list = (state.driverList && state.driverList.length > 0) ? state.driverList : (state.driverPreload || []);
+    var bestDist = Infinity;
+    var bestCognome = null;
+    list.forEach(function(d) {
+        if (!d.cognome) return;
+        var cog = d.cognome.toUpperCase().trim();
+        var cogNS = cog.replace(/\s+/g, '');
+        if (cog.length < 4) return;
+        var dist = Math.min(levenshtein(name, cog), levenshtein(name, cogNS));
+        if (dist < bestDist) { bestDist = dist; bestCognome = cog; }
+    });
+    return bestDist <= threshold ? bestCognome : null;
+}
+
 // Debounce
 function debounce(fn, delay = 300) {
     let timer;

@@ -38,8 +38,10 @@ async function runRiconciliazione() {
 
     var decoPerDriver = {};
     consegneGAS.forEach(function(c) {
-        var drv = (c.driver || '').toUpperCase().trim();
-        if (!drv || drv === 'RITIRO PDV') return;
+        var drv = typeof normalizeDriverName === 'function'
+            ? normalizeDriverName(c.driver || '')
+            : (c.driver || '').toUpperCase().trim();
+        if (!drv) return;
         if (!decoPerDriver[drv]) decoPerDriver[drv] = {};
         var fil = String(c.filiale || '?');
         if (!decoPerDriver[drv][fil]) decoPerDriver[drv][fil] = 0;

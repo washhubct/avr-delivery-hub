@@ -34,6 +34,8 @@ var DRIVER_ALIAS = {
     // Errori ortografici frequenti
     'TUMMONIA': 'TUMMINIA',
     'MESSNA': 'MESSINA',
+    'MESSIMNA': 'MESSINA',
+    'DICANDA': 'DI CANDIA',
     // Corriere Catania → La Porta (tutte le varianti)
     'CORRIERE CATANIA': 'LA PORTA',
     'CORRIERECATANIA': 'LA PORTA'
@@ -100,8 +102,14 @@ function isDriverAvr(riderName, avrSet) {
         if (avrName.length < 3) return;
         if (name.indexOf(avrName) >= 0) found = true;
     });
+    if (found) return true;
 
-    return found;
+    // Fuzzy: typo con distanza ≤1 (o ≤2 per nomi ≥8 char)
+    if (typeof fuzzyMatchDriver === 'function') {
+        if (fuzzyMatchDriver(name) !== null) return true;
+    }
+
+    return false;
 }
 
 function normalizeRiderForDisplay(riderName) {
@@ -110,6 +118,11 @@ function normalizeRiderForDisplay(riderName) {
     var noSpaces = name.replace(/\s+/g, '');
     if (DRIVER_ALIAS[name]) return DRIVER_ALIAS[name];
     if (DRIVER_ALIAS[noSpaces]) return DRIVER_ALIAS[noSpaces];
+    // Fuzzy fallback: restituisce il cognome canonico AVR se typo
+    if (typeof fuzzyMatchDriver === 'function') {
+        var fuzzy = fuzzyMatchDriver(name);
+        if (fuzzy) return fuzzy;
+    }
     return name;
 }
 

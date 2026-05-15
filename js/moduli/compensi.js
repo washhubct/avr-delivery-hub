@@ -133,17 +133,33 @@ function normalizeDriverName(name) {
         if (DRIVER_ALIAS[noSpaces]) return DRIVER_ALIAS[noSpaces];
     }
     n = n.replace(/['\u2019`]/g, '');
+    // Fuzzy fallback: typo con distanza ≤1/2 → cognome canonico AVR
+    if (typeof fuzzyMatchDriver === 'function') {
+        var fuzzy = fuzzyMatchDriver(n);
+        if (fuzzy) return fuzzy;
+    }
     return n;
 }
 
 function findDriverAnagrafica(driverName) {
     if (!driverName) return null;
     var name = driverName.toUpperCase().trim();
-    return state.driverList.find(function(d) {
+    var exact = state.driverList.find(function(d) {
         var full = (d.cognome + ' ' + d.nome).toUpperCase();
         var cognome = (d.cognome || '').toUpperCase();
         return name === full || name === cognome || name.indexOf(cognome) >= 0 || cognome.indexOf(name) >= 0;
     });
+    if (exact) return exact;
+    // Fuzzy fallback
+    if (typeof fuzzyMatchDriver === 'function') {
+        var fuzzyCog = fuzzyMatchDriver(name);
+        if (fuzzyCog) {
+            return state.driverList.find(function(d) {
+                return (d.cognome || '').toUpperCase().trim() === fuzzyCog;
+            }) || null;
+        }
+    }
+    return null;
 }
 
 function exportCompensi() {

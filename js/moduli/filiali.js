@@ -51,13 +51,19 @@ async function saveFiliale(editId) {
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     if (!codice) { toast('Inserisci il codice', 'error'); return; }
+    const btn = document.querySelector('[onclick="saveFiliale(\'' + (editId || '') + '\')"], [onclick="saveFiliale()"]');
+    if (btn) btn.disabled = true;
     try {
         await db.collection('filiali').doc(String(codice)).set(data, { merge: true });
         toast('Filiale salvata', 'success');
         closeModal();
         await loadFiliali();
         renderFiliali();
-    } catch (e) { toast('Errore: ' + e.message, 'error'); }
+    } catch (e) {
+        toast('Errore: ' + e.message, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 async function editFiliale(id) {
