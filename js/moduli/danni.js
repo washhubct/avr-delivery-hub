@@ -93,7 +93,7 @@ function openAddDanno() {
             '</div>' +
         '</div>' +
 
-        '<button class="btn btn-primary" onclick="saveDanno()" style="width:100%;margin-top:8px">Registra danno</button>'
+        '<button class="btn btn-primary" id="btnSaveDanno" onclick="saveDanno()" style="width:100%;margin-top:8px">Registra danno</button>'
     );
 }
 
@@ -128,6 +128,9 @@ document.addEventListener('input', function(e) {
 });
 
 async function saveDanno(editId) {
+    var btn = document.getElementById('btnSaveDanno');
+    if (btn && btn.disabled) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio...'; }
     var importo = parseFloat(document.getElementById('danImporto').value) || 0;
     var numRate = parseInt(document.getElementById('danRate').value) || 1;
     var importoRata = numRate > 1 ? Math.ceil((importo / numRate) * 100) / 100 : importo;
@@ -211,7 +214,12 @@ async function saveDanno(editId) {
         closeModal();
         await loadDanni();
         renderDanni();
-    } catch (e) { toast('Errore: ' + e.message, 'error'); }
+    } catch (e) {
+        toast('Errore: impossibile salvare il danno — riprova', 'error');
+        console.error('saveDanno error:', e);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = editId ? 'Aggiorna' : 'Registra danno'; }
+    }
 }
 
 function dettaglioDanno(id) {
@@ -295,7 +303,7 @@ async function editDanno(id) {
         '<div class="form-group"><label>Tipo sinistro</label><select id="danTipoSinistro" class="input">' + tipoOpts + '</select></div>' +
         '<div class="form-group"><label>Rif. sinistro</label><input type="text" id="danRifSinistro" class="input" value="' + (d.rifSinistro || '') + '"></div>' +
         '<div class="form-group"><label>Aggiungi documenti</label><input type="file" id="danFiles" class="input" multiple accept="image/*,.pdf" style="padding:10px"></div>' +
-        '<button class="btn btn-primary" onclick="saveDanno(\'' + id + '\')" style="width:100%;margin-top:8px">Aggiorna</button>'
+        '<button class="btn btn-primary" id="btnSaveDanno" onclick="saveDanno(\'' + id + '\')" style="width:100%;margin-top:8px">Aggiorna</button>'
     );
     calcolaRata();
 }
@@ -326,12 +334,16 @@ function calcolaDanniMese(driverName, mese) {
         var drvNorm = normalizzaNome(d.driver);
         if (drvNorm !== nomeNorm) return;
 
-        if (d.numRate && d.numRate > 1 && d.pianoRate) {
-            d.pianoRate.forEach(function(rata) {
-                if (rata.mese === mese && !rata.pagato) {
-                    totale += rata.importo;
-                }
-            });
+        if (d.numRate && d.numRate > 1) {
+            if (d.pianoRate && d.pianoRate.length > 0) {
+                d.pianoRate.forEach(function(rata) {
+                    if (rata.mese === mese && !rata.pagato) {
+                        totale += rata.importo;
+                    }
+                });
+            }
+            // pianoRate assente o vuoto: danno rateizzato senza piano → non si detrae nulla
+            // (evita di addebitare l'importo intero in un solo mese)
         } else {
             var meseDanno = d.mese || (d.data ? d.data.substring(0, 7) : '');
             if (meseDanno === mese) {

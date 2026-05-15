@@ -66,6 +66,20 @@ async function renderReportFinanziario() {
     // === COSTI ===
     var costiDoc = await loadCostiMese(mese);
     var costiData = costiDoc || {};
+    if (!costiDoc) {
+        var costiWarn = document.getElementById('rfCostiWarning');
+        if (!costiWarn) {
+            costiWarn = document.createElement('div');
+            costiWarn.id = 'rfCostiWarning';
+            costiWarn.style.cssText = 'background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e';
+            costiWarn.innerHTML = '⚠️ <strong>Costi manuali non caricati</strong> — i costi fissi (stipendi, F24, affitti) mostrano i valori di default. Verifica la connessione o salva i costi per questo mese.';
+            var rfSection = document.getElementById('rfTblCosti');
+            if (rfSection && rfSection.parentNode) rfSection.parentNode.insertBefore(costiWarn, rfSection);
+        }
+    } else {
+        var existingWarn = document.getElementById('rfCostiWarning');
+        if (existingWarn) existingWarn.remove();
+    }
 
     // Compensi driver automatici — usa stessa logica
     var compensiDriver = 0;
