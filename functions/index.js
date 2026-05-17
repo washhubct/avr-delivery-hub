@@ -10,6 +10,7 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
 const ALLOWED_ORIGINS = [
     'https://dashboard.avrlogisticarl.com',
+    'https://appdriver.avrlogisticarl.com',
     'https://avr-logistic-dashboard.firebaseapp.com',
     'https://avr-logistic-dashboard.web.app',
 ];
