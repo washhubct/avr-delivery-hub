@@ -424,7 +424,7 @@ async function saveConsegneBatch(consegne) {
     if (dryRun) console.log(`[DRY_RUN] ${consegne.length} record — nessuna scrittura su Firestore`);
 }
 
-function autoGenerateFiliali() {
+async function autoGenerateFiliali() {
     // Extract unique filiali from imported data
     const filialiMap = {};
     state.consegne.forEach(c => {

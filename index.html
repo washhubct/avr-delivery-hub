@@ -786,12 +786,16 @@
             btn.textContent = 'Invio in corso…';
 
             try {
-                var functions = firebase.app().functions('europe-west1');
-                var requestPasswordReset = functions.httpsCallable('requestPasswordReset');
-                await requestPasswordReset({ email: email });
+                await fetch(
+                    'https://europe-west1-avr-logistic-dashboard.cloudfunctions.net/requestPasswordReset',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email }),
+                    }
+                );
             } catch (e) {
-                // Errore di rete — non network Firebase error (la Function stessa non propaga)
-                console.warn('[forgotPassword] errore chiamata:', e.code || e.message);
+                console.warn('[forgotPassword] errore di rete:', e.message);
             } finally {
                 forgotBusy = false;
             }

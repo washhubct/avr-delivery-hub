@@ -1,6 +1,6 @@
 'use strict';
 
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 
@@ -8,9 +8,15 @@ admin.initializeApp();
 
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
-// Rate limiting in-memory (resetta ad ogni cold start — sufficiente per uso interno)
+const ALLOWED_ORIGINS = [
+    'https://dashboard.avrlogisticarl.com',
+    'https://avr-logistic-dashboard.firebaseapp.com',
+    'https://avr-logistic-dashboard.web.app',
+];
+
+// Rate limiting in-memory (resetta ad ogni cold start)
 const rateLimitMap = new Map();
-const RATE_WINDOW_MS = 60 * 1000; // 1 minuto
+const RATE_WINDOW_MS = 60 * 1000;
 const RATE_MAX = 5;
 
 function checkRateLimit(email) {
@@ -25,19 +31,42 @@ function checkRateLimit(email) {
     return true;
 }
 
-exports.requestPasswordReset = onCall(
-    { secrets: [RESEND_API_KEY], region: 'europe-west1' },
-    async (request) => {
-        const email = (request.data?.email || '').trim().toLowerCase();
+exports.requestPasswordReset = onRequest(
+    {
+        secrets: [RESEND_API_KEY],
+        region: 'europe-west1',
+        cors: ALLOWED_ORIGINS,
+    },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+
+        res.set('Access-Control-Allow-Origin', allowedOrigin);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type');
+
+        // Preflight
+        if (req.method === 'OPTIONS') {
+            res.status(204).send('');
+            return;
+        }
+
+        if (req.method !== 'POST') {
+            res.status(405).json({ error: 'Method not allowed' });
+            return;
+        }
+
+        const email = ((req.body && req.body.email) || '').trim().toLowerCase();
 
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            throw new HttpsError('invalid-argument', 'Email non valida');
+            res.status(400).json({ error: 'Email non valida' });
+            return;
         }
 
         if (!checkRateLimit(email)) {
-            // Non rivelare il rate limiting — risposta generica
-            console.warn('[requestPasswordReset] rate limit raggiunto per:', email);
-            return { success: true };
+            console.warn('[requestPasswordReset] rate limit:', email);
+            res.json({ success: true });
+            return;
         }
 
         try {
@@ -51,13 +80,12 @@ exports.requestPasswordReset = onCall(
                 link,
             });
         } catch (err) {
-            // Non propagare al client — no user enumeration
-            // Logga solo code/type, mai il link completo o l'email
+            // Non propagare — no user enumeration
             console.error('[requestPasswordReset] errore:', err.code || err.message);
         }
 
-        // SEMPRE risposta generica — non rivela se l'utente esiste
-        return { success: true };
+        // SEMPRE risposta generica
+        res.json({ success: true });
     }
 );
 
@@ -115,7 +143,7 @@ function buildEmailHtml(link) {
             AVR Logistic Delivery Hub. Clicca sul bottone qui sotto per impostarne una nuova.
           </p>
 
-          <!-- CTA Button -->
+          <!-- CTA -->
           <table cellpadding="0" cellspacing="0" width="100%">
             <tr>
               <td align="center" style="padding-bottom:32px">
@@ -127,7 +155,7 @@ function buildEmailHtml(link) {
             </tr>
           </table>
 
-          <!-- Link di fallback -->
+          <!-- Link fallback -->
           <p style="margin:0 0 6px;font-size:12px;color:#7c8db5;line-height:1.6">
             Se il bottone non funziona, copia e incolla questo link nel browser:
           </p>
@@ -139,7 +167,7 @@ function buildEmailHtml(link) {
           <div style="border-top:1px solid rgba(148,163,184,0.08);padding-top:20px">
             <p style="margin:0;font-size:12px;color:#4a5878;line-height:1.8">
               ⏱️ Il link è valido per <strong style="color:#7c8db5">1 ora</strong> dal momento della richiesta.<br>
-              🔒 Se non hai richiesto il reset della password, ignora questa email — il tuo account rimane al sicuro e la password non verrà modificata.
+              🔒 Se non hai richiesto il reset della password, ignora questa email — il tuo account rimane al sicuro.
             </p>
           </div>
         </td>
