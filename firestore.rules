@@ -165,11 +165,20 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // LEADERBOARD — aggregato precalcolato dal dashboard, letto dai driver
+    // LEADERBOARD — aggregato precalcolato da Cloud Function scheduled
+    // Versione anonima letta da tutti i driver autenticati.
+    // Scritture solo da admin SDK (CF bypassa le rules).
     // ═══════════════════════════════════════════════════════════
     match /leaderboard/{doc} {
       allow read: if isSignedIn();
-      allow write: if isAdminOrStaff();
+      allow write: if false;
+    }
+
+    // Versione completa con nome reale del driver — solo admin/staff.
+    // Usata dalla dashboard per decidere premi/riconoscimenti.
+    match /leaderboardFull/{doc} {
+      allow read: if isAdminOrStaff();
+      allow write: if false;
     }
 
     // ═══════════════════════════════════════════════════════════

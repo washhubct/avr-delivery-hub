@@ -57,6 +57,9 @@
                 <a class="nav-item" data-module="ritorni" onclick="navigateTo('ritorni')">
                     <span class="nav-icon">🔄</span> Ritorni
                 </a>
+                <a class="nav-item" data-module="classifica" onclick="navigateTo('classifica')">
+                    <span class="nav-icon">🏆</span> Classifica
+                </a>
                 <a class="nav-item" data-module="segnalazioni" onclick="navigateTo('segnalazioni')">
                     <span class="nav-icon">⚠️</span> Segnalazioni
                 </a>
@@ -393,6 +396,11 @@
             </div>
         </section>
 
+        <!-- ═══ CLASSIFICA ═══ -->
+        <section id="screen-classifica" class="screen" style="display:none">
+            <div id="classificaContent"></div>
+        </section>
+
         <!-- ═══ SEGNALAZIONI ═══ -->
         <section id="screen-segnalazioni" class="screen" style="display:none">
             <div class="kpi-grid">
@@ -702,6 +710,7 @@
     <script src="js/moduli/compensi.js"></script>
     <script src="js/moduli/danni.js"></script>
     <script src="js/moduli/ritorni.js"></script>
+    <script src="js/moduli/classifica.js"></script>
     <script src="js/moduli/segnalazioni-admin.js"></script>
     <script src="js/moduli/filiali.js"></script>
     <script src="js/moduli/riconciliazione.js"></script>

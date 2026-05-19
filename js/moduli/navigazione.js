@@ -6,6 +6,7 @@ const MODULE_TITLES = {
     compensi: 'Compensi Driver',
     danni: 'Danni / Furgoni',
     ritorni: 'Ritorni',
+    classifica: 'Classifica Driver',
     segnalazioni: 'Segnalazioni Driver',
     filiali: 'Filiali',
     riconciliazione: 'Riconciliazione',
@@ -38,6 +39,7 @@ function refreshCurrentModule() {
         case 'compensi': renderCompensi(); break;
         case 'danni': renderDanni(); break;
         case 'ritorni': renderRitorni(); break;
+        case 'classifica': renderClassifica(); break;
         case 'segnalazioni': renderSegnalazioniAdmin(); break;
         case 'filiali': renderFiliali(); break;
         case 'fatturazione': renderFatturazione(); break;

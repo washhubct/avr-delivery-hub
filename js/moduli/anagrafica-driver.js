@@ -108,26 +108,40 @@ async function saveDriverAndCreateAccess() {
     }
 }
 
+// Chiama la CF brandizzata inviaCredenzialiDriver: trova-o-crea utente Auth
+// e manda mail di reset via Resend (template AVR, dominio avrlogisticarl.com).
+// Sostituisce auth.sendPasswordResetEmail() che mandava da firebaseapp.com.
+async function inviaAccessoBrandizzato(email) {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Sessione admin scaduta — rifai login');
+    const idToken = await user.getIdToken();
+    const resp = await fetch('https://europe-west1-avr-logistic-dashboard.cloudfunctions.net/inviaCredenzialiDriver', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + idToken,
+        },
+        body: JSON.stringify({ email }),
+    });
+    const body = await resp.json();
+    if (!resp.ok) throw new Error(body.error || ('HTTP ' + resp.status));
+    return body; // { success, created, sent, uid }
+}
+
 async function creaAccessoDriver(email) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        toast('Email non valida', 'error');
+        return;
+    }
     try {
-        var secondaryApp;
-        try { secondaryApp = firebase.app('tempAuth'); }
-        catch (e) { secondaryApp = firebase.initializeApp(firebase.app().options, 'tempAuth'); }
-        var secondaryAuth = secondaryApp.auth();
-        var tempPw = 'TempAVR_' + Math.random().toString(36).slice(2, 10) + '!';
-        await secondaryAuth.createUserWithEmailAndPassword(email, tempPw);
-        await secondaryAuth.signOut();
-        await auth.sendPasswordResetEmail(email);
-        toast('Accesso creato e email di reset inviata a ' + email, 'success');
+        const r = await inviaAccessoBrandizzato(email);
+        const msg = r.created
+            ? 'Accesso creato e email di reset inviata a ' + email
+            : 'Utente già esistente — email di reset reinviata a ' + email;
+        toast(msg, 'success');
     } catch (e) {
-        if (e.code === 'auth/email-already-in-use') {
-            try {
-                await auth.sendPasswordResetEmail(email);
-                toast('Utente già esistente — email di reset inviata', 'success');
-            } catch (e2) { toast('Errore invio reset: ' + e2.message, 'error'); }
-        } else {
-            toast('Errore creazione accesso: ' + e.message, 'error');
-        }
+        console.error('creaAccessoDriver:', e);
+        toast('Errore: ' + e.message, 'error');
     }
 }
 
@@ -155,9 +169,15 @@ async function editDriver(id) {
 }
 
 async function reinviaResetPassword(email) {
+    // Stesso flow di creaAccessoDriver: la CF è idempotente — se l'utente Auth
+    // non esiste lo crea, altrimenti manda solo il link. In entrambi i casi
+    // mail brandizzata via Resend.
     try {
-        await auth.sendPasswordResetEmail(email);
-        toast('Email di reset inviata a ' + email, 'success');
+        const r = await inviaAccessoBrandizzato(email);
+        const msg = r.created
+            ? 'Accesso creato (mancava in Auth) ed email inviata a ' + email
+            : 'Email di reset inviata a ' + email;
+        toast(msg, 'success');
     } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
 

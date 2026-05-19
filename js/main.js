@@ -42,68 +42,15 @@ async function loadAllData() {
             loadReportDriver(),
             loadRitorniMese()
         ]);
-        aggiornaLeaderboard();
     } catch (e) {
         console.error('Load error:', e);
         toast('Errore nel caricamento dati', 'error');
     }
 }
 
-// Precalcola classifica mensile e scrive in leaderboard/{mese}.
-// Letta poi dall'app driver (che non può fare query cross-driver).
-// Scoring: 1 consegna = 1pt, zero danni = +50 bonus, ogni danno = -30.
-async function aggiornaLeaderboard() {
-    var mese = state.meseCorrente;
-    if (!mese) return;
-    if (!state.reportDriver || !state.danniList) return;
-
-    var driverConsegne = {};
-    state.reportDriver.forEach(function(d) {
-        var drv = (d.driver || '').toUpperCase();
-        if (!drv) return;
-        if (!driverConsegne[drv]) driverConsegne[drv] = 0;
-        driverConsegne[drv] += (d.numConsegne || 0);
-    });
-
-    var driverDanni = {};
-    state.danniList.forEach(function(d) {
-        if (d.stato === 'annullato') return;
-        var m = d.mese || (d.data instanceof Date
-            ? d.data.toISOString().slice(0,7)
-            : (typeof d.data === 'string' ? d.data.substring(0,7) : null));
-        if (m !== mese) return;
-        var drv = (d.driver || '').toUpperCase();
-        if (!drv) return;
-        if (!driverDanni[drv]) driverDanni[drv] = 0;
-        driverDanni[drv]++;
-    });
-
-    var drivers = Object.keys(driverConsegne).map(function(drv) {
-        var consegne = driverConsegne[drv];
-        var numDanni = driverDanni[drv] || 0;
-        var score = consegne;
-        if (numDanni === 0) score += 50;
-        score -= (numDanni * 30);
-        return {
-            driver: drv,
-            consegne: consegne,
-            danni: numDanni,
-            bonusZeroDanni: numDanni === 0,
-            score: Math.max(0, score)
-        };
-    }).sort(function(a, b) { return b.score - a.score; });
-
-    try {
-        await db.collection('leaderboard').doc(mese).set({
-            mese: mese,
-            drivers: drivers,
-            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        console.log('Leaderboard ' + mese + ' aggiornata (' + drivers.length + ' driver)');
-    } catch (e) {
-        console.warn('Leaderboard write error:', e.message);
-    }
-}
+// Nota: la leaderboard è ora precalcolata dalla Cloud Function scheduled
+// `precalcolaLeaderboard` (region europe-west1, every 1 hours, TZ Europe/Rome).
+// Il modulo dashboard/classifica.js legge `leaderboardFull/{mese}` direttamente.
 
 async function loadConsegnePerMese() {
     var mese = state.meseCorrente;
@@ -272,7 +219,6 @@ async function onMeseChange() {
         loadReportDriver(),
         loadRitorniMese()
     ]);
-    aggiornaLeaderboard();
     refreshCurrentModule();
 }
 
