@@ -144,7 +144,7 @@ exports.inviaCredenzialiDriver = onRequest(
             } catch (e) {
                 if (e.code !== 'auth/user-not-found') throw e;
                 // Password random — il driver la sostituirà subito col link di reset
-                const tempPw = 'AVR_' + require('crypto').randomBytes(12).toString('base64').replace(/[+/=]/g, '') + '!';
+                const tempPw = 'LM_' + require('crypto').randomBytes(12).toString('base64').replace(/[+/=]/g, '') + '!';
                 user = await admin.auth().createUser({
                     email,
                     password: tempPw,
@@ -182,10 +182,10 @@ async function sendResendEmail({ apiKey, to, link }) {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            from: 'AVR Logistic <noreply@avrlogisticarl.com>',
+            from: 'Last Mile <noreply@avrlogisticarl.com>',
             to: [to],
             reply_to: 'amministrazione@avrlogisticarl.com',
-            subject: 'Reimposta la tua password — AVR Logistic',
+            subject: 'Reimposta la tua password — Last Mile',
             html,
         }),
     });
@@ -460,7 +460,7 @@ function buildEmailHtml(link) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reimposta la tua password — AVR Logistic</title>
+<title>Reimposta la tua password — Last Mile</title>
 </head>
 <body style="margin:0;padding:0;background:#060910;font-family:'Helvetica Neue',Arial,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#060910;padding:40px 16px">
@@ -470,7 +470,7 @@ function buildEmailHtml(link) {
       <!-- Header -->
       <tr>
         <td style="background:#0d1117;padding:28px 40px;text-align:center;border-bottom:1px solid rgba(56,189,248,0.15)">
-          <div style="font-size:13px;letter-spacing:3px;font-weight:700;color:#38bdf8;text-transform:uppercase;margin-bottom:4px">AVR LOGISTIC</div>
+          <div style="font-size:13px;letter-spacing:3px;font-weight:700;color:#38bdf8;text-transform:uppercase;margin-bottom:4px">LAST MILE</div>
           <div style="font-size:11px;color:#7c8db5;letter-spacing:1px">DELIVERY HUB</div>
         </td>
       </tr>
@@ -483,7 +483,7 @@ function buildEmailHtml(link) {
           </h1>
           <p style="margin:0 0 28px;font-size:14px;color:#7c8db5;line-height:1.7">
             Abbiamo ricevuto una richiesta di reimpostazione della password per il tuo account
-            AVR Logistic Delivery Hub. Clicca sul bottone qui sotto per impostarne una nuova.
+            Last Mile Delivery Hub. Clicca sul bottone qui sotto per impostarne una nuova.
           </p>
 
           <!-- CTA -->
@@ -520,7 +520,7 @@ function buildEmailHtml(link) {
       <tr>
         <td style="background:#0d1117;padding:18px 40px;text-align:center;border-top:1px solid rgba(148,163,184,0.08)">
           <p style="margin:0;font-size:11px;color:#4a5878;line-height:1.7">
-            AVR Logistic S.r.l. — Gestionale Delivery Hub<br>
+            Last Mile &mdash; AVR Logistic S.r.l.<br>
             <a href="https://dashboard.avrlogisticarl.com" style="color:#38bdf8;text-decoration:none">
               dashboard.avrlogisticarl.com
             </a>

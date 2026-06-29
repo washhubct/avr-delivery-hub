@@ -1,6 +1,6 @@
 {
   "name": "avr-delivery-hub-functions",
-  "description": "Firebase Functions — AVR Logistic Delivery Hub",
+  "description": "Firebase Functions — Last Mile (AVR Logistic Delivery Hub)",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions --project avr-logistic-dashboard"
