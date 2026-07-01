@@ -148,7 +148,9 @@ function processSheet(rows, filiale, tabName) {
         let codFil = filiale;
         if (ci.filiale >= 0) {
             const vFil = String(row[ci.filiale] || '').trim().replace(/\.0$/, '');
-            if (vFil) codFil = vFil;
+            // Solo se vFil è un codice filiale plausibile (3-4 cifre): altrimenti la colonna
+            // "FIL" ha matchato qualcosa di sbagliato (es. barcode cliente lungo 20+ char)
+            if (vFil && /^\d{2,5}$/.test(vFil)) codFil = vFil;
         }
 
         out.push({
