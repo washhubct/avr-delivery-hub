@@ -12,6 +12,8 @@ const state = {
     danniList: [],
     reportDriver: [],
     ritorniMese: [],
+    utentiList: [],
+    puntiTimbraturaList: [],
     dataDeco: null,
     
     consegnePage: 1,

@@ -66,6 +66,12 @@
                 <a class="nav-item" data-module="filiali" onclick="navigateTo('filiali')">
                     <span class="nav-icon">🏪</span> Filiali
                 </a>
+                <a class="nav-item nav-can-manage-users" data-module="utenti" onclick="navigateTo('utenti')">
+                    <span class="nav-icon">👥</span> Utenti
+                </a>
+                <a class="nav-item nav-timbrature-admin" data-module="punti-timbratura" onclick="navigateTo('punti-timbratura')">
+                    <span class="nav-icon">📍</span> Punti Timbratura
+                </a>
                 <a class="nav-item" data-module="import" onclick="navigateTo('import')">
                     <span class="nav-icon">📥</span> Importa dati
                 </a>
@@ -448,6 +454,39 @@
             </div>
         </section>
 
+        <!-- ═══ PUNTI TIMBRATURA ═══ -->
+        <section id="screen-punti-timbratura" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Punti di timbratura provinciali</h3>
+                <p class="card-desc">
+                    Un tag NFC installato in una sede per provincia (CT, SR, ME, PA, EN). Il driver appoggia il telefono al tag per timbrare — la validazione include GPS + selfie + UID del tag, server-side.
+                </p>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Provincia</th><th>Nome</th><th>Indirizzo</th><th>Coordinate</th><th>NFC Tag UID</th><th>Stato</th><th>Azioni</th>
+                        </tr></thead>
+                        <tbody id="tblPuntiTimbraturaBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ UTENTI ═══ -->
+        <section id="screen-utenti" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Utenti gestionale</h3>
+                <p class="card-desc">Amministratori, Risorse Umane e Responsabili di zona che accedono al gestionale. I <strong>driver</strong> si gestiscono da <em>Anagrafica Driver</em>.</p>
+                <div class="toolbar"><button class="btn btn-primary" onclick="openAddUtente()">+ Aggiungi utente</button></div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Nome</th><th>Email</th><th>Mansione</th><th>Province</th><th>Stato</th><th>Azioni</th></tr></thead>
+                        <tbody id="tblUtentiBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- ═══ RICONCILIAZIONE ═══ -->
         <section id="screen-riconciliazione" class="screen" style="display:none">
             <div class="card">
@@ -713,6 +752,8 @@
     <script src="js/moduli/classifica.js"></script>
     <script src="js/moduli/segnalazioni-admin.js"></script>
     <script src="js/moduli/filiali.js"></script>
+    <script src="js/moduli/utenti.js"></script>
+    <script src="js/moduli/punti-timbratura.js"></script>
     <script src="js/moduli/riconciliazione.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
     <script src="js/moduli/report-finanziario.js"></script>
