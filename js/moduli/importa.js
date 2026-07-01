@@ -408,7 +408,8 @@ async function saveConsegneBatch(consegne) {
             if (dryRun) {
                 console.log('[DRY_RUN] set', docRef.path, JSON.stringify({ importo: c.importo, cliente: c.cliente, filiale: c.filiale, mese: c.mese }));
             } else {
-                batch.set(docRef, data);
+                // merge:true preserva eventuali campi scritti dal GAS di produzione (sync, rider, tipoDriver)
+                batch.set(docRef, data, { merge: true });
             }
         });
 
