@@ -196,6 +196,153 @@ async function sendResendEmail({ apiKey, to, link }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// CREA UTENZA GESTIONALE (superadmin-only)
+// Crea account Firebase Auth (se manca), salva doc utenti/{email}
+// con mansione + province, manda email di invito con link "imposta password".
+// Idempotente: se esiste già, aggiorna solo doc utenti/ e (opzionale) rinvia link.
+// ═══════════════════════════════════════════════════════════════════
+const VALID_MANSIONI = ['amministratore', 'risorse_umane', 'responsabile'];
+const VALID_PROVINCE = ['CT', 'SR', 'ME', 'PA', 'EN'];
+
+exports.creaUtenzaGestionale = onRequest(
+    {
+        secrets: [RESEND_API_KEY],
+        region: 'europe-west1',
+        cors: ALLOWED_ORIGINS,
+    },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+        res.set('Access-Control-Allow-Origin', allowedOrigin);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+        // Verifica caller = superadmin hardcoded
+        const authHeader = req.headers.authorization || '';
+        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+        let callerEmail = '';
+        try {
+            const decoded = await admin.auth().verifyIdToken(idToken);
+            callerEmail = (decoded.email || '').toLowerCase();
+        } catch (e) {
+            res.status(401).json({ error: 'Token non valido' });
+            return;
+        }
+        if (callerEmail !== 'amministrazione@avrlogisticarl.com') {
+            res.status(403).json({ error: 'Solo il Superadmin può creare utenze' });
+            return;
+        }
+
+        const body = req.body || {};
+        const email = (body.email || '').trim().toLowerCase();
+        const nome = (body.nome || '').trim();
+        const mansione = (body.mansione || '').trim();
+        const province = Array.isArray(body.province) ? body.province.filter(p => VALID_PROVINCE.includes(p)) : [];
+        const rinviaSoloEmail = !!body.rinviaSoloEmail;
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.status(400).json({ error: 'Email non valida' }); return; }
+        if (email === 'amministrazione@avrlogisticarl.com') { res.status(400).json({ error: 'Superadmin gestito hardcoded — non registrabile qui' }); return; }
+        if (!nome && !rinviaSoloEmail) { res.status(400).json({ error: 'Nome obbligatorio' }); return; }
+        if (!rinviaSoloEmail) {
+            if (!VALID_MANSIONI.includes(mansione)) { res.status(400).json({ error: 'Mansione non valida' }); return; }
+            if (mansione === 'responsabile' && province.length === 0) {
+                res.status(400).json({ error: 'Un Responsabile deve avere almeno una provincia' });
+                return;
+            }
+        }
+
+        try {
+            // [1] Crea o recupera account Auth
+            let user;
+            let created = false;
+            try {
+                user = await admin.auth().getUserByEmail(email);
+            } catch (e) {
+                if (e.code !== 'auth/user-not-found') throw e;
+                const tempPw = 'LM_' + require('crypto').randomBytes(12).toString('base64').replace(/[+/=]/g, '') + '!';
+                user = await admin.auth().createUser({
+                    email,
+                    password: tempPw,
+                    emailVerified: false,
+                    disabled: false,
+                    displayName: nome || undefined,
+                });
+                created = true;
+            }
+
+            // [2] Aggiorna doc utenti/{email} — solo se non è "rinvia solo email"
+            if (!rinviaSoloEmail) {
+                const now = admin.firestore.FieldValue.serverTimestamp();
+                const docRef = db.collection('utenti').doc(email);
+                const existing = await docRef.get();
+                const payload = {
+                    email,
+                    nome,
+                    mansione,
+                    province,
+                    attivo: true,
+                    aggiornatoIl: now,
+                };
+                if (!existing.exists) payload.creatoIl = now;
+                await docRef.set(payload, { merge: true });
+            }
+
+            // [3] Genera link password reset e manda email di invito
+            const link = await admin.auth().generatePasswordResetLink(email, {
+                url: 'https://dashboard.avrlogisticarl.com/auth/action/',
+                handleCodeInApp: false,
+            });
+            const displayName = nome || email.split('@')[0];
+            const mansioneLabel = { amministratore: 'Amministratore', risorse_umane: 'Risorse Umane', responsabile: 'Responsabile' }[mansione] || 'Utente';
+            await sendResendInvitoEmail({
+                apiKey: RESEND_API_KEY.value(),
+                to: email,
+                link,
+                nome: displayName,
+                mansione: mansioneLabel,
+                province,
+                nuovoAccount: created,
+            });
+
+            console.log(`[creaUtenzaGestionale] ${created ? 'creato + inviato' : (rinviaSoloEmail ? 'reinviato link' : 'aggiornato + reinviato')} per ${email} (caller=${callerEmail})`);
+            res.json({ success: true, created, uid: user.uid, emailInviata: true });
+        } catch (err) {
+            console.error('[creaUtenzaGestionale] errore:', err.code || err.message);
+            res.status(500).json({ error: err.code || err.message || 'Errore interno' });
+        }
+    }
+);
+
+async function sendResendInvitoEmail({ apiKey, to, link, nome, mansione, province, nuovoAccount }) {
+    const html = buildInvitoEmailHtml({ link, nome, mansione, province, nuovoAccount });
+    const subject = nuovoAccount
+        ? 'Benvenuto/a in Last Mile — imposta la tua password'
+        : 'Il tuo ruolo su Last Mile è stato aggiornato';
+    const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            from: 'Last Mile <noreply@avrlogisticarl.com>',
+            to: [to],
+            reply_to: 'amministrazione@avrlogisticarl.com',
+            subject,
+            html,
+        }),
+    });
+    if (!r.ok) {
+        const body = await r.text();
+        throw new Error(`Resend error: ${r.status} ${body.substring(0, 200)}`);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // LEADERBOARD — precalcolo schedulato
 // Sostituisce il rebuild client-side della dashboard. Gira ogni ora in
 // Europe/Rome, ricalcola mese corrente sempre + mese precedente nei
@@ -453,6 +600,94 @@ exports.rebuildLeaderboard = onRequest(
         }
     }
 );
+
+function buildInvitoEmailHtml({ link, nome, mansione, province, nuovoAccount }) {
+    const provinceStr = Array.isArray(province) && province.length
+        ? province.map(p => `<span style="display:inline-block;background:rgba(56,189,248,0.10);color:#38bdf8;padding:2px 10px;border-radius:6px;font-weight:600;font-size:11px;margin-right:4px">${p}</span>`).join('')
+        : '';
+    const titolo = nuovoAccount ? `Benvenuto/a, ${nome}` : `Ciao ${nome}`;
+    const messaggio = nuovoAccount
+        ? 'Il Superadmin ti ha invitato/a a usare <strong style="color:#e2e8f0">Last Mile Delivery Hub</strong>. Clicca sul bottone qui sotto per impostare la tua password ed entrare.'
+        : 'Il tuo ruolo su <strong style="color:#e2e8f0">Last Mile Delivery Hub</strong> è stato aggiornato. Puoi già accedere con la tua password attuale, oppure usare il bottone qui sotto per reimpostarla.';
+    const ctaLabel = nuovoAccount ? 'Imposta password ed entra' : 'Reimposta password';
+    return `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Last Mile Hub — Invito</title>
+</head>
+<body style="margin:0;padding:0;background:#060910;font-family:'Helvetica Neue',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#060910;padding:40px 16px">
+  <tr><td align="center">
+    <table width="100%" style="max-width:520px;background:#111620;border-radius:16px;border:1px solid rgba(148,163,184,0.10);overflow:hidden">
+
+      <tr>
+        <td style="background:#0d1117;padding:28px 40px;text-align:center;border-bottom:1px solid rgba(56,189,248,0.15)">
+          <div style="font-size:13px;letter-spacing:3px;font-weight:700;color:#38bdf8;text-transform:uppercase;margin-bottom:4px">LAST MILE</div>
+          <div style="font-size:11px;color:#7c8db5;letter-spacing:1px">DELIVERY HUB</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:36px 40px">
+          <h1 style="margin:0 0 14px;font-size:22px;font-weight:700;color:#e2e8f0;line-height:1.3">${titolo}</h1>
+          <p style="margin:0 0 24px;font-size:14px;color:#7c8db5;line-height:1.7">${messaggio}</p>
+
+          <table cellpadding="0" cellspacing="0" width="100%" style="background:#0d1117;border-radius:10px;border:1px solid rgba(148,163,184,0.08);margin-bottom:28px">
+            <tr>
+              <td style="padding:16px 18px">
+                <div style="font-size:11px;color:#4a5878;letter-spacing:1.5px;font-weight:700;text-transform:uppercase;margin-bottom:6px">Il tuo ruolo</div>
+                <div style="font-size:15px;color:#e2e8f0;font-weight:600">${mansione}</div>
+                ${provinceStr ? `<div style="margin-top:10px">${provinceStr}</div>` : ''}
+              </td>
+            </tr>
+          </table>
+
+          <table cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td align="center" style="padding-bottom:32px">
+                <a href="${link}"
+                   style="display:inline-block;background:linear-gradient(135deg,#38bdf8 0%,#22d3ee 100%);color:#080b12;font-weight:700;font-size:15px;text-decoration:none;border-radius:10px;padding:14px 40px;letter-spacing:0.3px">
+                  ${ctaLabel}
+                </a>
+              </td>
+            </tr>
+          </table>
+
+          <p style="margin:0 0 6px;font-size:12px;color:#7c8db5;line-height:1.6">
+            Se il bottone non funziona, copia e incolla questo link nel browser:
+          </p>
+          <p style="margin:0 0 28px;font-size:11px;color:#4a5878;word-break:break-all;line-height:1.8;background:#0d1117;padding:10px 14px;border-radius:6px;border:1px solid rgba(148,163,184,0.08)">
+            ${link}
+          </p>
+
+          <div style="border-top:1px solid rgba(148,163,184,0.08);padding-top:20px">
+            <p style="margin:0;font-size:12px;color:#4a5878;line-height:1.8">
+              ⏱️ Il link è valido per <strong style="color:#7c8db5">1 ora</strong>.<br>
+              🔒 Se non aspettavi questo invito, ignora questa email o contatta l'amministrazione.
+            </p>
+          </div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background:#0d1117;padding:18px 40px;text-align:center;border-top:1px solid rgba(148,163,184,0.08)">
+          <p style="margin:0;font-size:11px;color:#4a5878;line-height:1.7">
+            Last Mile &mdash; AVR Logistic S.r.l.<br>
+            <a href="https://dashboard.avrlogisticarl.com" style="color:#38bdf8;text-decoration:none">
+              dashboard.avrlogisticarl.com
+            </a>
+          </p>
+        </td>
+      </tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
 
 function buildEmailHtml(link) {
     return `<!DOCTYPE html>

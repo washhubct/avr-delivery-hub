@@ -61,6 +61,7 @@ function renderUtenti() {
             '<td>' + stato + '</td>' +
             '<td style="white-space:nowrap">' +
                 '<button class="btn btn-sm" onclick="editUtente(\'' + emailSafe + '\')" title="Modifica">✏️</button> ' +
+                '<button class="btn btn-sm" onclick="rinviaEmailInvito(\'' + emailSafe + '\')" title="Rinvia email di invito">📧</button> ' +
                 '<button class="btn btn-sm" onclick="toggleAttivoUtente(\'' + emailSafe + '\')" title="' + (u.attivo === false ? 'Riattiva' : 'Disattiva') + '">' + (u.attivo === false ? '✅' : '⏸️') + '</button>' +
             '</td>' +
         '</tr>';
@@ -137,28 +138,35 @@ async function saveUtente(editId) {
         if (province.length === 0) { toast('Un Responsabile deve avere almeno una provincia', 'error'); return; }
     }
 
-    // Blocca sovrascrittura del superadmin hardcoded
     if (email === 'amministrazione@avrlogisticarl.com') {
         toast('Questo account è il Superadmin di sistema — non modificabile qui', 'error');
         return;
     }
 
     var btn = document.querySelector('.modal .btn-primary');
-    if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio...'; }
-
-    var payload = {
-        email: email,
-        nome: nome,
-        mansione: mansione,
-        province: province,
-        attivo: true,
-        aggiornatoIl: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    if (!editId) payload.creatoIl = firebase.firestore.FieldValue.serverTimestamp();
+    if (btn) { btn.disabled = true; btn.textContent = 'Invio invito...'; }
 
     try {
-        await db.collection('utenti').doc(email).set(payload, { merge: true });
-        toast(editId ? 'Utente aggiornato' : 'Utente aggiunto', 'success');
+        // Chiama Cloud Function: crea Auth se manca, salva doc utenti/, invia email invito
+        var idToken = await auth.currentUser.getIdToken();
+        var resp = await fetch(
+            'https://europe-west1-avr-logistic-dashboard.cloudfunctions.net/creaUtenzaGestionale',
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + idToken
+                },
+                body: JSON.stringify({ email: email, nome: nome, mansione: mansione, province: province })
+            }
+        );
+        var data = await resp.json().catch(function() { return {}; });
+        if (!resp.ok) throw new Error(data.error || 'Errore server');
+
+        var messaggio = data.created
+            ? 'Utente creato — email di invito inviata a ' + email
+            : 'Ruolo aggiornato — email di conferma inviata a ' + email;
+        toast(messaggio, 'success');
         closeModal();
         await loadUtenti();
         renderUtenti();
@@ -166,7 +174,32 @@ async function saveUtente(editId) {
         console.error('saveUtente:', e);
         toast('Errore: ' + (e.message || 'salvataggio fallito'), 'error');
     } finally {
-        if (btn) { btn.disabled = false; }
+        if (btn) { btn.disabled = false; btn.textContent = editId ? 'Aggiorna utente' : 'Aggiungi utente'; }
+    }
+}
+
+async function rinviaEmailInvito(id) {
+    var u = (state.utentiList || []).find(function(x) { return x.id === id; });
+    if (!u) return;
+    if (!confirm('Rinviare l\'email di invito a ' + (u.nome || u.email) + '?')) return;
+    try {
+        var idToken = await auth.currentUser.getIdToken();
+        var resp = await fetch(
+            'https://europe-west1-avr-logistic-dashboard.cloudfunctions.net/creaUtenzaGestionale',
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + idToken
+                },
+                body: JSON.stringify({ email: id, rinviaSoloEmail: true })
+            }
+        );
+        var data = await resp.json().catch(function() { return {}; });
+        if (!resp.ok) throw new Error(data.error || 'Errore server');
+        toast('Email di invito reinviata', 'success');
+    } catch (e) {
+        toast('Errore: ' + (e.message || 'invio fallito'), 'error');
     }
 }
 
