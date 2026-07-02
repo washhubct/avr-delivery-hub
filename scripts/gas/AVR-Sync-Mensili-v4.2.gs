@@ -1,20 +1,20 @@
 /**
- * AVR LOGISTIC — GAS SYNC v4.2 (patch bug schema ID mutabile)
+ * AVR LOGISTIC - GAS SYNC v4.2 (patch bug schema ID mutabile)
  * Filiali MENSILI (tutte tranne 940 e 524)
  *
  * DIFF vs v4.1:
- *   • parseMensile: docId non usa più `codDom || cognome` come discriminante.
+ *   - parseMensile: docId non usa piu `codDom || cognome` come discriminante.
  *     Schema ID stabile SEMPRE cognome+cents+indirizzoCore. codiceDomicilio
  *     resta come campo del documento, ma NON entra nell'ID.
  *
- *   PERCHÉ: se in un run la colonna codiceDomicilio è vuota → ID = _COGNOME_cents.
- *   Se in un run successivo viene compilata → nuovo ID = _CT01_cents.
- *   Il vecchio doc non viene mai eliminato → duplicati.
- *   Con schema stabile (cognome + cents + primi 10 char indirizzo) l'ID è
+ *   PERCHE: se in un run la colonna codiceDomicilio e' vuota => ID = _COGNOME_cents.
+ *   Se in un run successivo viene compilata => nuovo ID = _CT01_cents.
+ *   Il vecchio doc non viene mai eliminato => duplicati.
+ *   Con schema stabile (cognome + cents + primi 10 char indirizzo) l'ID e'
  *   idempotente anche se codiceDomicilio cambia dopo la prima sync.
  *
  *   Applicato lo stesso fix in parsePGS. parseRitorni non era affetto
- *   (usava già solo cognome).
+ *   (usava gia solo cognome).
  *
  * IN USO SU: Apps Script "AVR Sync Mensili v4" (rimpiazzare il codice esistente).
  * Deploy: copia-incolla, salva, testa con syncMensili() manuale.
@@ -240,14 +240,14 @@ function batchWriteDocs(docs) {
   return written;
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ===================================================================
 // SCHEMA ID STABILE (v4.2 fix)
 // Composto SEMPRE dagli stessi campi semantici, indipendente da campi
 // mutabili come `codiceDomicilio` che possono essere compilati o
 // modificati dopo la prima sync. Include un pezzo di indirizzo
 // normalizzato per ridurre a ~0 le collisioni "stesso cognome + stesso
 // importo + stesso giorno + stessa filiale".
-// ═══════════════════════════════════════════════════════════════════
+// ===================================================================
 function buildStableId(codiceFiliale, dataYYYYMMDD, cognome, importo, indirizzo) {
   var cog = String(cognome || '').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
   var indir = String(indirizzo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
@@ -287,7 +287,7 @@ function parseMensile(filiale, sheetName) {
       var dv = parseDate(row[ci.data]);
       if (!dv) {
         skipped.dateParseErr++;
-        Logger.log('  ⚠️ ' + filiale.codice + ' riga ' + (i + 1) + ': data non parsabile "' + row[ci.data] + '" — cognome: ' + cognome);
+        Logger.log('  WARN' + filiale.codice + ' riga ' + (i + 1) + ': data non parsabile "' + row[ci.data] + '" - cognome: ' + cognome);
         continue;
       }
 
@@ -352,7 +352,7 @@ function parseRitorni(filiale) {
       if (!cognome) continue;
       var dv = parseDate(row[ci.data]);
       if (!dv) {
-        Logger.log('  ⚠️ ' + filiale.codice + ' RITORNI riga ' + (i + 1) + ': data non parsabile "' + row[ci.data] + '"');
+        Logger.log('  WARN' + filiale.codice + ' RITORNI riga ' + (i + 1) + ': data non parsabile "' + row[ci.data] + '"');
         continue;
       }
       var mese = dv.getFullYear() + '-' + String(dv.getMonth() + 1).padStart(2, '0');
@@ -413,7 +413,7 @@ function parsePGS(filiale) {
       if (!cognome) continue;
       var dv = parseDate(ci.data >= 0 ? row[ci.data] : null);
       if (!dv) {
-        Logger.log('  ⚠️ ' + filiale.codice + ' PGS riga ' + (i + 1) + ': data non parsabile');
+        Logger.log('  WARN' + filiale.codice + ' PGS riga ' + (i + 1) + ': data non parsabile');
         continue;
       }
       var mese = dv.getFullYear() + '-' + String(dv.getMonth() + 1).padStart(2, '0');
@@ -443,7 +443,7 @@ function parsePGS(filiale) {
 
 function syncMensili() {
   var meseLabel = getMeseLabel();
-  Logger.log('=== SYNC MENSILI v4.2 — ' + meseLabel + ' ===');
+  Logger.log('=== SYNC MENSILI v4.2 - ' + meseLabel + ' ===');
   var tC = 0, tR = 0, tP = 0, tInt = 0;
   for (var f = 0; f < FILIALI.length; f++) {
     var fil = FILIALI[f];
