@@ -141,6 +141,9 @@ function processSheet(rows, filiale, tabName, dailyDate) {
             if (vFil && /^\d{2,5}$/.test(vFil)) codFil = vFil;
         }
 
+        const importoR = ci.importo >= 0 ? (parseFloat(row[ci.importo]) || 0) : 0;
+        if (importoR === 0) continue;  // allineato al GAS v4.1: no righe con importo 0
+
         out.push({
             filiale: String(codFil),
             data: dv,
@@ -149,7 +152,7 @@ function processSheet(rows, filiale, tabName, dailyDate) {
             nome: ci.nome >= 0 ? String(row[ci.nome] || '').trim() : null,
             indirizzo: ci.indirizzo >= 0 ? String(row[ci.indirizzo] || '').trim() : null,
             citta: ci.citta >= 0 ? String(row[ci.citta] || '').trim() : null,
-            importo: ci.importo >= 0 ? (parseFloat(row[ci.importo]) || 0) : 0,
+            importo: importoR,
             rider: ci.rider >= 0 ? String(row[ci.rider] || '').trim() : null,
             sheetTab: tabName,
             sheetRow: i + 1,
