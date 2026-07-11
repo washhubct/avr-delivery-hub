@@ -226,14 +226,21 @@ function mesePrecedente(meseStr) {
 }
 
 async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
-    // Consegne del mese
+    // Consegne del mese + tempi (durataMin registrata dall'app driver)
     const repSnap = await db.collection('reportDriver').where('mese', '==', mese).get();
     const consegnePerDriver = {};
+    const tempoPerDriver = {}; // { minuti, consegneConTempo }
     repSnap.forEach(doc => {
         const d = doc.data();
         const drv = ((d.driver || '') + '').toUpperCase().trim();
         if (!drv) return;
-        consegnePerDriver[drv] = (consegnePerDriver[drv] || 0) + (d.numConsegne || 0);
+        const n = d.numConsegne || 0;
+        consegnePerDriver[drv] = (consegnePerDriver[drv] || 0) + n;
+        if (d.durataMin > 0 && n > 0) {
+            if (!tempoPerDriver[drv]) tempoPerDriver[drv] = { minuti: 0, consegneConTempo: 0 };
+            tempoPerDriver[drv].minuti += d.durataMin;
+            tempoPerDriver[drv].consegneConTempo += n;
+        }
     });
 
     // Danni del mese (filtra annullati; deriva mese da campo data se mancante)
@@ -255,10 +262,25 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
     });
 
     // Costruisci classifica + score
+    // Bonus velocità: tempo medio per consegna nel mese (da orari inizio/fine
+    // giro dell'app). Vale solo con almeno 10 consegne con tempo registrato,
+    // per evitare medie casuali su pochi dati. I mesi/driver senza orari
+    // (report vecchi) non sono penalizzati: bonus semplicemente assente.
+    const SOGLIA_CONSEGNE_TEMPO = 10;
     const drivers = Object.keys(consegnePerDriver).map(drv => {
         const consegne = consegnePerDriver[drv];
         const numDanni = danniPerDriver[drv] || 0;
-        let score = consegne;
+
+        const t = tempoPerDriver[drv];
+        let tempoMedioMin = null;
+        let bonusVelocita = 0;
+        if (t && t.consegneConTempo >= SOGLIA_CONSEGNE_TEMPO) {
+            tempoMedioMin = Math.round(t.minuti / t.consegneConTempo * 10) / 10;
+            if (tempoMedioMin < 20) bonusVelocita = 30;
+            else if (tempoMedioMin < 25) bonusVelocita = 15;
+        }
+
+        let score = consegne + bonusVelocita;
         if (numDanni === 0) score += 50;
         score -= numDanni * 30;
         return {
@@ -266,6 +288,8 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
             consegne,
             danni: numDanni,
             bonusZeroDanni: numDanni === 0,
+            tempoMedioMin,
+            bonusVelocita,
             score: Math.max(0, score),
         };
     });
@@ -283,6 +307,8 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
         consegne: d.consegne,
         danni: d.danni,
         bonusZeroDanni: d.bonusZeroDanni,
+        tempoMedioMin: d.tempoMedioMin,
+        bonusVelocita: d.bonusVelocita,
         score: d.score,
         posPrec: d.posPrec,
     }));
@@ -299,6 +325,8 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
             consegne: d.consegne,
             danni: d.danni,
             bonusZeroDanni: d.bonusZeroDanni,
+            tempoMedioMin: d.tempoMedioMin,
+            bonusVelocita: d.bonusVelocita,
             score: d.score,
             posPrec: d.posPrec,
         };

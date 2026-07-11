@@ -1,6 +1,9 @@
 // DELIVERY HUB — Classifica Driver (vista admin con nomi reali)
 // Legge leaderboardFull/{mese} scritta dalla Cloud Function precalcolaLeaderboard.
 // Usata per decidere chi premiare a fine mese.
+// Premi mensili in buoni pasto: 1° €100, 2° €70, 3° €40.
+
+var PREMI_CLASSIFICA = { 1: 100, 2: 70, 3: 40 };
 
 async function renderClassifica() {
     var mese = state.meseCorrente;
@@ -58,8 +61,18 @@ async function renderClassifica() {
         else posBadge = '<span style="font-weight:700;color:var(--text-light)">' + pos + '</span>';
 
         var trendHtml = renderTrend(d.posPrec, pos);
-        var bonusHtml = d.bonusZeroDanni
-            ? '<span class="badge" style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">🛡️ Zero danni</span>'
+        var bonusParts = [];
+        if (d.bonusVelocita > 0) bonusParts.push('<span class="badge" style="background:var(--info-bg);color:var(--accent);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">⚡ +' + d.bonusVelocita + '</span>');
+        if (d.bonusZeroDanni) bonusParts.push('<span class="badge" style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">🛡️ Zero danni</span>');
+        var bonusHtml = bonusParts.length ? bonusParts.join(' ') : '<span style="color:var(--text-light)">—</span>';
+
+        var tempoHtml = d.tempoMedioMin != null
+            ? d.tempoMedioMin.toFixed(1).replace('.', ',') + ' min'
+            : '<span style="color:var(--text-light)">—</span>';
+
+        var premio = PREMI_CLASSIFICA[pos];
+        var premioHtml = premio
+            ? '<span class="badge" style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">🎁 €' + premio + ' buoni pasto</span>'
             : '<span style="color:var(--text-light)">—</span>';
 
         var nomeReale = (d.nome || '') + ' ' + (d.cognome || d.driver);
@@ -73,10 +86,12 @@ async function renderClassifica() {
               '</td>' +
               '<td style="color:var(--text-muted)">' + escapeHtmlSafe(d.citta || '—') + '</td>' +
               '<td style="text-align:right"><strong>' + (d.consegne || 0) + '</strong></td>' +
+              '<td style="text-align:right">' + tempoHtml + '</td>' +
               '<td style="text-align:right;color:' + ((d.danni || 0) > 0 ? 'var(--danger)' : 'var(--text-light)') + '">' + (d.danni || 0) + '</td>' +
               '<td>' + bonusHtml + '</td>' +
               '<td style="text-align:right"><strong style="color:var(--accent);font-size:15px">' + (d.score || 0) + '</strong></td>' +
               '<td style="text-align:center">' + trendHtml + '</td>' +
+              '<td>' + premioHtml + '</td>' +
             '</tr>'
         );
     }).join('');
@@ -95,7 +110,7 @@ async function renderClassifica() {
 
         '<div class="card">' +
           '<div class="card-title">🏆 Classifica ' + meseLabel(mese) + '</div>' +
-          '<div class="card-desc">Aggiornata ' + lastUpdateStr + ' · Scoring: 1 consegna = 1 pt · Zero danni = +50 pt · Danno = -30 pt</div>' +
+          '<div class="card-desc">Aggiornata ' + lastUpdateStr + ' · Scoring: 1 consegna = 1 pt · ⚡ Velocità (tempo medio &lt;20 min = +30, &lt;25 min = +15, con almeno 10 consegne con orari) · Zero danni = +50 pt · Danno = -30 pt · Premi buoni pasto: 🥇 €100 · 🥈 €70 · 🥉 €40</div>' +
           '<div style="display:flex;gap:8px;margin-bottom:12px">' +
             '<button class="btn btn-sm" onclick="rebuildClassifica()">🔄 Rebuild ora</button>' +
             '<button class="btn btn-sm" onclick="esportaClassificaCsv()">📥 Esporta CSV</button>' +
@@ -107,10 +122,12 @@ async function renderClassifica() {
                 '<th>Driver</th>' +
                 '<th>Città</th>' +
                 '<th style="text-align:right">Consegne</th>' +
+                '<th style="text-align:right">Tempo medio</th>' +
                 '<th style="text-align:right">Danni</th>' +
                 '<th>Bonus</th>' +
                 '<th style="text-align:right">Score</th>' +
                 '<th style="text-align:center">Trend</th>' +
+                '<th>Premio</th>' +
               '</tr></thead>' +
               '<tbody>' + rowsHtml + '</tbody>' +
             '</table>' +
@@ -171,7 +188,7 @@ async function esportaClassificaCsv() {
         var doc = await db.collection('leaderboardFull').doc(mese).get();
         if (!doc.exists) { toast('Classifica non disponibile', 'error'); return; }
         var drivers = doc.data().drivers || [];
-        var rows = [['Posizione', 'Cognome', 'Nome', 'Email', 'Citta', 'Consegne', 'Danni', 'Zero danni', 'Score', 'Posizione mese precedente']];
+        var rows = [['Posizione', 'Cognome', 'Nome', 'Email', 'Citta', 'Consegne', 'Tempo medio (min)', 'Bonus velocita', 'Danni', 'Zero danni', 'Score', 'Posizione mese precedente', 'Premio buoni pasto (EUR)']];
         drivers.forEach(function(d, i) {
             rows.push([
                 i + 1,
@@ -180,10 +197,13 @@ async function esportaClassificaCsv() {
                 d.email || '',
                 d.citta || '',
                 d.consegne || 0,
+                d.tempoMedioMin != null ? d.tempoMedioMin : '',
+                d.bonusVelocita || 0,
                 d.danni || 0,
                 d.bonusZeroDanni ? 'SI' : 'NO',
                 d.score || 0,
                 d.posPrec || '',
+                PREMI_CLASSIFICA[i + 1] || '',
             ]);
         });
         var csv = rows.map(function(r) {
