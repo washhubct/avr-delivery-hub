@@ -96,7 +96,36 @@ async function renderClassifica() {
         );
     }).join('');
 
+    // Podio premi — riferimento per inserire il bonus buoni pasto in busta paga
+    var podioOrder = [2, 1, 3]; // visual: 2° a sinistra, 1° al centro, 3° a destra
+    var podioHtml = podioOrder.map(function(pos) {
+        var d = drivers[pos - 1];
+        var premio = PREMI_CLASSIFICA[pos];
+        var medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉';
+        var isFirst = pos === 1;
+        if (!d) {
+            return '<div style="flex:1;text-align:center;padding:16px 12px;border:1.5px dashed var(--border);border-radius:12px;opacity:.5">' +
+                '<div style="font-size:26px">' + medal + '</div><div style="font-size:12px;color:var(--text-light);margin-top:6px">Nessun driver</div></div>';
+        }
+        var nome = ((d.nome || '') + ' ' + (d.cognome || d.driver)).trim();
+        return '<div style="flex:1;text-align:center;padding:' + (isFirst ? '22px 12px' : '16px 12px') + ';background:' + (isFirst ? '#fffbeb' : 'var(--white)') + ';border:1.5px solid ' + (isFirst ? '#fbbf24' : 'var(--border)') + ';border-radius:12px' + (isFirst ? ';box-shadow:0 4px 12px rgba(251,191,36,0.25)' : '') + '">' +
+            '<div style="font-size:' + (isFirst ? '34px' : '26px') + '">' + medal + '</div>' +
+            '<div style="font-weight:700;color:var(--text);margin-top:6px;font-size:' + (isFirst ? '15px' : '13px') + '">' + escapeHtmlSafe(nome) + '</div>' +
+            '<div style="font-size:11px;color:var(--text-muted)">' + escapeHtmlSafe(d.citta || '—') + ' · ' + (d.consegne || 0) + ' consegne · ' + (d.score || 0) + ' pt</div>' +
+            '<div style="margin-top:8px;display:inline-block;background:#fef3c7;color:#b45309;font-weight:800;padding:4px 12px;border-radius:8px;font-size:' + (isFirst ? '16px' : '14px') + '">🎁 €' + premio + '</div>' +
+            '<div style="font-size:10px;color:var(--text-light);margin-top:4px">buoni pasto</div>' +
+        '</div>';
+    }).join('');
+
+    var podioCard =
+        '<div class="card" style="margin-bottom:20px">' +
+          '<div class="card-title">🏆 Podio ' + meseLabel(mese) + ' — bonus da inserire in busta paga</div>' +
+          '<div class="card-desc">Buoni pasto da riconoscere ai primi 3 classificati del mese insieme alla busta paga.</div>' +
+          '<div style="display:flex;gap:14px;align-items:flex-end;margin-top:14px">' + podioHtml + '</div>' +
+        '</div>';
+
     el.innerHTML =
+        podioCard +
         '<div class="card" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">' +
           '<div><div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px">Driver attivi</div>' +
             '<div style="font-size:22px;font-weight:700;color:var(--text);margin-top:4px">' + drivers.length + '</div></div>' +
