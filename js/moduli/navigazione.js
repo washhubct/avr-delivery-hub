@@ -4,6 +4,7 @@ const MODULE_TITLES = {
     consegne: 'Consegne',
     'anagrafica-driver': 'Anagrafica Driver',
     compensi: 'Compensi Driver',
+    produttivita: 'Produttività Driver',
     danni: 'Danni / Furgoni',
     ritorni: 'Ritorni',
     classifica: 'Classifica Driver',
@@ -15,7 +16,7 @@ const MODULE_TITLES = {
     import: 'Importa dati',
     'log-accessi': 'Log Accessi',
     'driver-consegne': 'Le mie consegne',
-    'driver-compensi': 'I miei compensi',
+    'driver-compensi': 'Storico mensile',
     'driver-bustepaga': 'Buste paga'
 };
 function navigateTo(module) {
@@ -37,6 +38,7 @@ function refreshCurrentModule() {
         case 'consegne': renderConsegne(); break;
         case 'anagrafica-driver': renderAnagraficaDriver(); break;
         case 'compensi': renderCompensi(); break;
+        case 'produttivita': renderProduttivita(); break;
         case 'danni': renderDanni(); break;
         case 'ritorni': renderRitorni(); break;
         case 'classifica': renderClassifica(); break;

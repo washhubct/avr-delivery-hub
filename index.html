@@ -51,6 +51,9 @@
                 <a class="nav-item" data-module="compensi" onclick="navigateTo('compensi')">
                     <span class="nav-icon">💰</span> Compensi
                 </a>
+                <a class="nav-item nav-superadmin" data-module="produttivita" onclick="navigateTo('produttivita')">
+                    <span class="nav-icon">⏱️</span> Produttività
+                </a>
                 <a class="nav-item" data-module="danni" onclick="navigateTo('danni')">
                     <span class="nav-icon">🔧</span> Danni / Furgoni
                 </a>
@@ -81,7 +84,7 @@
                     <span class="nav-icon">📦</span> Le mie consegne
                 </a>
                 <a class="nav-item" data-module="driver-compensi" onclick="navigateTo('driver-compensi')">
-                    <span class="nav-icon">💰</span> I miei compensi
+                    <span class="nav-icon">📊</span> Storico mensile
                 </a>
                 <a class="nav-item" data-module="driver-bustepaga" onclick="navigateTo('driver-bustepaga')">
                     <span class="nav-icon">📄</span> Buste paga
@@ -333,6 +336,35 @@
                 </div>
                 <div style="margin-top:16px">
                     <button class="btn btn-primary" onclick="exportCompensi()">📄 Esporta compensi</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ PRODUTTIVITÀ DRIVER (admin only) ═══ -->
+        <section id="screen-produttivita" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Produttività driver — monitoraggio giornaliero</h3>
+                <p class="card-desc">Consegne per giorno e tempo medio per singola consegna (da orario inizio/fine giro inserito nell'app driver). I driver sono dipendenti a stipendio fisso: questa vista sostituisce il calcolo a consegna.</p>
+                <div class="kpi-grid" style="margin:16px 0">
+                    <div class="kpi-card"><div class="kpi-label">Consegne mese</div><div class="kpi-value" id="prodTotConsegne">—</div></div>
+                    <div class="kpi-card accent"><div class="kpi-label">Tempo medio/consegna</div><div class="kpi-value" id="prodTempoMedio">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Driver attivi oggi</div><div class="kpi-value" id="prodAttiviOggi">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Copertura orari</div><div class="kpi-value" id="prodCopertura">—</div></div>
+                </div>
+                <div class="toolbar">
+                    <input type="text" id="searchProduttivita" class="input search-input" placeholder="Cerca driver..." oninput="renderProduttivita()">
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Driver</th><th>Città</th><th>Oggi</th><th>Giorni attivi</th><th>Consegne mese</th><th>Media/giorno</th><th>Tempo medio/consegna</th><th>Copertura orari</th>
+                        </tr></thead>
+                        <tbody id="tblProduttivita"></tbody>
+                    </table>
+                </div>
+                <p class="card-desc" style="margin-top:12px;font-size:12px">Clicca su un driver per il dettaglio giornaliero. «Copertura orari» = % di consegne con orario inizio/fine registrato: i report inseriti prima dell'aggiornamento dell'app non hanno il tempo.</p>
+                <div style="margin-top:16px">
+                    <button class="btn btn-primary" onclick="exportProduttivita()">📄 Esporta produttività</button>
                 </div>
             </div>
         </section>
@@ -637,7 +669,7 @@
         <section id="screen-driver-consegne" class="screen" style="display:none">
             <div class="kpi-grid">
                 <div class="kpi-card"><div class="kpi-label">Consegne mese</div><div class="kpi-value" id="drvConsegneMese">—</div></div>
-                <div class="kpi-card accent"><div class="kpi-label">Compenso mese</div><div class="kpi-value" id="drvCompensoMese">—</div></div>
+                <div class="kpi-card accent"><div class="kpi-label">Giorni attivi</div><div class="kpi-value" id="drvGiorniAttivi">—</div></div>
                 <div class="kpi-card"><div class="kpi-label">Media giornaliera</div><div class="kpi-value" id="drvMedia">—</div></div>
             </div>
             <div class="card">
@@ -654,10 +686,10 @@
         <!-- ═══ DRIVER: I miei compensi ═══ -->
         <section id="screen-driver-compensi" class="screen" style="display:none">
             <div class="card">
-                <h3 class="card-title">I miei compensi</h3>
+                <h3 class="card-title">Storico mensile consegne</h3>
                 <div class="table-wrap">
                     <table class="data-table">
-                        <thead><tr><th>Mese</th><th>Consegne</th><th>Lordo</th><th>Danni</th><th>Netto</th></tr></thead>
+                        <thead><tr><th>Mese</th><th>Consegne</th><th>Giorni attivi</th><th>Media/giorno</th></tr></thead>
                         <tbody id="tblDriverCompensiBody"></tbody>
                     </table>
                 </div>
@@ -708,6 +740,7 @@
     <script src="js/moduli/consegne.js"></script>
     <script src="js/moduli/anagrafica-driver.js"></script>
     <script src="js/moduli/compensi.js"></script>
+    <script src="js/moduli/produttivita.js"></script>
     <script src="js/moduli/danni.js"></script>
     <script src="js/moduli/ritorni.js"></script>
     <script src="js/moduli/classifica.js"></script>

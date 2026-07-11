@@ -14,15 +14,14 @@ function renderDriverConsegne() {
     });
 
     const count = myConsegne.length;
-    const compenso = count * (state.driverProfile?.costoConsegna || state.costoPerConsegna);
 
     document.getElementById('drvConsegneMese').textContent = formatNumber(count);
-    document.getElementById('drvCompensoMese').textContent = formatCurrency(compenso);
 
     const giorni = new Set(myConsegne.map(c => {
         const d = c.data instanceof Date ? c.data : new Date(c.data);
         return d.toISOString().slice(0, 10);
     }));
+    document.getElementById('drvGiorniAttivi').textContent = giorni.size;
     document.getElementById('drvMedia').textContent = giorni.size > 0 ? Math.round(count / giorni.size) : '—';
 
     const sorted = [...myConsegne].sort((a, b) => {
@@ -41,10 +40,10 @@ function renderDriverConsegne() {
 }
 
 function renderDriverCompensi() {
+    // Storico mensile consegne — i driver sono dipendenti a stipendio fisso,
+    // quindi niente più calcolo € a consegna: solo conteggi.
     const driverName = getMyDriverName();
     if (!driverName) return;
-
-    const costo = state.driverProfile?.costoConsegna || state.costoPerConsegna;
 
     // Group consegne by month
     const mesiData = {};
@@ -52,35 +51,23 @@ function renderDriverCompensi() {
         if (normalizeDriverName(c.driver) !== driverName) return;
         const m = meseFromDate(c.data);
         if (!m) return;
-        if (!mesiData[m]) mesiData[m] = 0;
-        mesiData[m]++;
-    });
-
-    // Get danni by month
-    const danniByMese = {};
-    state.danniList.forEach(d => {
-        if (normalizeDriverName(d.driver) !== driverName) return;
-        if (d.stato === 'annullato') return;
-        const m = d.mese || (d.data ? d.data.substring(0, 7) : null);
-        if (!m) return;
-        if (!danniByMese[m]) danniByMese[m] = 0;
-        danniByMese[m] += d.importo || 0;
+        if (!mesiData[m]) mesiData[m] = { count: 0, giorni: new Set() };
+        mesiData[m].count++;
+        const d = c.data instanceof Date ? c.data : new Date(c.data);
+        if (!isNaN(d)) mesiData[m].giorni.add(d.toISOString().slice(0, 10));
     });
 
     const sorted = Object.entries(mesiData).sort((a, b) => b[0].localeCompare(a[0]));
 
-    document.getElementById('tblDriverCompensiBody').innerHTML = sorted.map(([m, count]) => {
-        const lordo = count * costo;
-        const danni = danniByMese[m] || 0;
-        const netto = lordo - danni;
+    document.getElementById('tblDriverCompensiBody').innerHTML = sorted.map(([m, data]) => {
+        const g = data.giorni.size;
         return `<tr>
             <td><strong>${meseLabel(m)}</strong></td>
-            <td>${count}</td>
-            <td>${formatCurrency(lordo)}</td>
-            <td style="color:${danni > 0 ? 'var(--danger)' : 'var(--text-muted)'}">${danni > 0 ? '-' + formatCurrency(danni) : '—'}</td>
-            <td><strong>${formatCurrency(netto)}</strong></td>
+            <td>${data.count}</td>
+            <td>${g}</td>
+            <td>${g > 0 ? Math.round(data.count / g) : '—'}</td>
         </tr>`;
-    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Nessun dato</td></tr>';
+    }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">Nessun dato</td></tr>';
 }
 
 function getMyDriverName() {
