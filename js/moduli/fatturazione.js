@@ -104,7 +104,7 @@ function renderFatturazioneFlat(d) {
         totFatt += r.fatt;
     });
 
-    document.getElementById('fatDesc').innerHTML = 'Schema in vigore da luglio 2026: <strong>€9,70 per consegna</strong>, senza distinzioni di volume. Le consegne con importo merce &gt; €499 sono elencate a parte e vanno prezzate a mano.';
+    document.getElementById('fatDesc').innerHTML = 'Schema in vigore da luglio 2026: <strong>€9,70 per consegna</strong>, senza distinzioni di volume, con <strong>fattura unica a F.lli Arena</strong> (Palermo inclusa). Le consegne con importo merce &gt; €499 sono elencate a parte e vanno prezzate a mano.';
     document.getElementById('fatKpiGrid').innerHTML =
         fatKpi('Consegne (×€9,70)', formatNumber(totConsegne)) +
         fatKpi('Fatturato automatico', formatCurrency(totFatt), true) +

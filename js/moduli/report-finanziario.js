@@ -24,8 +24,10 @@ async function renderReportFinanziario() {
     var totConsegne = cmAvr.length;
     var schemaFlat = mese >= MESE_SCHEMA_FLAT;
 
-    // Calcola fatturato per gruppo con lo schema prezzi del mese
-    // (flat €9,70 da luglio 2026: le >€499 sono a prezzo manuale → escluse)
+    // Calcola fatturato con lo schema prezzi del mese.
+    // Da luglio 2026: €9,70 flat, >€499 a prezzo manuale (escluse) e
+    // FATTURA UNICA a F.lli Arena (niente più split Palermo Retail).
+    // Mesi precedenti: split Arena/Palermo con schema storico.
     var arenaImponibile = 0, palermoImponibile = 0, specialiImponibile = 0, specialiManuali = 0;
     cmAvr.forEach(function(c) {
         var area = c.area || c.provincia || '?';
@@ -33,7 +35,7 @@ async function renderReportFinanziario() {
         if (schemaFlat) {
             var p = prezzoConsegnaMese(importo, mese, c.tipo);
             if (p === null) { specialiManuali++; return; }
-            if (area === 'PA') palermoImponibile += p; else arenaImponibile += p;
+            arenaImponibile += p; // fattura unica F.lli Arena
         } else {
             var base = importo >= 250.01 ? 10.00 : 6.90;
             if (area === 'PA') palermoImponibile += base; else arenaImponibile += base;
@@ -47,8 +49,8 @@ async function renderReportFinanziario() {
 
     // Render ricavi
     var ricaviHtml = '';
-    ricaviHtml += rigaRicavo('F.lli Arena', arenaImponibile);
-    ricaviHtml += rigaRicavo('Palermo Retail', palermoImponibile);
+    ricaviHtml += rigaRicavo(schemaFlat ? 'F.lli Arena — fattura unica (×€9,70)' : 'F.lli Arena', arenaImponibile);
+    if (!schemaFlat) ricaviHtml += rigaRicavo('Palermo Retail', palermoImponibile);
     if (specialiImponibile > 0) ricaviHtml += rigaRicavo('Consegne speciali', specialiImponibile);
     if (specialiManuali > 0) ricaviHtml += '<tr><td style="color:var(--warning)">Speciali >€499 (prezzo manuale)</td><td colspan="3" style="text-align:right;color:var(--warning)">' + specialiManuali + ' consegne — non incluse nel totale</td></tr>';
     document.getElementById('rfTblRicavi').innerHTML = ricaviHtml;

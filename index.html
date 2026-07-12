@@ -6,8 +6,11 @@
     <title>Last Mile Hub</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <script>/* Applica il tema prima del render per evitare flash */
-    try { if ((localStorage.getItem('lm_theme') || 'light') === 'light') document.documentElement.classList.add('theme-light'); } catch (e) {}
+    <script>/* Applica tema e stato sidebar prima del render per evitare flash */
+    try {
+        if ((localStorage.getItem('lm_theme') || 'light') === 'light') document.documentElement.classList.add('theme-light');
+        if (localStorage.getItem('lm_sidebar') === 'collapsed') document.documentElement.classList.add('sidebar-collapsed');
+    } catch (e) {}
     </script>
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="apple-touch-icon.png">
@@ -357,9 +360,10 @@
         <section id="screen-produttivita" class="screen" style="display:none">
             <div class="card">
                 <h3 class="card-title">Produttività driver — monitoraggio giornaliero</h3>
-                <p class="card-desc">Consegne per giorno e tempo medio per singola consegna (da orario inizio/fine giro inserito nell'app driver). I driver sono dipendenti a stipendio fisso: questa vista sostituisce il calcolo a consegna.</p>
+                <p class="card-desc">Confronto tra le consegne <strong>segnate dai driver nell'app</strong> e quelle <strong>presenti nei file Decò</strong> (sync automatico dai fogli Google), con tempo medio per consegna dagli orari del giro. Diff. = app − Decò: ✓ allineati, giallo scostamento piccolo, rosso scostamento importante.</p>
                 <div class="kpi-grid" style="margin:16px 0">
-                    <div class="kpi-card"><div class="kpi-label">Consegne mese</div><div class="kpi-value" id="prodTotConsegne">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Consegne app driver</div><div class="kpi-value" id="prodTotConsegne">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Consegne file Decò</div><div class="kpi-value" id="prodTotDeco">—</div><div class="kpi-detail" id="prodTotDiff"></div></div>
                     <div class="kpi-card accent"><div class="kpi-label">Tempo medio/consegna</div><div class="kpi-value" id="prodTempoMedio">—</div></div>
                     <div class="kpi-card"><div class="kpi-label">Driver attivi oggi</div><div class="kpi-value" id="prodAttiviOggi">—</div></div>
                     <div class="kpi-card"><div class="kpi-label">Copertura orari</div><div class="kpi-value" id="prodCopertura">—</div></div>
@@ -370,7 +374,7 @@
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Driver</th><th>Città</th><th>Oggi</th><th>Giorni attivi</th><th>Consegne mese</th><th>Media/giorno</th><th>Tempo medio/consegna</th><th>Copertura orari</th>
+                            <th>Driver</th><th>Città</th><th>Oggi</th><th>Giorni attivi</th><th>App driver</th><th>File Decò</th><th>Diff.</th><th>Media/giorno</th><th>Tempo medio/consegna</th><th>Copertura orari</th>
                         </tr></thead>
                         <tbody id="tblProduttivita"></tbody>
                     </table>

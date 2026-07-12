@@ -29,16 +29,25 @@ function fmtMinuti(min) {
 
 function prodAggrega() {
     var perDriver = {};
+
+    function ensure(drv) {
+        if (!perDriver[drv]) perDriver[drv] = { giorni: {}, consegne: 0, deco: 0, minuti: 0, consegneConTempo: 0 };
+        return perDriver[drv];
+    }
+    function ensureDay(pd, day) {
+        if (!pd.giorni[day]) pd.giorni[day] = { consegne: 0, deco: 0, minuti: 0, consegneConTempo: 0, fasce: 0 };
+        return pd.giorni[day];
+    }
+
+    // ── Fonte 1: report dei driver dall'app (con orari giro) ──
     (state.reportDriver || []).forEach(function(r) {
         var drv = normalizeDriverName(r.driver || '');
         if (!drv) return;
         var day = prodToDay(r.data);
         if (!day) return;
 
-        if (!perDriver[drv]) perDriver[drv] = { giorni: {}, consegne: 0, minuti: 0, consegneConTempo: 0 };
-        var pd = perDriver[drv];
-        if (!pd.giorni[day]) pd.giorni[day] = { consegne: 0, minuti: 0, consegneConTempo: 0, fasce: 0 };
-        var g = pd.giorni[day];
+        var pd = ensure(drv);
+        var g = ensureDay(pd, day);
 
         var n = r.numConsegne || 0;
         pd.consegne += n;
@@ -51,6 +60,21 @@ function prodAggrega() {
             g.consegneConTempo += n;
         }
     });
+
+    // ── Fonte 2: consegne dai fogli Decò (sync GAS) — per confronto ──
+    var mese = state.meseCorrente;
+    (state.consegne || []).forEach(function(c) {
+        if (meseFromDate(c.data) !== mese) return;
+        if (c.tipo === 'ritorno') return;
+        var drv = normalizeDriverName(c.driver || c.rider || '');
+        if (!drv) return;
+        var day = prodToDay(c.data);
+        if (!day) return;
+        var pd = ensure(drv);
+        pd.deco++;
+        ensureDay(pd, day).deco++;
+    });
+
     return perDriver;
 }
 
@@ -69,6 +93,8 @@ function renderProduttivita() {
             citta: ana ? ana.citta : '—',
             nGiorni: giorni.length,
             consegne: pd.consegne,
+            deco: pd.deco,
+            diff: pd.consegne - pd.deco,
             mediaGiorno: giorni.length ? pd.consegne / giorni.length : 0,
             tempoMedio: pd.consegneConTempo > 0 ? pd.minuti / pd.consegneConTempo : null,
             copertura: pd.consegne > 0 ? Math.round(pd.consegneConTempo / pd.consegne * 100) : 0,
@@ -77,16 +103,22 @@ function renderProduttivita() {
         };
     });
 
-    rows.sort(function(a, b) { return b.consegne - a.consegne; });
+    rows.sort(function(a, b) { return (b.consegne || b.deco) - (a.consegne || a.deco); });
 
     // KPI globali
-    var totConsegne = 0, totMinuti = 0, totConTempo = 0, attiviOggi = 0;
+    var totConsegne = 0, totDeco = 0, totMinuti = 0, totConTempo = 0, attiviOggi = 0;
     rows.forEach(function(r) {
         totConsegne += r.consegne;
+        totDeco += r.deco;
         if (r.oggi > 0) attiviOggi++;
         r.giorniDetail.forEach(function(g) { totMinuti += g.minuti; totConTempo += g.consegneConTempo; });
     });
     document.getElementById('prodTotConsegne').textContent = formatNumber(totConsegne);
+    document.getElementById('prodTotDeco').textContent = formatNumber(totDeco);
+    var totDiff = totConsegne - totDeco;
+    document.getElementById('prodTotDiff').innerHTML = totDiff === 0
+        ? '<span style="color:var(--success, #16a34a)">allineate ✓</span>'
+        : '<span style="color:var(--warning)">' + (totDiff > 0 ? '+' + totDiff : totDiff) + ' vs app driver</span>';
     document.getElementById('prodTempoMedio').textContent = totConTempo > 0 ? fmtMinuti(totMinuti / totConTempo) : '—';
     document.getElementById('prodAttiviOggi').textContent = attiviOggi;
     document.getElementById('prodCopertura').textContent = totConsegne > 0 ? Math.round(totConTempo / totConsegne * 100) + '%' : '—';
@@ -99,20 +131,23 @@ function renderProduttivita() {
         var key = r.drv.replace(/[^A-Z0-9]/g, '_');
         var isOpen = !!prodExpanded[key];
         var tempoColor = r.tempoMedio == null ? 'var(--text-light)' : (r.tempoMedio > 30 ? 'var(--danger)' : (r.tempoMedio > 20 ? 'var(--warning)' : 'var(--success, #16a34a)'));
+        var diffHtml = prodDiffHtml(r.diff, r.deco);
         var html = '<tr style="cursor:pointer" onclick="prodToggle(\'' + key + '\')">' +
             '<td>' + (isOpen ? '▼' : '▶') + ' <strong>' + escapeHtml(r.drv) + '</strong></td>' +
             '<td><span class="badge badge-info">' + escapeHtml(r.citta) + '</span></td>' +
             '<td>' + r.oggi + '</td>' +
             '<td>' + r.nGiorni + '</td>' +
-            '<td>' + r.consegne + '</td>' +
+            '<td><strong>' + r.consegne + '</strong></td>' +
+            '<td>' + r.deco + '</td>' +
+            '<td>' + diffHtml + '</td>' +
             '<td>' + r.mediaGiorno.toFixed(1) + '</td>' +
             '<td style="color:' + tempoColor + ';font-weight:700">' + fmtMinuti(r.tempoMedio) + '</td>' +
             '<td style="color:' + (r.copertura < 80 ? 'var(--warning)' : 'var(--text-muted)') + '">' + r.copertura + '%</td>' +
         '</tr>';
         if (isOpen) {
-            html += '<tr><td colspan="8" style="padding:0;background:var(--bg, #f8fafc)">' +
+            html += '<tr><td colspan="10" style="padding:0;background:var(--bg, #f8fafc)">' +
                 '<table class="data-table" style="margin:8px 16px;width:calc(100% - 32px)">' +
-                '<thead><tr><th>Giorno</th><th>Fasce</th><th>Consegne</th><th>Tempo in giro</th><th>Tempo medio/consegna</th></tr></thead><tbody>' +
+                '<thead><tr><th>Giorno</th><th>Fasce</th><th>App driver</th><th>File Decò</th><th>Diff.</th><th>Tempo in giro</th><th>Tempo medio/consegna</th></tr></thead><tbody>' +
                 r.giorniDetail.map(function(g) {
                     var media = g.consegneConTempo > 0 ? g.minuti / g.consegneConTempo : null;
                     var dd = new Date(g.day + 'T12:00:00');
@@ -121,6 +156,8 @@ function renderProduttivita() {
                         '<td>' + label + (g.day === oggi ? ' <span class="badge badge-info">oggi</span>' : '') + '</td>' +
                         '<td>' + g.fasce + '</td>' +
                         '<td><strong>' + g.consegne + '</strong></td>' +
+                        '<td>' + g.deco + '</td>' +
+                        '<td>' + prodDiffHtml(g.consegne - g.deco, g.deco) + '</td>' +
                         '<td>' + (g.minuti > 0 ? fmtMinuti(g.minuti) : '—') + '</td>' +
                         '<td>' + fmtMinuti(media) + '</td>' +
                     '</tr>';
@@ -128,7 +165,15 @@ function renderProduttivita() {
                 '</tbody></table></td></tr>';
         }
         return html;
-    }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">Nessun report driver per questo mese</td></tr>';
+    }).join('') || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted)">Nessun report driver per questo mese</td></tr>';
+}
+
+// Differenza app driver vs file Decò: 0 = allineati, + = il driver ha
+// segnato più consegne dei fogli, − = ne ha segnate meno
+function prodDiffHtml(diff, deco) {
+    if (diff === 0) return '<span style="color:var(--success, #16a34a)">✓</span>';
+    var color = Math.abs(diff) > Math.max(2, deco * 0.1) ? 'var(--danger)' : 'var(--warning)';
+    return '<span style="color:' + color + ';font-weight:700">' + (diff > 0 ? '+' + diff : diff) + '</span>';
 }
 
 function prodToggle(key) {
@@ -145,12 +190,12 @@ function exportProduttivita() {
     var riepilogo = [
         ['PRODUTTIVITÀ DRIVER — ' + meseLabel(mese)],
         [],
-        ['Driver', 'Giorni attivi', 'Consegne totali', 'Media consegne/giorno', 'Tempo medio per consegna (min)', 'Copertura orari %']
+        ['Driver', 'Giorni attivi', 'Consegne app driver', 'Consegne file Decò', 'Differenza', 'Media consegne/giorno', 'Tempo medio per consegna (min)', 'Copertura orari %']
     ];
     var giornaliero = [
         ['DETTAGLIO GIORNALIERO — ' + meseLabel(mese)],
         [],
-        ['Driver', 'Giorno', 'Fasce', 'Consegne', 'Minuti in giro', 'Tempo medio per consegna (min)']
+        ['Driver', 'Giorno', 'Fasce', 'Consegne app', 'Consegne Decò', 'Differenza', 'Minuti in giro', 'Tempo medio per consegna (min)']
     ];
 
     drivers.sort().forEach(function(drv) {
@@ -158,7 +203,7 @@ function exportProduttivita() {
         var giorni = Object.keys(pd.giorni).sort();
         var tempoMedio = pd.consegneConTempo > 0 ? (pd.minuti / pd.consegneConTempo) : null;
         riepilogo.push([
-            drv, giorni.length, pd.consegne,
+            drv, giorni.length, pd.consegne, pd.deco, pd.consegne - pd.deco,
             giorni.length ? +(pd.consegne / giorni.length).toFixed(1) : 0,
             tempoMedio != null ? +tempoMedio.toFixed(1) : '',
             pd.consegne > 0 ? Math.round(pd.consegneConTempo / pd.consegne * 100) : 0
@@ -166,7 +211,7 @@ function exportProduttivita() {
         giorni.forEach(function(day) {
             var g = pd.giorni[day];
             var m = g.consegneConTempo > 0 ? +(g.minuti / g.consegneConTempo).toFixed(1) : '';
-            giornaliero.push([drv, day, g.fasce, g.consegne, g.minuti || '', m]);
+            giornaliero.push([drv, day, g.fasce, g.consegne, g.deco, g.consegne - g.deco, g.minuti || '', m]);
         });
     });
 

@@ -292,6 +292,7 @@ body {
 
 .main-content {
     margin-left: var(--sidebar-w);
+    transition: margin-left .3s cubic-bezier(.4, 0, .2, 1);
     min-height: 100vh; min-height: 100dvh;
     background: var(--gradient-subtle);
     position: relative;
@@ -343,7 +344,7 @@ body {
     font-weight: 700;
     flex: 1;
     letter-spacing: -.2px;
-    color: #fff;
+    color: var(--text);
 }
 
 .topbar-actions {
@@ -580,7 +581,7 @@ body.is-login .topbar { display: none; }
 .kpi-value {
     font-size: 28px;
     font-weight: 800;
-    color: #fff;
+    color: var(--text);
     font-variant-numeric: tabular-nums;
     letter-spacing: -.5px;
     line-height: 1.1;
@@ -615,7 +616,7 @@ body.is-login .topbar { display: none; }
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #fff;
+    color: var(--text);
 }
 
 .card-title::before {
@@ -843,7 +844,7 @@ body.is-login .topbar { display: none; }
     padding: 18px 22px;
     border-bottom: 1px solid var(--border);
 }
-.modal-header h3 { font-size: 16px; font-weight: 700; color: #fff; }
+.modal-header h3 { font-size: 16px; font-weight: 700; color: var(--text); }
 
 .modal-close {
     background: none;
@@ -1073,3 +1074,46 @@ html.theme-light .main-content::before {
     transition: all .15s;
 }
 .theme-toggle:hover { border-color: var(--border-hover); color: var(--text); }
+
+
+/* ══════════════════════════════════════════════════════════════
+   SIDEBAR A SCOMPARSA (desktop) — hamburger sempre visibile
+   ══════════════════════════════════════════════════════════════ */
+@media (min-width: 769px) {
+    .hamburger { display: flex; align-items: center; }
+    html.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+    html.sidebar-collapsed .main-content { margin-left: 0; }
+    html.sidebar-collapsed .main-content::before { left: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE / TABLET UX
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 1024px) and (min-width: 769px) {
+    /* Tablet: sidebar più stretta */
+    :root { --sidebar-w: 200px; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .grid-2 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+    /* Touch target più generosi */
+    .btn, .nav-item, .theme-toggle { min-height: 42px; }
+    .btn-sm { min-height: 36px; }
+    .data-table th, .data-table td { padding: 10px 8px; font-size: 12px; white-space: nowrap; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .mese-select { min-height: 40px; }
+    .modal { max-width: calc(100vw - 24px); max-height: 88dvh; overflow-y: auto; }
+    .input, select.input { min-height: 42px; font-size: 16px; } /* 16px evita lo zoom iOS */
+    .topbar-actions { gap: 6px; }
+    .kpi-label { font-size: 10px; }
+    .toast-wrap, #toastContainer { left: 12px; right: 12px; }
+}
+
+@media (max-width: 480px) {
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .kpi-value { font-size: 19px; }
+    .screen { padding: 10px; }
+    .card { padding: 12px; }
+    .page-title { font-size: 14px; }
+}

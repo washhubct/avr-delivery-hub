@@ -60,6 +60,13 @@ function refreshCurrentModule() {
     }
 }
 function toggleSidebar() {
+    // Desktop (>768px): drawer a scomparsa con stato salvato.
+    // Mobile: overlay come prima.
+    if (window.innerWidth > 768) {
+        var collapsed = document.documentElement.classList.toggle('sidebar-collapsed');
+        try { localStorage.setItem('lm_sidebar', collapsed ? 'collapsed' : 'open'); } catch (e) {}
+        return;
+    }
     const sb = document.getElementById('sidebar');
     const ov = document.getElementById('sidebarOverlay');
     if (sb.classList.contains('open')) { closeSidebar(); }
