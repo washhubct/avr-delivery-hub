@@ -30,7 +30,7 @@ function renderAnagraficaDriver() {
         <td>${escapeHtml(d.nome)}</td>
         <td><span class="badge badge-info">${escapeHtml(d.citta)}</span></td>
         <td>${escapeHtml(d.contratto) || '—'}</td>
-        <td>€${(d.costoConsegna || state.costoPerConsegna).toFixed(2)}</td>
+        <td>${scadenzaBadge(d.scadenzaContratto)}</td>
         <td><span class="badge ${d.attivo !== false ? 'badge-ok' : 'badge-err'}">${d.attivo !== false ? 'Attivo' : 'Inattivo'}</span></td>
         <td>
             <button class="btn btn-sm" onclick="editDriver('${idSafe}')">✏️</button>
@@ -38,6 +38,30 @@ function renderAnagraficaDriver() {
             <button class="btn btn-sm btn-danger" onclick="eliminaDriver('${idSafe}')">🗑️</button>
         </td>
     </tr>`;
+    }).join('');
+}
+
+// Badge scadenza contratto: rosso se scaduto, giallo se entro 30 giorni
+function scadenzaBadge(scad) {
+    if (!scad) return '<span style="color:var(--text-light)">Indeterminato</span>';
+    var d = new Date(scad + 'T12:00:00');
+    if (isNaN(d)) return escapeHtml(scad);
+    var label = d.toLocaleDateString('it-IT');
+    var oggi = new Date();
+    var giorni = Math.floor((d - oggi) / 86400000);
+    if (giorni < 0) return '<span class="badge badge-err" title="Contratto scaduto">⚠️ ' + label + '</span>';
+    if (giorni <= 30) return '<span class="badge badge-warn" title="Scade tra ' + giorni + ' giorni">' + label + '</span>';
+    return label;
+}
+
+var CONTRATTI_TIPI = ['Full time', 'Part time'];
+
+function contrattoOptions(current) {
+    var tipi = CONTRATTI_TIPI.slice();
+    // Mantieni visibile un eventuale valore legacy (CO.CO.CO, P.O., Dipendente…)
+    if (current && tipi.indexOf(current) < 0) tipi.push(current);
+    return tipi.map(function(c) {
+        return '<option value="' + escapeHtml(c) + '"' + (c === current ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
     }).join('');
 }
 
@@ -51,13 +75,10 @@ function openAddDriver() {
                 <option value="EN">Enna</option><option value="SR">Siracusa</option><option value="PA">Palermo</option>
             </select>
         </div>
-        <div class="form-group"><label>Tipo contratto</label>
-            <select id="drContratto" class="input">
-                <option value="CO.CO.CO">CO.CO.CO</option><option value="P.O.">P.O.</option>
-                <option value="Dipendente">Dipendente</option>
-            </select>
+        <div class="form-group"><label>Contratto</label>
+            <select id="drContratto" class="input">${contrattoOptions('Full time')}</select>
         </div>
-        <div class="form-group"><label>€ per consegna</label><input type="number" id="drCosto" class="input" value="3.50" step="0.10"></div>
+        <div class="form-group"><label>Scadenza contratto <span style="color:var(--text-light);font-weight:400">(vuoto = indeterminato)</span></label><input type="date" id="drScadenza" class="input"></div>
         <div class="form-group"><label>Email (per accesso driver app)</label><input type="email" id="drEmail" class="input" placeholder="obbligatoria per accesso app"></div>
         <div style="display:flex;gap:8px;margin-top:8px">
             <button class="btn btn-primary" onclick="saveDriverAndCreateAccess()" style="flex:1">Salva + Crea accesso app</button>
@@ -72,7 +93,7 @@ async function saveDriver(editId) {
         nome: document.getElementById('drNome').value.trim(),
         citta: document.getElementById('drCitta').value,
         contratto: document.getElementById('drContratto').value,
-        costoConsegna: parseFloat(document.getElementById('drCosto').value) || 3.50,
+        scadenzaContratto: document.getElementById('drScadenza')?.value || null,
         email: document.getElementById('drEmail')?.value.trim().toLowerCase() || null,
         attivo: true,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -159,12 +180,10 @@ async function editDriver(id) {
                 ${['CT','ME','EN','SR','PA'].map(a => `<option value="${a}" ${d.citta===a?'selected':''}>${state.aree[a]?.nome||a}</option>`).join('')}
             </select>
         </div>
-        <div class="form-group"><label>Tipo contratto</label>
-            <select id="drContratto" class="input">
-                ${['CO.CO.CO','P.O.','Dipendente'].map(c => `<option ${d.contratto===c?'selected':''}>${c}</option>`).join('')}
-            </select>
+        <div class="form-group"><label>Contratto</label>
+            <select id="drContratto" class="input">${contrattoOptions(d.contratto)}</select>
         </div>
-        <div class="form-group"><label>€ per consegna</label><input type="number" id="drCosto" class="input" value="${d.costoConsegna||3.50}" step="0.10"></div>
+        <div class="form-group"><label>Scadenza contratto <span style="color:var(--text-light);font-weight:400">(vuoto = indeterminato)</span></label><input type="date" id="drScadenza" class="input" value="${d.scadenzaContratto || ''}"></div>
         <div class="form-group"><label>Email</label><input type="email" id="drEmail" class="input" value="${d.email||''}"></div>
         <button class="btn btn-primary" onclick="saveDriver('${id}')" style="width:100%;margin-top:8px">Aggiorna</button>
         ${d.email ? `<button class="btn" onclick="reinviaResetPassword('${d.email}')" style="width:100%;margin-top:6px">📧 Reinvia password di accesso</button>` : `<button class="btn" onclick="creaAccessoDriver(document.getElementById('drEmail').value.trim().toLowerCase())" style="width:100%;margin-top:6px">🔑 Crea accesso app</button>`}
@@ -225,7 +244,6 @@ async function popolaDriver() {
         if (existing.includes(key)) continue;
         await db.collection('driverAnagrafica').add({
             ...d,
-            costoConsegna: 3.50,
             attivo: true,
             email: null,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
