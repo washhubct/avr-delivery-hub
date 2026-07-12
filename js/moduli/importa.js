@@ -428,7 +428,8 @@ async function saveConsegneBatch(consegne) {
             if (dryRun) {
                 console.log('[DRY_RUN] set', docRef.path, JSON.stringify({ importo: c.importo, cliente: c.cliente, filiale: c.filiale, mese: c.mese }));
             } else {
-                batch.set(docRef, data);
+                // merge:true preserva eventuali campi scritti dal GAS di produzione (sync, rider, tipoDriver)
+                batch.set(docRef, data, { merge: true });
             }
         });
 
@@ -442,70 +443,6 @@ async function saveConsegneBatch(consegne) {
         }
     }
     if (dryRun) console.log(`[DRY_RUN] ${consegne.length} record — nessuna scrittura su Firestore`);
-}
-
-// ══════════════════════════════════════════════
-// SYNC AUTOMATICA DA GOOGLE DRIVE (Cloud Function)
-// ══════════════════════════════════════════════
-
-async function loadSyncStatus() {
-    var box = document.getElementById('syncStatusBox');
-    if (!box) return;
-    try {
-        var doc = await db.collection('syncStatus').doc('last').get();
-        if (!doc.exists) {
-            box.innerHTML = 'Nessuna sincronizzazione ancora eseguita. I fogli devono essere condivisi (lettura) con il service account: <code id="syncSaEmail">verrà mostrato dopo il primo run</code>.';
-            return;
-        }
-        var d = doc.data();
-        var at = d.at && d.at.toDate ? d.at.toDate().toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-        var righe = (d.dettagli || []).map(function(f) {
-            var stato = f.errore
-                ? '<span style="color:var(--danger)">❌ ' + escapeHtml(f.errore) + '</span>'
-                : '<span style="color:var(--success, #16a34a)">✓ ' + f.upserted + ' consegne</span>';
-            return '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>' + escapeHtml(f.nome) + '</span>' + stato + '</div>';
-        }).join('');
-        box.innerHTML =
-            '<div style="margin-bottom:8px"><strong>Ultimo sync:</strong> ' + at +
-            ' · mesi ' + (d.mesi || []).join(', ') +
-            ' · <strong>' + (d.totUpserted || 0) + '</strong> consegne aggiornate' +
-            ((d.totRitorniEsclusi || 0) > 0 ? ' · ' + d.totRitorniEsclusi + ' ritorni esclusi' : '') +
-            (d.errori > 0 ? ' · <span style="color:var(--danger)">' + d.errori + ' fogli in errore</span>' : '') +
-            '</div>' + righe +
-            (d.serviceAccount ? '<div style="margin-top:8px;font-size:11px;color:var(--text-light)">Service account (condividi qui i fogli): <code>' + escapeHtml(d.serviceAccount) + '</code></div>' : '');
-    } catch (e) {
-        box.textContent = 'Stato sync non disponibile: ' + e.message;
-    }
-}
-
-async function triggerSyncConsegne() {
-    var btn = document.getElementById('btnSyncNow');
-    var meseInput = document.getElementById('syncMese');
-    var mese = meseInput && meseInput.value ? meseInput.value : null;
-    btn.disabled = true; btn.textContent = 'Sincronizzazione…';
-    try {
-        var user = firebase.auth().currentUser;
-        if (!user) { toast('Sessione scaduta', 'error'); return; }
-        var idToken = await user.getIdToken();
-        var resp = await fetch('https://europe-west1-avr-logistic-dashboard.cloudfunctions.net/syncConsegne', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
-            body: JSON.stringify(mese ? { mese: mese } : {})
-        });
-        var body = await resp.json();
-        if (!resp.ok) throw new Error(body.error || 'Errore sync');
-        toast('Sync completata: ' + body.totUpserted + ' consegne' + (body.errori > 0 ? ' (' + body.errori + ' fogli in errore)' : ''), body.errori > 0 ? 'warning' : 'success');
-        await loadSyncStatus();
-        // Ricarica le consegne del mese visualizzato
-        try { sessionStorage.clear(); } catch(e) {}
-        await loadConsegnePerMese();
-        refreshCurrentModule();
-    } catch (e) {
-        console.error('triggerSyncConsegne:', e);
-        toast('Errore: ' + e.message, 'error');
-    } finally {
-        btn.disabled = false; btn.textContent = '🔄 Sincronizza ora';
-    }
 }
 
 async function autoGenerateFiliali() {

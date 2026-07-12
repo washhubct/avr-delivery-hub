@@ -4,16 +4,80 @@ var SUPER_ADMIN_EMAILS = [
     'amministrazione@avrlogisticarl.com'
 ];
 
+// Fallback hardcoded — attivo finché non completiamo la migrazione a
+// collection `utenti/`. Rimuovere quando i doc utenti/{email} sono a regime.
 var STAFF_EMAILS = [
     'michela@avrlogisticarl.com',
     'alessandra@avrlogisticarl.com'
 ];
 
+// Sync legacy — non usare per nuova logica. Mantieni per compatibilità
+// con codice che non è ancora stato migrato al ruolo esteso.
 function getUserRole(email) {
-    var e = email.toLowerCase();
+    var e = (email || '').toLowerCase();
     if (SUPER_ADMIN_EMAILS.indexOf(e) >= 0) return 'superadmin';
     if (STAFF_EMAILS.indexOf(e) >= 0) return 'staff';
     return 'driver';
+}
+
+// Estende getUserRole leggendo la collection `utenti/{emailLower}`.
+// Ruoli possibili: 'superadmin' | 'amministratore' | 'risorse_umane'
+//                | 'responsabile' | 'staff' (legacy) | 'driver'
+// Popola anche state.userProfile con { mansione, province, nome } se presente.
+async function resolveUserRole(email) {
+    var e = (email || '').toLowerCase();
+    if (SUPER_ADMIN_EMAILS.indexOf(e) >= 0) {
+        state.userProfile = { mansione: 'superadmin', province: [], nome: 'Amministratore' };
+        return 'superadmin';
+    }
+    try {
+        var doc = await db.collection('utenti').doc(e).get();
+        if (doc.exists) {
+            var d = doc.data();
+            if (d.attivo === false) {
+                // Utente disattivato: forza signOut immediato
+                console.warn('Utente disattivato:', e);
+                await auth.signOut();
+                throw new Error('Account disattivato');
+            }
+            state.userProfile = {
+                mansione: d.mansione,
+                province: Array.isArray(d.province) ? d.province : [],
+                nome: d.nome || e.split('@')[0]
+            };
+            return d.mansione; // amministratore | risorse_umane | responsabile
+        }
+    } catch (err) {
+        // Se è signOut voluto sopra, ripropaga
+        if (err && err.message === 'Account disattivato') throw err;
+        console.warn('resolveUserRole utenti lookup:', err.message);
+    }
+    // Fallback hardcoded staff (Michela, Alessandra) finché non migrati
+    if (STAFF_EMAILS.indexOf(e) >= 0) {
+        state.userProfile = { mansione: 'staff', province: [], nome: e.split('@')[0] };
+        return 'staff';
+    }
+    state.userProfile = null;
+    return 'driver';
+}
+
+// True se il ruolo può gestire la sezione Utenti (solo superadmin + amministratore).
+function canManageUsers(role) {
+    return role === 'superadmin' || role === 'amministratore';
+}
+
+// True se il ruolo può configurare/leggere le timbrature (superadmin + amministratore + risorse_umane).
+function canManageTimbrature(role) {
+    return role === 'superadmin' || role === 'amministratore' || role === 'risorse_umane';
+}
+
+// True se il ruolo ha accesso admin/staff completo alla dashboard (senza P&L).
+function isAdminOrStaffRole(role) {
+    return role === 'superadmin'
+        || role === 'amministratore'
+        || role === 'risorse_umane'
+        || role === 'responsabile'
+        || role === 'staff';
 }
 
 // Registra accesso in Firestore
@@ -67,30 +131,53 @@ function initAuth() {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('sidebar').style.display = 'flex';
 
-            var role = getUserRole(user.email);
+            var role;
+            try {
+                role = await resolveUserRole(user.email);
+            } catch (err) {
+                // Utente disattivato → signOut già eseguito
+                return;
+            }
             state.userRole = role;
 
             // Log accesso
             await logAccesso(user, role);
 
-            if (role === 'superadmin' || role === 'staff') {
+            if (isAdminOrStaffRole(role)) {
                 document.getElementById('navAdmin').style.display = 'block';
                 document.getElementById('navDriver').style.display = 'none';
 
+                // Voci "solo superadmin" (P&L, Log Accessi, Dashboard KPI top)
                 var adminOnlyItems = document.querySelectorAll('.nav-superadmin');
                 adminOnlyItems.forEach(function(el) {
-                    el.style.display = role === 'superadmin' ? 'block' : 'none';
+                    el.style.display = (role === 'superadmin' || role === 'amministratore') ? 'block' : 'none';
                 });
 
-                if (role === 'superadmin') {
-                    document.getElementById('userName').textContent = 'Amministratore';
-                    document.getElementById('userRole').textContent = user.email;
-                } else {
-                    var name = user.email.split('@')[0];
-                    name = name.charAt(0).toUpperCase() + name.slice(1);
-                    document.getElementById('userName').textContent = name;
-                    document.getElementById('userRole').textContent = 'Staff';
-                }
+                // Voce "Utenti" — solo superadmin + amministratore
+                var manageUsersItems = document.querySelectorAll('.nav-can-manage-users');
+                manageUsersItems.forEach(function(el) {
+                    el.style.display = canManageUsers(role) ? 'block' : 'none';
+                });
+
+                // Voci di gestione timbrature — superadmin + amministratore + risorse_umane
+                var timbratureItems = document.querySelectorAll('.nav-timbrature-admin');
+                timbratureItems.forEach(function(el) {
+                    el.style.display = canManageTimbrature(role) ? 'block' : 'none';
+                });
+
+                // Label sidebar
+                var profile = state.userProfile || {};
+                var displayName = profile.nome || user.email.split('@')[0];
+                displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+                var roleLabel = {
+                    superadmin: 'Amministratore',
+                    amministratore: 'Amministratore',
+                    risorse_umane: 'Risorse Umane',
+                    responsabile: 'Responsabile' + (profile.province && profile.province.length ? ' — ' + profile.province.join(', ') : ''),
+                    staff: 'Staff'
+                }[role] || role;
+                document.getElementById('userName').textContent = displayName;
+                document.getElementById('userRole').textContent = role === 'superadmin' ? user.email : roleLabel;
             } else {
                 document.getElementById('navAdmin').style.display = 'none';
                 document.getElementById('navDriver').style.display = 'block';
@@ -108,9 +195,9 @@ function initAuth() {
             initMeseSelector();
             await loadAllData();
 
-            if (role === 'superadmin') {
+            if (role === 'superadmin' || role === 'amministratore') {
                 navigateTo('dashboard');
-            } else if (role === 'staff') {
+            } else if (isAdminOrStaffRole(role)) {
                 navigateTo('consegne');
             } else {
                 navigateTo('driver-consegne');

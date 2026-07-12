@@ -213,6 +213,45 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // UTENTI — anagrafica utenti gestionale (amministratori, HR,
+    // responsabili). Solo il superadmin hardcoded può scrivere qui.
+    // Ogni utente può leggere il PROPRIO doc (per risolvere ruolo lato client).
+    // Le altre rules potranno leggere utenti/{email}.mansione per gate futuri.
+    // ═══════════════════════════════════════════════════════════
+    match /utenti/{email} {
+      allow read: if isSuperAdmin()
+                     || (isSignedIn() && email == userEmail());
+      allow write: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PUNTI TIMBRATURA — 5 sedi provinciali (CT/SR/ME/PA/EN) con NFC.
+    // Lettura consentita a tutti gli utenti autenticati: il driver deve
+    // sapere lat/lng del proprio punto per validare pre-timbratura.
+    // Scrittura solo admin/HR: superadmin, amministratore, risorse_umane.
+    // ═══════════════════════════════════════════════════════════
+    function isAmministratore() {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/utenti/$(userEmail()))
+             && get(/databases/$(database)/documents/utenti/$(userEmail())).data.mansione == 'amministratore'
+             && get(/databases/$(database)/documents/utenti/$(userEmail())).data.attivo != false;
+    }
+    function isRisorseUmane() {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/utenti/$(userEmail()))
+             && get(/databases/$(database)/documents/utenti/$(userEmail())).data.mansione == 'risorse_umane'
+             && get(/databases/$(database)/documents/utenti/$(userEmail())).data.attivo != false;
+    }
+    function canManageTimbrature() {
+      return isSuperAdmin() || isAmministratore() || isRisorseUmane();
+    }
+
+    match /puntiTimbratura/{provincia} {
+      allow read: if isSignedIn();
+      allow write: if canManageTimbrature();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // DEFAULT DENY — qualsiasi altra collezione resta chiusa
     // ═══════════════════════════════════════════════════════════
     match /{document=**} {

@@ -139,13 +139,15 @@ async function runRiconciliazione() {
         var diffColor = r.diff === 0 ? 'var(--success)' : 'var(--danger)';
         var diffText = r.diff === 0 ? '0' : (r.diff > 0 ? '+' + r.diff : String(r.diff));
 
+        var driverSafe = escapeHtml(r.driver);
+        var meseSafe = escapeHtml(mese);
         html += '<tr>' +
-            '<td><strong>' + r.driver + '</strong></td>' +
+            '<td><strong>' + driverSafe + '</strong></td>' +
             '<td style="text-align:right">' + r.totApp + '</td>' +
             '<td style="text-align:right">' + r.totDeco + '</td>' +
             '<td style="text-align:right;color:' + diffColor + ';font-weight:700">' + diffText + '</td>' +
             '<td><span class="badge ' + badgeClass + '">' + statoLabel + '</span></td>' +
-            '<td><button class="btn btn-sm" onclick="mostraDettaglioRicon(\'' + r.driver + '\', \'' + mese + '\')">👁️</button></td>' +
+            '<td><button class="btn btn-sm" onclick="mostraDettaglioRicon(\'' + driverSafe + '\', \'' + meseSafe + '\')">👁️</button></td>' +
         '</tr>';
     });
 

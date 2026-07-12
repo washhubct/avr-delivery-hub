@@ -17,7 +17,7 @@
  */
 
 (async () => {
-    console.log('%c🔄 Reset password driver — AVR Logistic', 'font-size:14px;font-weight:bold;color:#38bdf8');
+    console.log('%c🔄 Reset password driver — Last Mile', 'font-size:14px;font-weight:bold;color:#38bdf8');
 
     // ── Safety: deve esserci un utente loggato ──
     if (typeof auth === 'undefined' || !auth.currentUser) {

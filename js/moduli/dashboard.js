@@ -336,8 +336,8 @@ function exportConsegneInterne() {
     });
 
     var rows = [
-        ['CONSEGNE INTERNE (NON AVR) — ' + meseLabel(mese)],
-        ['Consegne effettuate da personale interno filiale, non da driver AVR Logistic'],
+        ['CONSEGNE INTERNE (NON LAST MILE) — ' + meseLabel(mese)],
+        ['Consegne effettuate da personale interno filiale, non da driver Last Mile'],
         [],
         ['Data', 'Filiale', 'Nome Filiale', 'Area', 'Cliente', 'Città', 'Indirizzo', 'Importo', 'Driver Interno', 'Prestazione']
     ];

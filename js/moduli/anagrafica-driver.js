@@ -23,19 +23,22 @@ function renderAnagraficaDriver() {
         return;
     }
 
-    tbody.innerHTML = sorted.map(d => `<tr>
-        <td><strong>${d.cognome}</strong></td>
-        <td>${d.nome}</td>
-        <td><span class="badge badge-info">${d.citta}</span></td>
-        <td>${d.contratto || '—'}</td>
+    tbody.innerHTML = sorted.map(d => {
+        const idSafe = escapeHtml(d.id);
+        return `<tr>
+        <td><strong>${escapeHtml(d.cognome)}</strong></td>
+        <td>${escapeHtml(d.nome)}</td>
+        <td><span class="badge badge-info">${escapeHtml(d.citta)}</span></td>
+        <td>${escapeHtml(d.contratto) || '—'}</td>
         <td>€${(d.costoConsegna || state.costoPerConsegna).toFixed(2)}</td>
         <td><span class="badge ${d.attivo !== false ? 'badge-ok' : 'badge-err'}">${d.attivo !== false ? 'Attivo' : 'Inattivo'}</span></td>
         <td>
-            <button class="btn btn-sm" onclick="editDriver('${d.id}')">✏️</button>
-            <button class="btn btn-sm btn-danger" onclick="toggleDriverAttivo('${d.id}')">⏸️</button>
-            <button class="btn btn-sm btn-danger" onclick="eliminaDriver('${d.id}','${d.cognome} ${d.nome||''}')">🗑️</button>
+            <button class="btn btn-sm" onclick="editDriver('${idSafe}')">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="toggleDriverAttivo('${idSafe}')">⏸️</button>
+            <button class="btn btn-sm btn-danger" onclick="eliminaDriver('${idSafe}')">🗑️</button>
         </td>
-    </tr>`).join('');
+    </tr>`;
+    }).join('');
 }
 
 function openAddDriver() {
@@ -198,7 +201,9 @@ async function toggleDriverAttivo(id) {
     }
 }
 
-async function eliminaDriver(id, nome) {
+async function eliminaDriver(id) {
+    var d = state.driverList.find(function(x) { return x.id === id; });
+    var nome = d ? ((d.cognome || '') + ' ' + (d.nome || '')).trim() : id;
     if (!confirm('Sei sicuro di voler eliminare ' + nome + ' dall\'anagrafica?\n\nQuesta azione è irreversibile.')) return;
     if (!confirm('Conferma eliminazione di ' + nome + '?')) return;
     try {

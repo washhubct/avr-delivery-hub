@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>DELIVERY HUB — AVR Logistic</title>
+    <title>Last Mile Hub</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
@@ -17,10 +17,10 @@
     <aside id="sidebar" class="sidebar" style="display:none">
         <div class="sidebar-header">
             <div class="logo">
-                <img src="avr-logo.png" alt="AVR" style="height:36px">
+                <img src="avr-logo.png" alt="Last Mile" style="height:36px">
                 <div>
-                    <div class="logo-title">DELIVERY HUB</div>
-                    <div class="logo-subtitle">AVR Logistic</div>
+                    <div class="logo-title">LAST MILE</div>
+                    <div class="logo-subtitle">Delivery Hub</div>
                 </div>
             </div>
         </div>
@@ -69,6 +69,12 @@
                 <a class="nav-item" data-module="filiali" onclick="navigateTo('filiali')">
                     <span class="nav-icon">🏪</span> Filiali
                 </a>
+                <a class="nav-item nav-can-manage-users" data-module="utenti" onclick="navigateTo('utenti')">
+                    <span class="nav-icon">👥</span> Utenti
+                </a>
+                <a class="nav-item nav-timbrature-admin" data-module="punti-timbratura" onclick="navigateTo('punti-timbratura')">
+                    <span class="nav-icon">📍</span> Punti Timbratura
+                </a>
                 <a class="nav-item" data-module="import" onclick="navigateTo('import')">
                     <span class="nav-icon">📥</span> Importa dati
                 </a>
@@ -116,9 +122,9 @@
         <!-- ═══ LOGIN ═══ -->
         <section id="loginScreen" class="screen login-screen">
             <div class="login-card">
-                <div class="login-logo"><img src="avr-logo.png" alt="AVR Logistic" style="height:60px"></div>
-                <h2>DELIVERY HUB</h2>
-                <p class="login-subtitle">Gestionale Consegne — AVR Logistic</p>
+                <div class="login-logo"><img src="avr-logo.png" alt="Last Mile" style="height:60px"></div>
+                <h2>LAST MILE HUB</h2>
+                <p class="login-subtitle">Gestionale Consegne</p>
                 <input type="email" id="loginEmail" placeholder="Email" class="input" autocomplete="username">
                 <div style="position:relative">
                     <input type="password" id="loginPassword" placeholder="Password" class="input" autocomplete="current-password" style="padding-right:44px;margin-bottom:0">
@@ -233,8 +239,8 @@
             </div>
 
             <div class="card" id="cardInterne" style="display:none">
-                <h3 class="card-title" style="color:var(--warning)">📦 Consegne Interne (non AVR)</h3>
-                <p class="card-desc">Consegne effettuate da personale interno della filiale — non fatturabili e non compensabili driver AVR.</p>
+                <h3 class="card-title" style="color:var(--warning)">📦 Consegne Interne (non Last Mile)</h3>
+                <p class="card-desc">Consegne effettuate da personale interno della filiale — non fatturabili e non compensabili driver Last Mile.</p>
                 <div class="kpi-grid" style="margin-bottom:16px">
                     <div class="kpi-card" style="border-color:rgba(217,119,6,0.3)">
                         <div class="kpi-label" style="color:var(--warning)">Consegne interne</div>
@@ -480,6 +486,39 @@
             </div>
         </section>
 
+        <!-- ═══ PUNTI TIMBRATURA ═══ -->
+        <section id="screen-punti-timbratura" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Punti di timbratura provinciali</h3>
+                <p class="card-desc">
+                    Un tag NFC installato in una sede per provincia (CT, SR, ME, PA, EN). Il driver appoggia il telefono al tag per timbrare — la validazione include GPS + selfie + UID del tag, server-side.
+                </p>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Provincia</th><th>Nome</th><th>Indirizzo</th><th>Coordinate</th><th>NFC Tag UID</th><th>Stato</th><th>Azioni</th>
+                        </tr></thead>
+                        <tbody id="tblPuntiTimbraturaBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══ UTENTI ═══ -->
+        <section id="screen-utenti" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">Utenti gestionale</h3>
+                <p class="card-desc">Amministratori, Risorse Umane e Responsabili di zona che accedono al gestionale. I <strong>driver</strong> si gestiscono da <em>Anagrafica Driver</em>.</p>
+                <div class="toolbar"><button class="btn btn-primary" onclick="openAddUtente()">+ Aggiungi utente</button></div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Nome</th><th>Email</th><th>Mansione</th><th>Province</th><th>Stato</th><th>Azioni</th></tr></thead>
+                        <tbody id="tblUtentiBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- ═══ RICONCILIAZIONE ═══ -->
         <section id="screen-riconciliazione" class="screen" style="display:none">
             <div class="card">
@@ -598,13 +637,8 @@
         <!-- ═══ IMPORT ═══ -->
         <section id="screen-import" class="screen" style="display:none">
             <div class="card">
-                <h3 class="card-title">🔄 Sincronizzazione automatica da Google Drive</h3>
-                <p class="card-desc">Due canali equivalenti (stesso dedup, possono convivere): <strong>①</strong> lo script Apps Script <code>sync-consegne-firestore.gs</code> sul tuo account Google spinge i dati ogni notte (nessuna condivisione necessaria); <strong>②</strong> la lettura diretta via Sheets API (richiede fogli condivisi col service account, elenco da Filiali → Link Google Sheet). Mese corrente + precedente nei primi 10 giorni, ritorni esclusi, nessuna consegna persa o duplicata.</p>
-                <div id="syncStatusBox" style="margin:12px 0;padding:12px 16px;background:var(--bg, #f8fafc);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text-muted)">Caricamento stato…</div>
-                <div style="display:flex;gap:8px;align-items:center">
-                    <button id="btnSyncNow" class="btn btn-primary" onclick="triggerSyncConsegne()">🔄 Sincronizza ora</button>
-                    <input type="month" id="syncMese" class="input" style="width:auto;margin:0" title="Mese da sincronizzare (vuoto = corrente)">
-                </div>
+                <h3 class="card-title">🔄 Sincronizzazione automatica da Google Sheets</h3>
+                <p class="card-desc">Le consegne arrivano automaticamente dagli script Apps Script attivi sull'account Google aziendale: <strong>Sync Giornalieri v1</strong> (filiali 940 e 524, ogni sera alle 21:00) e <strong>Sync Mensili v4.2</strong> (tutte le altre filiali). Gli script riconoscono PRESTAZIONE (AVR/interna), i ritorni e i driver AVR anche con errori di battitura. I sorgenti di backup sono in <code>scripts/gas/</code> nel repository. L'import manuale qui sotto resta disponibile per recuperi straordinari.</p>
             </div>
             <div class="card">
                 <h3 class="card-title">Importa dati da file Excel</h3>
@@ -755,6 +789,8 @@
     <script src="js/moduli/classifica.js"></script>
     <script src="js/moduli/segnalazioni-admin.js"></script>
     <script src="js/moduli/filiali.js"></script>
+    <script src="js/moduli/utenti.js"></script>
+    <script src="js/moduli/punti-timbratura.js"></script>
     <script src="js/moduli/riconciliazione.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
     <script src="js/moduli/report-finanziario.js"></script>

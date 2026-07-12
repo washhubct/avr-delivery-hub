@@ -10,6 +10,8 @@ const MODULE_TITLES = {
     classifica: 'Classifica Driver',
     segnalazioni: 'Segnalazioni Driver',
     filiali: 'Filiali',
+    utenti: 'Utenti',
+    'punti-timbratura': 'Punti Timbratura',
     riconciliazione: 'Riconciliazione',
     fatturazione: 'Fatturazione',
     'report-finanziario': 'Report Finanziario',
@@ -44,10 +46,15 @@ function refreshCurrentModule() {
         case 'classifica': renderClassifica(); break;
         case 'segnalazioni': renderSegnalazioniAdmin(); break;
         case 'filiali': renderFiliali(); break;
+        case 'utenti':
+            loadUtenti().then(renderUtenti);
+            break;
+        case 'punti-timbratura':
+            loadPuntiTimbratura().then(renderPuntiTimbratura);
+            break;
         case 'fatturazione': renderFatturazione(); break;
         case 'report-finanziario': renderReportFinanziario(); break;
         case 'log-accessi': renderLogAccessi(); break;
-        case 'import': if (typeof loadSyncStatus === 'function') loadSyncStatus(); break;
         case 'driver-consegne': renderDriverConsegne(); break;
         case 'driver-compensi': renderDriverCompensi(); break;
     }
