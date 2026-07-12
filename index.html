@@ -78,6 +78,9 @@
                 <a class="nav-item nav-can-manage-users" data-module="utenti" onclick="navigateTo('utenti')">
                     <span class="nav-icon">👥</span> Utenti
                 </a>
+                <a class="nav-item nav-timbrature-admin" data-module="timbrature" onclick="navigateTo('timbrature')">
+                    <span class="nav-icon">🕐</span> Timbrature
+                </a>
                 <a class="nav-item nav-timbrature-admin" data-module="punti-timbratura" onclick="navigateTo('punti-timbratura')">
                     <span class="nav-icon">📍</span> Punti Timbratura
                 </a>
@@ -498,11 +501,49 @@
         </section>
 
         <!-- ═══ PUNTI TIMBRATURA ═══ -->
+        <!-- ═══ TIMBRATURE (admin/HR) ═══ -->
+        <section id="screen-timbrature" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">🕐 Timbrature driver</h3>
+                <p class="card-desc">Entrate/uscite dai <strong>terminali ZKTeco</strong> nei 5 hub (badge/QR + PIN — niente biometria) e dall'<strong>app QR + geofence</strong> per chi non passa dall'hub. La riconciliazione incrocia le presenze con le consegne dei file Decò.</p>
+                <div class="kpi-grid" style="margin:16px 0">
+                    <div class="kpi-card"><div class="kpi-label">Timbrature del giorno</div><div class="kpi-value" id="timbKpiTot">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Driver presenti</div><div class="kpi-value" id="timbKpiDriver">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Terminale / App</div><div class="kpi-value" id="timbKpiFonti">—</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Sospette</div><div class="kpi-value" id="timbKpiSospette">—</div></div>
+                </div>
+                <div id="timbAlertBox" style="display:none;margin-bottom:14px"></div>
+                <div class="toolbar">
+                    <input type="date" id="timbFiltroGiorno" class="input" style="width:170px" onchange="renderTimbrature()">
+                    <input type="text" id="timbFiltroDriver" class="input search-input" placeholder="Cerca driver..." oninput="renderTimbrature()">
+                    <select id="timbFiltroCitta" class="input filter-select" onchange="renderTimbrature()">
+                        <option value="">Tutte le città</option>
+                        <option value="CT">Catania</option><option value="ME">Messina</option>
+                        <option value="EN">Enna</option><option value="SR">Siracusa</option><option value="PA">Palermo</option>
+                    </select>
+                    <select id="timbFiltroFonte" class="input filter-select" onchange="renderTimbrature()">
+                        <option value="">Tutte le fonti</option>
+                        <option value="terminale">🏢 Terminale</option>
+                        <option value="app">📱 App QR</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr>
+                            <th>Ora</th><th>Driver</th><th>Città</th><th>Tipo</th><th>Fonte</th><th>Posizione</th><th>Anomalie</th><th>Note</th>
+                        </tr></thead>
+                        <tbody id="tblTimbratureBody"></tbody>
+                    </table>
+                </div>
+                <p class="card-desc" style="margin-top:12px;font-size:12px">App timbratura driver: <a href="/timbra/" target="_blank" rel="noopener"><strong>dashboard.avrlogisticarl.com/timbra</strong></a> — da condividere ai driver che non passano dagli hub.</p>
+            </div>
+        </section>
+
         <section id="screen-punti-timbratura" class="screen" style="display:none">
             <div class="card">
                 <h3 class="card-title">Punti di timbratura provinciali</h3>
                 <p class="card-desc">
-                    Un tag NFC installato in una sede per provincia (CT, SR, ME, PA, EN). Il driver appoggia il telefono al tag per timbrare — la validazione include GPS + selfie + UID del tag, server-side.
+                    Un punto per provincia (CT, SR, ME, PA, EN) con QR code stampato in sede: il driver lo inquadra con l'app e la posizione GPS viene verificata nel raggio impostato. Genera il token con 🔄 e stampa il QR con 🖨️. Se un QR viene compromesso, rigenera il token e ristampa.
                 </p>
                 <div class="table-wrap">
                     <table class="data-table">
@@ -806,6 +847,7 @@
     <script src="js/moduli/filiali.js"></script>
     <script src="js/moduli/utenti.js"></script>
     <script src="js/moduli/punti-timbratura.js"></script>
+    <script src="js/moduli/timbrature.js"></script>
     <script src="js/moduli/riconciliazione.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
     <script src="js/moduli/report-finanziario.js"></script>

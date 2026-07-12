@@ -251,6 +251,37 @@ service cloud.firestore {
       allow write: if canManageTimbrature();
     }
 
+    // Token QR in chiaro per la stampa — SOLO gestori timbrature.
+    // Nei doc puntiTimbratura è salvato solo l'hash SHA-256: i driver
+    // verificano il QR scansionato senza poter leggere il token dal DB.
+    match /qrTokens/{provincia} {
+      allow read, write: if canManageTimbrature();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TIMBRATURE — schema unificato per terminali ZKTeco (bridge,
+    // admin SDK bypassa le rules) e app QR+geofence (create driver).
+    // Nessuna modifica/cancellazione dal client: audit trail.
+    // ═══════════════════════════════════════════════════════════
+    match /timbrature/{doc} {
+      allow read: if isAdminOrStaff()
+                     || canManageTimbrature()
+                     || (isSignedIn() && resource.data.driverId == userEmail());
+      allow create: if isSignedIn()
+                       && request.resource.data.driverId is string
+                       && request.resource.data.driverId == userEmail()
+                       && request.resource.data.fonte == 'app'
+                       && request.resource.data.metodo == 'app-qr-geo'
+                       && (request.resource.data.tipo == 'in' || request.resource.data.tipo == 'out')
+                       && request.resource.data.filialeId is string
+                       && request.resource.data.giorno is string
+                       && request.resource.data.giorno.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+                       && request.resource.data.mese is string
+                       && request.resource.data.mese.matches('[0-9]{4}-[0-9]{2}')
+                       && request.resource.data.timestamp == request.time;
+      allow update, delete: if false;
+    }
+
     // ═══════════════════════════════════════════════════════════
     // DEFAULT DENY — qualsiasi altra collezione resta chiusa
     // ═══════════════════════════════════════════════════════════

@@ -12,6 +12,7 @@ const MODULE_TITLES = {
     filiali: 'Filiali',
     utenti: 'Utenti',
     'punti-timbratura': 'Punti Timbratura',
+    timbrature: 'Timbrature',
     riconciliazione: 'Riconciliazione',
     fatturazione: 'Fatturazione',
     'report-finanziario': 'Report Finanziario',
@@ -52,6 +53,7 @@ function refreshCurrentModule() {
         case 'punti-timbratura':
             loadPuntiTimbratura().then(renderPuntiTimbratura);
             break;
+        case 'timbrature': renderTimbrature(); break;
         case 'fatturazione': renderFatturazione(); break;
         case 'report-finanziario': renderReportFinanziario(); break;
         case 'log-accessi': renderLogAccessi(); break;

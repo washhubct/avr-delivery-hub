@@ -1,0 +1,14 @@
+{
+  "name": "Timbratura Last Mile",
+  "short_name": "Timbra",
+  "description": "Timbratura entrata/uscita driver AVR Logistic — QR + GPS",
+  "start_url": "/timbra/",
+  "scope": "/timbra/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080b12",
+  "theme_color": "#080b12",
+  "icons": [
+    { "src": "../apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}

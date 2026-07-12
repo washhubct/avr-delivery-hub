@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#080b12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Timbratura — Last Mile</title>
+<link rel="icon" href="../apple-touch-icon.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700;9..40,800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ══ Timbratura Last Mile — midnight navy + electric teal, mobile-first ══ */
+:root{
+  --bg:#080b12;--bg-card:#111620;--bg-elev:#161d2a;--border:rgba(148,163,184,0.12);
+  --text:#e2e8f0;--text2:#7c8db5;--text3:#4a5878;
+  --teal:#38bdf8;--teal-dark:#0ea5e9;--ok:#10b981;--warn:#f59e0b;--err:#f43f5e;
+  --font:'DM Sans',-apple-system,sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100dvh;-webkit-font-smoothing:antialiased}
+.wrap{max-width:440px;margin:0 auto;padding:18px 16px calc(28px + env(safe-area-inset-bottom))}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.top img{height:34px}
+.top h1{font-size:16px;font-weight:800;letter-spacing:2px}
+.top small{display:block;font-size:11px;color:var(--text2);letter-spacing:0;font-weight:400}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px}
+.input{width:100%;padding:14px;font-size:16px;font-family:var(--font);background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;color:var(--text);margin-bottom:10px}
+.input:focus{outline:none;border-color:var(--teal)}
+.btn{width:100%;padding:16px;font-size:16px;font-weight:800;font-family:var(--font);border:none;border-radius:12px;cursor:pointer;transition:opacity .15s}
+.btn:disabled{opacity:.5}
+.btn-in{background:var(--ok);color:#052e22}
+.btn-out{background:var(--teal);color:#082032}
+.btn-ghost{background:var(--bg-elev);color:var(--text2);border:1px solid var(--border);font-weight:600}
+.btn+.btn{margin-top:10px}
+.hello{font-size:14px;color:var(--text2);margin-bottom:4px}
+.hello strong{color:var(--text);font-size:17px}
+.clock{font-family:var(--mono);font-size:38px;font-weight:700;text-align:center;margin:6px 0 2px;letter-spacing:2px}
+.clock-date{text-align:center;font-size:13px;color:var(--text2);margin-bottom:16px;text-transform:capitalize}
+.err-msg{color:var(--err);font-size:13px;min-height:18px;margin-bottom:6px}
+/* Scanner */
+#scanView{position:fixed;inset:0;background:#000;z-index:100;display:none;flex-direction:column}
+#scanVideo{flex:1;object-fit:cover;width:100%}
+.scan-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.scan-box{width:240px;height:240px;border:3px solid var(--teal);border-radius:20px;box-shadow:0 0 0 4000px rgba(0,0,0,0.45)}
+.scan-hint{margin-top:18px;color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 4px #000}
+.scan-close{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;background:rgba(0,0,0,0.6);color:#fff;border:none;font-size:22px;width:44px;height:44px;border-radius:50%;cursor:pointer;pointer-events:auto}
+/* Step feedback */
+.steps{display:flex;flex-direction:column;gap:10px;margin:14px 0}
+.step{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text2)}
+.step .dot{width:26px;height:26px;border-radius:50%;background:var(--bg-elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.step.ok .dot{background:rgba(16,185,129,0.15);border-color:var(--ok)}
+.step.ko .dot{background:rgba(244,63,94,0.15);border-color:var(--err)}
+.step.run .dot{border-color:var(--teal);animation:pulse 1s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(56,189,248,0.12)}}
+/* Esito */
+.result{text-align:center;padding:26px 14px}
+.result .big{font-size:56px;margin-bottom:8px}
+.result h2{font-size:20px;margin-bottom:6px}
+.result p{font-size:13px;color:var(--text2);line-height:1.5}
+/* Storico */
+.h-title{font-size:12px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin:18px 0 10px}
+.t-row{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--border);font-size:13px}
+.t-row:last-child{border-bottom:none}
+.t-tipo{width:70px;font-weight:800;font-size:11px;padding:4px 0;border-radius:6px;text-align:center;flex-shrink:0}
+.t-in{background:rgba(16,185,129,0.12);color:var(--ok)}
+.t-out{background:rgba(56,189,248,0.12);color:var(--teal)}
+.t-when{font-family:var(--mono);font-size:12px;color:var(--text)}
+.t-where{margin-left:auto;color:var(--text2);font-size:12px;text-align:right}
+.t-susp{color:var(--warn)}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(22px + env(safe-area-inset-bottom));background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-size:14px;z-index:200;display:none;box-shadow:0 8px 30px rgba(0,0,0,0.5)}
+.hidden{display:none!important}
+.logout{background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;margin-left:auto;font-family:var(--font)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <img src="../avr-logo.png" alt="Last Mile">
+    <h1>TIMBRATURA<small>Last Mile — AVR Logistic</small></h1>
+    <button class="logout hidden" id="btnLogout" onclick="doLogout()">Esci</button>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="viewLogin" class="card hidden">
+    <p class="hello" style="margin-bottom:14px">Accedi con le credenziali dell'app driver</p>
+    <input type="email" id="loginEmail" class="input" placeholder="Email" autocomplete="username">
+    <input type="password" id="loginPw" class="input" placeholder="Password" autocomplete="current-password">
+    <div class="err-msg" id="loginErr"></div>
+    <button class="btn btn-out" onclick="doLogin()" id="btnLogin">Accedi</button>
+  </div>
+
+  <!-- HOME TIMBRATURA -->
+  <div id="viewHome" class="hidden">
+    <div class="card">
+      <p class="hello">Ciao <strong id="homeNome">—</strong></p>
+      <div class="clock" id="clock">--:--</div>
+      <div class="clock-date" id="clockDate"></div>
+      <button class="btn btn-in" id="btnIn" onclick="avviaTimbratura('in')">▶ &nbsp;TIMBRA ENTRATA</button>
+      <button class="btn btn-out" id="btnOut" onclick="avviaTimbratura('out')">◀ &nbsp;TIMBRA USCITA</button>
+    </div>
+    <div class="h-title">Le mie timbrature del mese</div>
+    <div class="card" id="storico" style="padding:8px 14px">
+      <p style="font-size:13px;color:var(--text3);padding:10px 0">Caricamento…</p>
+    </div>
+  </div>
+
+  <!-- FLUSSO IN CORSO -->
+  <div id="viewFlow" class="card hidden">
+    <p class="hello" style="margin-bottom:4px">Timbratura <strong id="flowTipo">—</strong> in corso</p>
+    <div class="steps">
+      <div class="step" id="stepQr"><span class="dot">1</span><span>Scansione QR della sede</span></div>
+      <div class="step" id="stepGeo"><span class="dot">2</span><span>Verifica posizione GPS</span></div>
+      <div class="step" id="stepSave"><span class="dot">3</span><span>Registrazione</span></div>
+    </div>
+    <div class="err-msg" id="flowErr"></div>
+    <button class="btn btn-ghost" onclick="annullaFlow()">Annulla</button>
+  </div>
+
+  <!-- ESITO -->
+  <div id="viewDone" class="card hidden">
+    <div class="result">
+      <div class="big" id="doneIcon">✅</div>
+      <h2 id="doneTitle">Timbratura registrata</h2>
+      <p id="doneDetail"></p>
+    </div>
+    <button class="btn btn-ghost" onclick="tornaHome()">← Torna alla home</button>
+  </div>
+</div>
+
+<!-- SCANNER FULLSCREEN -->
+<div id="scanView">
+  <video id="scanVideo" playsinline muted></video>
+  <div class="scan-overlay">
+    <div class="scan-box"></div>
+    <div class="scan-hint">Inquadra il QR della sede</div>
+  </div>
+  <button class="scan-close" onclick="chiudiScanner(true)">✕</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════
+// TIMBRATURA LAST MILE — app QR + geofencing (fonte: "app")
+// Flusso: QR sede → verifica hash token → GPS nel raggio → scrivi.
+// Il mock GPS non è rilevabile in modo affidabile dal browser:
+// le anomalie marcano sospetto=true (non bloccano) e finiscono in
+// evidenza nella vista admin + riconciliazione con le consegne.
+// TODO(capacitor): in un futuro wrapper nativo Capacitor, integrare
+//   il rilevamento mock-location (Android: isFromMockProvider /
+//   isMock su Location; iOS: sourceInformation.isSimulatedBySoftware)
+//   e passare l'esito in `sospetto`/`note` prima della scrittura.
+// ══════════════════════════════════════════════════════════════
+
+firebase.initializeApp({
+  apiKey: "AIzaSyCleejDdWN6w41TcBw4fvyAPr_6rxU8Bgs",
+  authDomain: "avr-logistic-dashboard.firebaseapp.com",
+  projectId: "avr-logistic-dashboard",
+  storageBucket: "avr-logistic-dashboard.firebasestorage.app",
+  messagingSenderId: "323721042739",
+  appId: "1:323721042739:web:a9fa1710eeb8cfe3357c46"
+});
+var auth = firebase.auth();
+var db = firebase.firestore();
+
+var profilo = null;        // doc driverAnagrafica
+var tipoCorrente = null;   // 'in' | 'out'
+var scanStream = null;
+var scanRaf = null;
+var scanAttivo = false;
+var jsQRPromise = null;
+
+// ── Utils ──
+function $(id){ return document.getElementById(id); }
+function show(id){ ['viewLogin','viewHome','viewFlow','viewDone'].forEach(function(v){ $(v).classList.toggle('hidden', v!==id); }); }
+function toast(msg){ var t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(function(){ t.style.display='none'; },3500); }
+function oggiRoma(){ return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()); }
+async function sha256Hex(s){
+  var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
+// Distanza haversine in metri
+function distanzaMt(lat1, lng1, lat2, lng2){
+  var R = 6371000, rad = Math.PI/180;
+  var dLat = (lat2-lat1)*rad, dLng = (lng2-lng1)*rad;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+// ── Orologio ──
+setInterval(function(){
+  var now = new Date();
+  $('clock').textContent = now.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Europe/Rome'});
+  $('clockDate').textContent = now.toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',timeZone:'Europe/Rome'});
+}, 1000);
+
+// ── Auth ──
+auth.onAuthStateChanged(async function(u){
+  if (!u) { profilo=null; $('btnLogout').classList.add('hidden'); show('viewLogin'); return; }
+  try {
+    var s = await db.collection('driverAnagrafica').where('email','==',(u.email||'').toLowerCase()).get();
+    if (s.empty) {
+      $('loginErr').textContent = 'Account non abilitato come driver — contatta l\'amministrazione.';
+      await auth.signOut();
+      return;
+    }
+    profilo = s.docs[0].data();
+    $('homeNome').textContent = (profilo.nome || profilo.cognome || u.email);
+    $('btnLogout').classList.remove('hidden');
+    show('viewHome');
+    caricaStorico();
+  } catch (e) {
+    $('loginErr').textContent = 'Errore di connessione — riprova.';
+    console.error(e);
+  }
+});
+
+function doLogin(){
+  var email = $('loginEmail').value.trim(), pw = $('loginPw').value;
+  $('loginErr').textContent = '';
+  if (!email || !pw) { $('loginErr').textContent = 'Inserisci email e password'; return; }
+  $('btnLogin').disabled = true;
+  auth.signInWithEmailAndPassword(email, pw)
+    .catch(function(e){
+      var m = 'Errore di accesso';
+      if (['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].indexOf(e.code)>=0) m='Email o password non validi';
+      if (e.code==='auth/too-many-requests') m='Troppi tentativi — riprova tra poco';
+      $('loginErr').textContent = m;
+    })
+    .finally(function(){ $('btnLogin').disabled = false; });
+}
+function doLogout(){ auth.signOut(); }
+
+// ══════════════════════════════════════════════════════════════
+// FLUSSO TIMBRATURA
+// ══════════════════════════════════════════════════════════════
+function setStep(id, stato){ // 'run' | 'ok' | 'ko' | ''
+  var el = $(id);
+  el.classList.remove('run','ok','ko');
+  if (stato) el.classList.add(stato);
+  var dot = el.querySelector('.dot');
+  dot.textContent = stato==='ok' ? '✓' : (stato==='ko' ? '✕' : dot.dataset.n || dot.textContent);
+}
+function resetSteps(){
+  ['stepQr','stepGeo','stepSave'].forEach(function(s,i){
+    var el=$(s); el.classList.remove('run','ok','ko');
+    el.querySelector('.dot').textContent = i+1;
+  });
+  $('flowErr').textContent='';
+}
+
+async function avviaTimbratura(tipo){
+  tipoCorrente = tipo;
+  $('flowTipo').textContent = tipo==='in' ? 'ENTRATA' : 'USCITA';
+  resetSteps();
+  show('viewFlow');
+  setStep('stepQr','run');
+
+  var qr;
+  try { qr = await scansionaQr(); }
+  catch (e) {
+    if (e && e.message==='annullato') { tornaHome(); return; }
+    setStep('stepQr','ko');
+    $('flowErr').textContent = e.message || 'Scansione non riuscita';
+    return;
+  }
+
+  // Verifica token: payload atteso AVRT1|PROV|token
+  var parti = String(qr||'').split('|');
+  if (parti.length!==3 || parti[0]!=='AVRT1') {
+    setStep('stepQr','ko');
+    $('flowErr').textContent = 'QR non riconosciuto: usa il QR ufficiale esposto in sede.';
+    return;
+  }
+  var prov = parti[1], token = parti[2];
+
+  var punto;
+  try {
+    var doc = await db.collection('puntiTimbratura').doc(prov).get();
+    if (!doc.exists) throw new Error('Punto ' + prov + ' non configurato');
+    punto = doc.data();
+  } catch (e) {
+    setStep('stepQr','ko');
+    $('flowErr').textContent = 'Errore verifica sede: ' + e.message;
+    return;
+  }
+  if (punto.attivo === false) {
+    setStep('stepQr','ko');
+    $('flowErr').textContent = 'Punto timbratura ' + prov + ' disattivato.';
+    return;
+  }
+  var hashLetto = await sha256Hex(token);
+  if (!punto.qrTokenHash || hashLetto !== punto.qrTokenHash) {
+    setStep('stepQr','ko');
+    $('flowErr').textContent = 'QR non valido o scaduto: chiedi in sede il QR aggiornato.';
+    return;
+  }
+  setStep('stepQr','ok');
+
+  // ── Geofencing ──
+  setStep('stepGeo','run');
+  var pos;
+  try { pos = await leggiPosizione(); }
+  catch (e) {
+    setStep('stepGeo','ko');
+    $('flowErr').textContent = e.message;
+    return;
+  }
+  var geo = punto.geo || {};
+  var raggio = typeof geo.raggioMt === 'number' ? geo.raggioMt : 150;
+  var dist = distanzaMt(pos.lat, pos.lng, geo.lat, geo.lng);
+  if (dist > raggio + Math.min(pos.accuracy||0, 50)) {
+    setStep('stepGeo','ko');
+    $('flowErr').textContent = 'Sei a ~' + dist + ' m dalla sede (' + (punto.nome||prov) + '), fuori dal raggio consentito di ' + raggio + ' m. Avvicinati e riprova.';
+    return;
+  }
+
+  // Euristiche mock/anomalie: non bloccano, marcano sospetto
+  var sospetto = false, note = [];
+  if ((pos.accuracy||0) > 150) { sospetto = true; note.push('accuratezza GPS bassa (' + Math.round(pos.accuracy) + 'm)'); }
+  if (pos.accuracy === 0)      { sospetto = true; note.push('accuratezza 0 — possibile posizione simulata'); }
+  if (pos.ageMs > 30000)       { sospetto = true; note.push('fix GPS vecchio di ' + Math.round(pos.ageMs/1000) + 's'); }
+  if (sospetto) console.warn('[timbratura] sospetto:', note.join(' · '));
+  setStep('stepGeo','ok');
+
+  // ── Scrittura ──
+  setStep('stepSave','run');
+  var adesso = new Date();
+  var giorno = oggiRoma();
+  try {
+    await db.collection('timbrature').add({
+      driverId: (auth.currentUser.email||'').toLowerCase(),
+      driverNome: ((profilo.cognome||'') + ' ' + (profilo.nome||'')).trim(),
+      filialeId: prov,
+      citta: prov,
+      tipo: tipo,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      giorno: giorno,
+      mese: giorno.substring(0,7),
+      fonte: 'app',
+      metodo: 'app-qr-geo',
+      qrTokenLetto: hashLetto.substring(0,12),
+      lat: pos.lat, lng: pos.lng, accuracy: Math.round(pos.accuracy||0),
+      idTerminale: null,
+      sospetto: sospetto,
+      note: note.join(' · ') || (dist + 'm dalla sede')
+    });
+  } catch (e) {
+    setStep('stepSave','ko');
+    $('flowErr').textContent = 'Salvataggio fallito: ' + e.message + ' — riprova.';
+    return;
+  }
+  setStep('stepSave','ok');
+
+  $('doneIcon').textContent = sospetto ? '⚠️' : '✅';
+  $('doneTitle').textContent = (tipo==='in' ? 'Entrata' : 'Uscita') + ' registrata';
+  $('doneDetail').textContent = (punto.nome||prov) + ' · ' +
+    adesso.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Rome'}) +
+    (sospetto ? ' — segnalata per verifica (GPS impreciso)' : '');
+  show('viewDone');
+  caricaStorico();
+}
+
+function annullaFlow(){ chiudiScanner(false); tornaHome(); }
+function tornaHome(){ show('viewHome'); }
+
+// ── Geolocalizzazione ──
+function leggiPosizione(){
+  return new Promise(function(resolve, reject){
+    if (!navigator.geolocation) { reject(new Error('GPS non disponibile su questo dispositivo')); return; }
+    navigator.geolocation.getCurrentPosition(function(p){
+      resolve({
+        lat: p.coords.latitude,
+        lng: p.coords.longitude,
+        accuracy: p.coords.accuracy,
+        ageMs: Date.now() - p.timestamp
+      });
+    }, function(err){
+      var m = 'Posizione non disponibile';
+      if (err.code === 1) m = 'Permesso posizione negato: abilita il GPS per l\'app nelle impostazioni del telefono.';
+      if (err.code === 3) m = 'GPS troppo lento: spostati all\'aperto e riprova.';
+      reject(new Error(m));
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// SCANNER QR — BarcodeDetector nativo (Android Chrome) con
+// fallback jsQR via canvas (iPhone Safari e browser senza API).
+// ══════════════════════════════════════════════════════════════
+function caricaJsQR(){
+  if (window.jsQR) return Promise.resolve();
+  if (jsQRPromise) return jsQRPromise;
+  jsQRPromise = new Promise(function(resolve, reject){
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+    s.onload = resolve;
+    s.onerror = function(){ jsQRPromise=null; reject(new Error('Libreria QR non caricata — controlla la connessione')); };
+    document.head.appendChild(s);
+  });
+  return jsQRPromise;
+}
+
+async function scansionaQr(){
+  var video = $('scanVideo');
+  var detector = null;
+  if ('BarcodeDetector' in window) {
+    try {
+      var formats = await BarcodeDetector.getSupportedFormats();
+      if (formats.indexOf('qr_code') >= 0) detector = new BarcodeDetector({ formats: ['qr_code'] });
+    } catch (e) { detector = null; }
+  }
+  if (!detector) await caricaJsQR();
+
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+  } catch (e) {
+    throw new Error('Fotocamera non disponibile: consenti l\'accesso alla fotocamera nelle impostazioni del browser.');
+  }
+  video.srcObject = scanStream;
+  await video.play();
+  $('scanView').style.display = 'flex';
+  scanAttivo = true;
+
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  return new Promise(function(resolve, reject){
+    var timeout = setTimeout(function(){
+      if (scanAttivo) { chiudiScanner(false); reject(new Error('Nessun QR rilevato in 60 secondi — riprova con più luce.')); }
+    }, 60000);
+
+    window._scanReject = function(){ clearTimeout(timeout); reject(new Error('annullato')); };
+
+    async function tick(){
+      if (!scanAttivo) { clearTimeout(timeout); return; }
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        var testo = null;
+        try {
+          if (detector) {
+            var codes = await detector.detect(video);
+            if (codes.length > 0) testo = codes[0].rawValue;
+          } else {
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+            if (code && code.data) testo = code.data;
+          }
+        } catch (e) { /* frame perso: continua */ }
+        if (testo) {
+          clearTimeout(timeout);
+          chiudiScanner(false);
+          if (navigator.vibrate) navigator.vibrate(80);
+          resolve(testo);
+          return;
+        }
+      }
+      scanRaf = requestAnimationFrame(tick);
+    }
+    tick();
+  });
+}
+
+function chiudiScanner(daUtente){
+  scanAttivo = false;
+  if (scanRaf) cancelAnimationFrame(scanRaf);
+  if (scanStream) { scanStream.getTracks().forEach(function(t){ t.stop(); }); scanStream = null; }
+  $('scanView').style.display = 'none';
+  $('scanVideo').srcObject = null;
+  if (daUtente && window._scanReject) window._scanReject();
+}
+
+// ══════════════════════════════════════════════════════════════
+// STORICO MESE
+// ══════════════════════════════════════════════════════════════
+async function caricaStorico(){
+  var box = $('storico');
+  var mese = oggiRoma().substring(0,7);
+  try {
+    var snap = await db.collection('timbrature')
+      .where('driverId','==',(auth.currentUser.email||'').toLowerCase())
+      .where('mese','==',mese)
+      .get();
+    var docs = snap.docs.map(function(d){
+      var x = d.data();
+      if (x.timestamp && x.timestamp.toDate) x.timestamp = x.timestamp.toDate();
+      return x;
+    }).sort(function(a,b){
+      return (b.timestamp instanceof Date ? b.timestamp : 0) - (a.timestamp instanceof Date ? a.timestamp : 0);
+    });
+    if (!docs.length) {
+      box.innerHTML = '<p style="font-size:13px;color:var(--text3);padding:10px 0">Nessuna timbratura questo mese</p>';
+      return;
+    }
+    box.innerHTML = docs.slice(0,60).map(function(t){
+      var quando = t.timestamp instanceof Date
+        ? t.timestamp.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',timeZone:'Europe/Rome'}) + ' ' +
+          t.timestamp.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Rome'})
+        : '—';
+      return '<div class="t-row">' +
+        '<span class="t-tipo ' + (t.tipo==='in'?'t-in':'t-out') + '">' + (t.tipo==='in'?'ENTRATA':'USCITA') + '</span>' +
+        '<span class="t-when">' + quando + '</span>' +
+        '<span class="t-where">' + (t.citta||'—') + (t.fonte==='terminale'?' 🏢':' 📱') + (t.sospetto?' <span class="t-susp">⚠️</span>':'') + '</span>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    console.error('storico:', e);
+    box.innerHTML = '<p style="font-size:13px;color:var(--err);padding:10px 0">Storico non disponibile: ' + e.message + '</p>';
+  }
+}
+
+$('loginPw').addEventListener('keydown', function(e){ if (e.key==='Enter') doLogin(); });
+</script>
+</body>
+</html>

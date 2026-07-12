@@ -1,0 +1,19 @@
+{
+  "_istruzioni": "Copia questo file in config.json e compila i due mapping. Il SN del terminale è sul retro del dispositivo o in Menu → Info sistema. Il PIN è il numero utente registrato sul terminale (lo stesso che il driver digita/associa alla card).",
+
+  "terminali": {
+    "SN-TERMINALE-CATANIA": { "citta": "CT", "puntoId": "CT", "nome": "Hub Catania" },
+    "SN-TERMINALE-MESSINA": { "citta": "ME", "puntoId": "ME", "nome": "Hub Messina" },
+    "SN-TERMINALE-ENNA":    { "citta": "EN", "puntoId": "EN", "nome": "Hub Enna" },
+    "SN-TERMINALE-SIRACUSA":{ "citta": "SR", "puntoId": "SR", "nome": "Hub Siracusa" },
+    "SN-TERMINALE-PALERMO": { "citta": "PA", "puntoId": "PA", "nome": "Hub Palermo" }
+  },
+
+  "pinDriver": {
+    "1":  { "driverId": "mario.rossi@example.com",  "nome": "ROSSI Mario" },
+    "2":  { "driverId": "luigi.verdi@example.com",  "nome": "VERDI Luigi" },
+    "_nota": "un blocco per ogni driver: PIN sul terminale → email di accesso all'app driver (driverId) + nome per le viste admin"
+  },
+
+  "utcOffsetOre": null
+}
