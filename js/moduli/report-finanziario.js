@@ -20,33 +20,25 @@ async function renderReportFinanziario() {
 
     // Filtra solo AVR usando la stessa logica del dashboard
     var avrSet = buildDriverAvrSet();
-    var cmAvr = cm.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        return isDriverAvr(rider, avrSet);
-    });
+    var cmAvr = cm.filter(function(c) { return isConsegnaAvr(c, avrSet); });
     var totConsegne = cmAvr.length;
+    var schemaFlat = mese >= MESE_SCHEMA_FLAT;
 
-    // Calcola fatturato per gruppo
-    var filialiPerGruppo = { arena: { sotto: 0, sopra: 0 }, palermo: { sotto: 0, sopra: 0 } };
+    // Calcola fatturato per gruppo con lo schema prezzi del mese
+    // (flat €9,70 da luglio 2026: le >€499 sono a prezzo manuale → escluse)
+    var arenaImponibile = 0, palermoImponibile = 0, specialiImponibile = 0, specialiManuali = 0;
     cmAvr.forEach(function(c) {
         var area = c.area || c.provincia || '?';
-        var gruppo = (area === 'PA') ? 'palermo' : 'arena';
         var importo = parseFloat(c.importo) || 0;
-        if (importo >= 250.01) {
-            filialiPerGruppo[gruppo].sopra++;
+        if (schemaFlat) {
+            var p = prezzoConsegnaMese(importo, mese, c.tipo);
+            if (p === null) { specialiManuali++; return; }
+            if (area === 'PA') palermoImponibile += p; else arenaImponibile += p;
         } else {
-            filialiPerGruppo[gruppo].sotto++;
+            var base = importo >= 250.01 ? 10.00 : 6.90;
+            if (area === 'PA') palermoImponibile += base; else arenaImponibile += base;
+            if (importo >= 400) specialiImponibile += calcolaPrezzoSpeciale(importo);
         }
-    });
-
-    var arenaImponibile = (filialiPerGruppo.arena.sotto * 6.90) + (filialiPerGruppo.arena.sopra * 10.00);
-    var palermoImponibile = (filialiPerGruppo.palermo.sotto * 6.90) + (filialiPerGruppo.palermo.sopra * 10.00);
-
-    // Consegne speciali (importo >= 400)
-    var specialiImponibile = 0;
-    cmAvr.forEach(function(c) {
-        var imp = parseFloat(c.importo) || 0;
-        if (imp >= 400) specialiImponibile += calcolaPrezzoSpeciale(imp);
     });
 
     var totImponibile = arenaImponibile + palermoImponibile + specialiImponibile;
@@ -58,6 +50,7 @@ async function renderReportFinanziario() {
     ricaviHtml += rigaRicavo('F.lli Arena', arenaImponibile);
     ricaviHtml += rigaRicavo('Palermo Retail', palermoImponibile);
     if (specialiImponibile > 0) ricaviHtml += rigaRicavo('Consegne speciali', specialiImponibile);
+    if (specialiManuali > 0) ricaviHtml += '<tr><td style="color:var(--warning)">Speciali >€499 (prezzo manuale)</td><td colspan="3" style="text-align:right;color:var(--warning)">' + specialiManuali + ' consegne — non incluse nel totale</td></tr>';
     document.getElementById('rfTblRicavi').innerHTML = ricaviHtml;
     document.getElementById('rfTotImponibile').innerHTML = '<strong>' + formatCurrency(totImponibile) + '</strong>';
     document.getElementById('rfTotIva').innerHTML = formatCurrency(totIva);

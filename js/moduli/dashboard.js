@@ -162,21 +162,18 @@ function renderDashboard() {
     var consegneFatturabili = allConsegne.filter(function(c) { return c.tipoDriver !== 'interna'; });
     var totale = consegneFatturabili.length;
     var totaleInterne = allConsegne.length - totale;
-    var maggiori = 0, minori = 0, speciali = 0;
+    var maggiori = 0, minori = 0, speciali = 0, manuali = 0;
     var fatturato = 0;
+    var schemaFlat = mese >= MESE_SCHEMA_FLAT;
 
     consegneFatturabili.forEach(function(c) {
         var imp = c.importo || 0;
-        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
-            speciali++;
-            fatturato += 6.90;
-        } else if (imp >= 250) {
-            maggiori++;
-            fatturato += 10.00;
-        } else {
-            minori++;
-            fatturato += 6.90;
-        }
+        var p = prezzoConsegnaMese(imp, mese, c.tipo);
+        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') speciali++;
+        else if (p === null) manuali++; // >€499: prezzo a mano, non nel fatturato auto
+        else if (imp >= 250) maggiori++;
+        else minori++;
+        if (p !== null) fatturato += p;
     });
 
     // Costo driver = solo consegne con driver AVR riconosciuto (non le AVR/FARO senza driver)
@@ -184,10 +181,14 @@ function renderDashboard() {
     var margine = fatturato - costoDriver;
 
     document.getElementById('kpiConsegneMese').textContent = totale;
-    document.getElementById('kpiConsegneDetail').innerHTML = maggiori + ' ≥€250 · ' + minori + ' <€250 · ' + speciali + ' speciali'
+    document.getElementById('kpiConsegneDetail').innerHTML = (schemaFlat
+        ? (maggiori + minori) + ' ordinarie · ' + manuali + ' >€499 · ' + speciali + ' ritorni/extra'
+        : maggiori + ' ≥€250 · ' + minori + ' <€250 · ' + speciali + ' speciali')
         + (totaleInterne > 0 ? ' · <span style="color:var(--text-muted)">' + totaleInterne + ' interne escluse</span>' : '');
     document.getElementById('kpiFatturato').textContent = formatCurrency(fatturato);
-    document.getElementById('kpiFatturatoDetail').textContent = maggiori + '×€10 + ' + (minori + speciali) + '×€6,90';
+    document.getElementById('kpiFatturatoDetail').textContent = schemaFlat
+        ? (maggiori + minori) + '×€9,70 + ' + speciali + '×€6,90' + (manuali > 0 ? ' (+' + manuali + ' >€499 manuali)' : '')
+        : maggiori + '×€10 + ' + (minori + speciali) + '×€6,90';
     document.getElementById('kpiCostoDriver').textContent = formatCurrency(costoDriver);
     document.getElementById('kpiCostoDriverDetail').textContent = consegneAvr.length + ' × €' + ((state.costoPerConsegna || 3.50).toFixed(2).replace('.', ','));
     document.getElementById('kpiMargine').textContent = formatCurrency(margine);
@@ -203,16 +204,10 @@ function renderDashboard() {
         if (!aree[area]) aree[area] = { filiali: new Set(), maggiori: 0, minori: 0, fatturato: 0 };
         aree[area].filiali.add(c.filiale);
         var imp = c.importo || 0;
-        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
-            aree[area].minori++;
-            aree[area].fatturato += 6.90;
-        } else if (imp >= 250) {
-            aree[area].maggiori++;
-            aree[area].fatturato += 10.00;
-        } else {
-            aree[area].minori++;
-            aree[area].fatturato += 6.90;
-        }
+        var p = prezzoConsegnaMese(imp, mese, c.tipo);
+        if (imp >= 250 && c.tipo !== 'ritorno' && c.tipo !== 'pane_gastro_sushi') aree[area].maggiori++;
+        else aree[area].minori++;
+        if (p !== null) aree[area].fatturato += p;
     });
 
     var tblAree = document.getElementById('tblAree');
@@ -256,12 +251,8 @@ function renderDashboard() {
         var key = c.filiale || '?';
         if (!byFiliale[key]) byFiliale[key] = { nome: c.filialeNome || key, area: c.area || '?', count: 0, fatturato: 0 };
         byFiliale[key].count++;
-        var imp = c.importo || 0;
-        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') {
-            byFiliale[key].fatturato += 6.90;
-        } else {
-            byFiliale[key].fatturato += imp >= 250 ? 10 : 6.90;
-        }
+        var p = prezzoConsegnaMese(c.importo || 0, mese, c.tipo);
+        if (p !== null) byFiliale[key].fatturato += p;
     });
 
     var topFil = Object.entries(byFiliale).sort(function(a, b) { return b[1].count - a[1].count; }).slice(0, 10);

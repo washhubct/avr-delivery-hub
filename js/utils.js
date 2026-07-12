@@ -57,7 +57,22 @@ function getMesiOptions() {
     return mesi;
 }
 
-// Calcola il prezzo per una consegna basato sull'importo
+// ── Prezzo automatico consegna secondo lo schema del mese ──
+// Da luglio 2026: €9,70 flat; >€499 → null (prezzo da definire a mano).
+// Prima: €6,90 <250 / €10,00 ≥250. Ritorni e pane/gastro/sushi: €6,90.
+var MESE_SCHEMA_FLAT = '2026-07';
+
+function prezzoConsegnaMese(importo, mese, tipo) {
+    if (tipo === 'ritorno' || tipo === 'pane_gastro_sushi') return 6.90;
+    var imp = importo || 0;
+    if ((mese || '') >= MESE_SCHEMA_FLAT) {
+        if (imp > 499) return null; // speciale: prezzo manuale
+        return 9.70;
+    }
+    return imp >= 250 ? 10.00 : 6.90;
+}
+
+// Calcola il prezzo per una consegna basato sull'importo (schema storico)
 function calcolaPrezzo(importo) {
     if (!importo || importo <= 0) return 0;
     
