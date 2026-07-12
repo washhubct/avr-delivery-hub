@@ -29,17 +29,29 @@ async function renderReportFinanziario() {
     // FATTURA UNICA a F.lli Arena (niente più split Palermo Retail).
     // Mesi precedenti: split Arena/Palermo con schema storico.
     var arenaImponibile = 0, palermoImponibile = 0, specialiImponibile = 0, specialiManuali = 0;
+    var perCitta = {}; // area → { consegne, fatturato }
+    var AREA_LABELS = { CT: 'Catania', ME: 'Messina', EN: 'Enna', SR: 'Siracusa', PA: 'Palermo' };
+
     cmAvr.forEach(function(c) {
         var area = c.area || c.provincia || '?';
         var importo = parseFloat(c.importo) || 0;
+        if (!perCitta[area]) perCitta[area] = { consegne: 0, fatturato: 0 };
+        perCitta[area].consegne++;
+
         if (schemaFlat) {
             var p = prezzoConsegnaMese(importo, mese, c.tipo);
             if (p === null) { specialiManuali++; return; }
             arenaImponibile += p; // fattura unica F.lli Arena
+            perCitta[area].fatturato += p;
         } else {
             var base = importo >= 250.01 ? 10.00 : 6.90;
             if (area === 'PA') palermoImponibile += base; else arenaImponibile += base;
-            if (importo >= 400) specialiImponibile += calcolaPrezzoSpeciale(importo);
+            perCitta[area].fatturato += base;
+            if (importo >= 400) {
+                var extra = calcolaPrezzoSpeciale(importo);
+                specialiImponibile += extra;
+                perCitta[area].fatturato += extra;
+            }
         }
     });
 
@@ -47,11 +59,19 @@ async function renderReportFinanziario() {
     var totIva = totImponibile * 0.22;
     var totLordo = totImponibile + totIva;
 
-    // Render ricavi
+    // Render ricavi — da luglio 2026: dettaglio per città (fattura unica
+    // a F.lli Arena, ma il monitoraggio si fa città per città)
     var ricaviHtml = '';
-    ricaviHtml += rigaRicavo(schemaFlat ? 'F.lli Arena — fattura unica (×€9,70)' : 'F.lli Arena', arenaImponibile);
-    if (!schemaFlat) ricaviHtml += rigaRicavo('Palermo Retail', palermoImponibile);
-    if (specialiImponibile > 0) ricaviHtml += rigaRicavo('Consegne speciali', specialiImponibile);
+    if (schemaFlat) {
+        Object.keys(perCitta).sort().forEach(function(area) {
+            ricaviHtml += rigaRicavo(area + ' — ' + (AREA_LABELS[area] || area), perCitta[area].fatturato);
+        });
+        ricaviHtml += '<tr><td colspan="4" style="font-size:11px;color:var(--text-muted);padding:6px 12px">Fattura unica a F.lli Arena (×€9,70) — dettaglio città a scopo di monitoraggio</td></tr>';
+    } else {
+        ricaviHtml += rigaRicavo('F.lli Arena', arenaImponibile);
+        ricaviHtml += rigaRicavo('Palermo Retail', palermoImponibile);
+        if (specialiImponibile > 0) ricaviHtml += rigaRicavo('Consegne speciali', specialiImponibile);
+    }
     if (specialiManuali > 0) ricaviHtml += '<tr><td style="color:var(--warning)">Speciali >€499 (prezzo manuale)</td><td colspan="3" style="text-align:right;color:var(--warning)">' + specialiManuali + ' consegne — non incluse nel totale</td></tr>';
     document.getElementById('rfTblRicavi').innerHTML = ricaviHtml;
     document.getElementById('rfTotImponibile').innerHTML = '<strong>' + formatCurrency(totImponibile) + '</strong>';
@@ -102,6 +122,42 @@ async function renderReportFinanziario() {
     });
     document.getElementById('rfTblCosti').innerHTML = costiHtml;
     document.getElementById('rfTotCosti').innerHTML = '<strong>' + formatCurrency(totCosti) + '</strong>';
+
+    // === FATTURATO E MARGINE PER CITTÀ ===
+    // Costi ripartiti pro-quota sulle consegne (stipendi, mezzi, F24…
+    // sono voci globali: la quota consegne è l'allocazione più onesta)
+    var cittaEl = document.getElementById('rfTblCitta');
+    if (cittaEl) {
+        var totConsegneCitta = 0;
+        Object.values(perCitta).forEach(function(x) { totConsegneCitta += x.consegne; });
+        var cittaHtml = '';
+        var tcCons = 0, tcFatt = 0, tcCosti = 0, tcMarg = 0;
+        Object.keys(perCitta).sort(function(a, b) { return perCitta[b].fatturato - perCitta[a].fatturato; }).forEach(function(area) {
+            var x = perCitta[area];
+            var quota = totConsegneCitta > 0 ? totCosti * (x.consegne / totConsegneCitta) : 0;
+            var marg = x.fatturato - quota;
+            var margPct = x.fatturato > 0 ? Math.round(marg / x.fatturato * 100) : 0;
+            var col = marg >= 0 ? 'var(--success)' : 'var(--danger)';
+            tcCons += x.consegne; tcFatt += x.fatturato; tcCosti += quota; tcMarg += marg;
+            cittaHtml += '<tr>' +
+                '<td><strong>' + area + '</strong> — ' + (AREA_LABELS[area] || area) + '</td>' +
+                '<td style="text-align:right">' + x.consegne + '</td>' +
+                '<td style="text-align:right">' + formatCurrency(x.fatturato) + '</td>' +
+                '<td style="text-align:right;color:var(--text-muted)">' + formatCurrency(quota) + '</td>' +
+                '<td style="text-align:right;font-weight:700;color:' + col + '">' + formatCurrency(marg) + '</td>' +
+                '<td style="text-align:right;font-weight:700;color:' + col + '">' + margPct + '%</td>' +
+            '</tr>';
+        });
+        cittaHtml += '<tr class="totals-row">' +
+            '<td><strong>TOTALE</strong></td>' +
+            '<td style="text-align:right"><strong>' + tcCons + '</strong></td>' +
+            '<td style="text-align:right"><strong>' + formatCurrency(tcFatt) + '</strong></td>' +
+            '<td style="text-align:right"><strong>' + formatCurrency(tcCosti) + '</strong></td>' +
+            '<td style="text-align:right"><strong style="color:' + (tcMarg >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + formatCurrency(tcMarg) + '</strong></td>' +
+            '<td style="text-align:right"><strong>' + (tcFatt > 0 ? Math.round(tcMarg / tcFatt * 100) : 0) + '%</strong></td>' +
+        '</tr>';
+        cittaEl.innerHTML = cittaHtml || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Nessuna consegna nel mese</td></tr>';
+    }
 
     // === KPI ===
     var revenue = totImponibile - totCosti;
