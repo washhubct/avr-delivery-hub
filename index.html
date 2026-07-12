@@ -598,6 +598,15 @@
         <!-- ═══ IMPORT ═══ -->
         <section id="screen-import" class="screen" style="display:none">
             <div class="card">
+                <h3 class="card-title">🔄 Sincronizzazione automatica da Google Drive</h3>
+                <p class="card-desc">I fogli filiale Decò vengono letti direttamente da Google Sheets ogni notte alle 03:30 (mese corrente + precedente nei primi 10 giorni). Ritorni esclusi automaticamente, dedup garantito: nessuna consegna persa o duplicata.</p>
+                <div id="syncStatusBox" style="margin:12px 0;padding:12px 16px;background:var(--bg, #f8fafc);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text-muted)">Caricamento stato…</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button id="btnSyncNow" class="btn btn-primary" onclick="triggerSyncConsegne()">🔄 Sincronizza ora</button>
+                    <input type="month" id="syncMese" class="input" style="width:auto;margin:0" title="Mese da sincronizzare (vuoto = corrente)">
+                </div>
+            </div>
+            <div class="card">
                 <h3 class="card-title">Importa dati da file Excel</h3>
                 <p class="card-desc">Carica i file .xlsx delle filiali. Il sistema riconosce automaticamente la struttura.</p>
                 <div class="import-zone" id="importZone">

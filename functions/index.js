@@ -577,3 +577,369 @@ function buildEmailHtml(link) {
 </body>
 </html>`;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// SYNC CONSEGNE DA GOOGLE SHEETS (fogli filiale Decò)
+//
+// Legge i fogli "AVR FILIALE xxx" direttamente via Sheets API e
+// sincronizza la collection `consegne` con la stessa logica di
+// normalizzazione e dedup dell'import manuale (importa.js):
+//   • upsert con docId deterministico → mai duplicati, mai perdite
+//   • RITORNI esclusi (fatturati a parte dal modulo Ritorni)
+//   • PRESTAZIONE (AVR/INTERNA) importata: INTERNA = consegna Decò
+//   • nessuna cancellazione: solo insert/update
+//
+// Requisito: i fogli devono essere condivisi (lettura) con il
+// service account delle functions. L'email esatta viene loggata ad
+// ogni run ed è visibile in syncStatus/last.
+//
+// Config fogli: collection `driveSheets` (docs: {spreadsheetId, nome,
+// attivo}). Se vuota si usano i DEFAULT_SHEETS qui sotto.
+// ═══════════════════════════════════════════════════════════════════
+
+const { google } = require('googleapis');
+
+const DEFAULT_SHEETS = [
+    { spreadsheetId: '1Mbog1enTD18W0r7Ie03EzBchYR9lCF5yvpW6dQL1aBM', nome: 'AVR FILIALE 300' },
+    { spreadsheetId: '15dv1maX8zjteESUTi6QpQ9OnMK1tErm4qi7BytFcwrY', nome: 'AVR FILIALE 401' },
+    { spreadsheetId: '1WETOk-4_G_Xc4tpHrwDHfE5HMo9cTFJTux6qK7X4bDI', nome: 'AVR FILIALE 516 (ME)' },
+    { spreadsheetId: '1-4vHi9UbeWbbWpC_HmgO8DyF5NOP57bjj9HgJEIkd4A', nome: 'AVR FILIALE 533 (PA)' },
+    { spreadsheetId: '1iYh1Wo428fBbtNdsZYXb0zw_EpdvUHcF6dflfUWw25w', nome: 'AVR FILIALE 940' },
+    { spreadsheetId: '1ASFT3M9coo3Zuqf-iSgaoasoxThsto8hAoqojmf1Cxc', nome: 'AVR FILIALE 346 LEONE' },
+];
+
+const MESI_TAB = { GEN: 1, FEB: 2, MAR: 3, APR: 4, MAG: 5, GIU: 6, LUG: 7, AGO: 8, SET: 9, OTT: 10, NOV: 11, DIC: 12 };
+
+// "LUG 26" / "LUG26" → "2026-07", altrimenti null
+function meseFromTabName(name) {
+    const m = String(name || '').toUpperCase().trim()
+        .match(/^(GEN|FEB|MAR|APR|MAG|GIU|LUG|AGO|SET|OTT|NOV|DIC)\s?(\d{2})$/);
+    if (!m) return null;
+    return '20' + m[2] + '-' + String(MESI_TAB[m[1]]).padStart(2, '0');
+}
+
+// ── Repliche 1:1 della logica di importa.js (client) ──
+function syncDetectColumns(rows) {
+    for (let i = 0; i < Math.min(5, rows.length); i++) {
+        const row = rows[i];
+        if (!row) continue;
+        const headers = row.map(h => String(h || '').toUpperCase().trim());
+        const filIdx = headers.findIndex(h => h === 'FIL' || h === 'FIL.' || h === 'FIL. PARTENZA');
+        const dataIdx = headers.findIndex(h => h === 'DATA');
+        if (filIdx >= 0 && dataIdx >= 0) {
+            return {
+                headerIdx: i,
+                colMap: {
+                    filiale: filIdx,
+                    data: dataIdx,
+                    orderId: headers.findIndex(h => h.includes('ORDER ID')),
+                    fascia: headers.findIndex(h => h === 'FASCIA'),
+                    cognome: headers.findIndex(h => h === 'COGNOME'),
+                    nome: headers.findIndex(h => h === 'NOME'),
+                    provincia: headers.findIndex(h => h === 'PR'),
+                    citta: headers.findIndex(h => h.includes('CITTA')),
+                    indirizzo: headers.findIndex(h => h === 'INDIRIZZO'),
+                    importo: headers.findIndex(h => h.includes('IMPORTO EFFETTIVO') || h === 'IMPORTO'),
+                    pagamento: headers.findIndex(h => h === 'PAGAMENTO'),
+                    codiceDom: headers.findIndex(h => h.includes('CODICE DOMICILIO') || h.includes('CODICE_DOM')),
+                    driver: headers.findIndex(h => h === 'RIDER' || h === 'DRIVER'),
+                    targa: headers.findIndex(h => h.includes('TARGA')),
+                    consegnata: headers.findIndex(h => h.includes('CONSEGNATA')),
+                    prestazione: headers.findIndex(h => h === 'PRESTAZIONE'),
+                    richiesta: headers.findIndex(h => h.includes('RICHIESTA')),
+                    oraConsegna: headers.findIndex(h => h.includes('ORA CONSEGNA')),
+                },
+            };
+        }
+    }
+    return { headerIdx: -1, colMap: {} };
+}
+
+function syncGetVal(row, idx) {
+    if (idx == null || idx < 0 || idx >= row.length) return null;
+    const v = row[idx];
+    if (v === null || v === undefined || v === '') return null;
+    return String(v).trim();
+}
+
+function syncParseDate(val) {
+    if (!val) return null;
+    const s = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const d = new Date(s.slice(0, 10) + 'T12:00:00Z');
+        if (!isNaN(d)) return d;
+    }
+    let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1], 12));
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+    if (m) return new Date(Date.UTC(2000 + (+m[3]), +m[2] - 1, +m[1], 12));
+    const num = parseFloat(s);
+    if (!isNaN(num) && num > 40000 && num < 60000) {
+        return new Date(Math.round((num - 25569) * 86400 * 1000));
+    }
+    return null;
+}
+
+function syncMeseFromDate(d) {
+    return d.toISOString().slice(0, 7);
+}
+
+function syncAreaFromProvincia(prov) {
+    const p = String(prov || '').toUpperCase().trim();
+    const map = { CT: 'CT', EN: 'EN', ME: 'ME', SR: 'SR', PA: 'PA' };
+    return map[p] || null;
+}
+
+function syncParseImporto(val) {
+    if (val == null) return 0;
+    let s = String(val).trim().replace(/[€\s]/g, '');
+    // Formato italiano 1.234,56 → 1234.56
+    if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+}
+
+// Identica a consegnaDocId di importa.js → stessa chiave di dedup
+function syncConsegnaDocId(c) {
+    const d = c.data;
+    const dateStr = d.toISOString().slice(0, 10).replace(/-/g, '');
+    const fil = String(c.filiale || '').replace(/[^a-zA-Z0-9]/g, '');
+    const ref = (c.orderId || c.codiceDomicilio || '').replace(/[^a-zA-Z0-9]/g, '');
+    const cli = (c.cliente || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    const imp = String(Math.round((c.importo || 0) * 100));
+    return `${fil}_${dateStr}_${ref || cli}_${imp}`.slice(0, 100);
+}
+
+function parseTabRows(rows, fonte, sheetName) {
+    const { headerIdx, colMap } = syncDetectColumns(rows);
+    if (headerIdx < 0) return { consegne: [], ritorni: 0, scarti: 0, struttura: false };
+
+    const consegne = [];
+    let ritorni = 0, scarti = 0;
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        const filiale = syncGetVal(row, colMap.filiale);
+        const dataRaw = syncGetVal(row, colMap.data);
+        const cognome = syncGetVal(row, colMap.cognome);
+        if (!filiale && !cognome) continue;
+        if (!dataRaw) continue;
+
+        const richiesta = (syncGetVal(row, colMap.richiesta) || '').toUpperCase();
+        const targaRaw = (syncGetVal(row, colMap.targa) || '').toUpperCase();
+        if (richiesta.includes('RITORNO') || targaRaw === 'RITORNO') { ritorni++; continue; }
+
+        const dateObj = syncParseDate(dataRaw);
+        if (!dateObj) { scarti++; continue; }
+
+        const mese = syncMeseFromDate(dateObj);
+        // Guard: una riga con data fuori dal mese della tab resta comunque
+        // importata (fa fede la data), ma non deve rompere nulla.
+
+        const consegnataRaw = (syncGetVal(row, colMap.consegnata) || '').toUpperCase();
+        const provincia = syncGetVal(row, colMap.provincia);
+
+        consegne.push({
+            filiale: String(filiale || '').replace(/\.0$/, ''),
+            data: dateObj,
+            mese,
+            cliente: [cognome, syncGetVal(row, colMap.nome)].filter(Boolean).join(' ').trim() || null,
+            provincia: provincia || null,
+            citta: syncGetVal(row, colMap.citta) || null,
+            indirizzo: syncGetVal(row, colMap.indirizzo) || null,
+            importo: syncParseImporto(syncGetVal(row, colMap.importo)),
+            fascia: syncGetVal(row, colMap.fascia) || syncGetVal(row, colMap.oraConsegna) || null,
+            driver: syncGetVal(row, colMap.driver) || null,
+            targa: syncGetVal(row, colMap.targa) || null,
+            consegnata: consegnataRaw === 'SI',
+            nonConsegnata: consegnataRaw === 'NO',
+            prestazione: syncGetVal(row, colMap.prestazione) || null,
+            orderId: syncGetVal(row, colMap.orderId) || null,
+            pagamento: syncGetVal(row, colMap.pagamento) || null,
+            codiceDomicilio: syncGetVal(row, colMap.codiceDom) || null,
+            area: syncAreaFromProvincia(provincia),
+            fonte,
+            sheetName,
+        });
+    }
+    return { consegne, ritorni, scarti, struttura: true };
+}
+
+async function loadSheetConfig() {
+    try {
+        const snap = await db.collection('driveSheets').get();
+        const configured = [];
+        snap.forEach(doc => {
+            const d = doc.data();
+            if (d.spreadsheetId && d.attivo !== false) {
+                configured.push({ spreadsheetId: d.spreadsheetId, nome: d.nome || doc.id });
+            }
+        });
+        if (configured.length > 0) return configured;
+    } catch (e) {
+        console.warn('[sync] driveSheets config:', e.message);
+    }
+    return DEFAULT_SHEETS;
+}
+
+async function eseguiSyncConsegne(mesiTarget) {
+    const auth = new google.auth.GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+    let saEmail = null;
+    try {
+        const client = await auth.getClient();
+        saEmail = client.email || (await auth.getCredentials()).client_email || null;
+    } catch (e) { /* best effort */ }
+
+    const sheetsApi = google.sheets({ version: 'v4', auth });
+    const fogli = await loadSheetConfig();
+
+    const dettagli = [];
+    let totUpserted = 0, totRitorni = 0, totScarti = 0;
+
+    for (const foglio of fogli) {
+        const det = { nome: foglio.nome, spreadsheetId: foglio.spreadsheetId, tabs: [], upserted: 0, errore: null };
+        try {
+            const meta = await sheetsApi.spreadsheets.get({
+                spreadsheetId: foglio.spreadsheetId,
+                fields: 'sheets.properties.title',
+            });
+            const tabNames = (meta.data.sheets || []).map(s => s.properties.title);
+            const target = tabNames.filter(t => {
+                const m = meseFromTabName(t);
+                return m && mesiTarget.includes(m);
+            });
+
+            for (const tab of target) {
+                const resp = await sheetsApi.spreadsheets.values.get({
+                    spreadsheetId: foglio.spreadsheetId,
+                    range: `'${tab.replace(/'/g, "''")}'`,
+                    valueRenderOption: 'FORMATTED_VALUE',
+                    dateTimeRenderOption: 'FORMATTED_STRING',
+                });
+                const rows = resp.data.values || [];
+                const { consegne, ritorni, scarti, struttura } = parseTabRows(rows, foglio.nome, tab);
+
+                if (!struttura) {
+                    det.tabs.push({ tab, warn: 'struttura non riconosciuta' });
+                    continue;
+                }
+
+                // Upsert in batch da 400
+                for (let i = 0; i < consegne.length; i += 400) {
+                    const batch = db.batch();
+                    consegne.slice(i, i + 400).forEach(c => {
+                        const docRef = db.collection('consegne').doc(syncConsegnaDocId(c));
+                        batch.set(docRef, {
+                            ...c,
+                            data: admin.firestore.Timestamp.fromDate(c.data),
+                            syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+                            fonteTipo: 'drive_sync',
+                        }, { merge: true });
+                    });
+                    await batch.commit();
+                }
+
+                det.tabs.push({ tab, consegne: consegne.length, ritorniEsclusi: ritorni, scarti });
+                det.upserted += consegne.length;
+                totRitorni += ritorni;
+                totScarti += scarti;
+            }
+            totUpserted += det.upserted;
+        } catch (e) {
+            det.errore = e.message;
+            console.error(`[sync] ${foglio.nome}:`, e.message);
+        }
+        dettagli.push(det);
+    }
+
+    const risultato = {
+        at: admin.firestore.FieldValue.serverTimestamp(),
+        mesi: mesiTarget,
+        serviceAccount: saEmail,
+        totUpserted,
+        totRitorniEsclusi: totRitorni,
+        totScarti,
+        dettagli: JSON.parse(JSON.stringify(dettagli)),
+        errori: dettagli.filter(d => d.errore).length,
+    };
+    await db.collection('syncStatus').doc('last').set(risultato);
+    await db.collection('syncLog').add(risultato);
+    console.log('[sync] done:', JSON.stringify({ mesi: mesiTarget, totUpserted, errori: risultato.errori }));
+    return risultato;
+}
+
+function mesiTargetDefault() {
+    const now = meseInRome(new Date());
+    const mesi = [now.mese];
+    // Primi 10 giorni del mese: sincronizza anche il mese precedente
+    // per catturare righe aggiunte/corrette in ritardo dalle filiali
+    if (now.day <= 10) mesi.push(mesePrecedente(now.mese));
+    return mesi;
+}
+
+// Sync automatica notturna (03:30 Europe/Rome, dopo la chiusura giornata)
+exports.syncConsegneScheduled = onSchedule(
+    {
+        schedule: '30 3 * * *',
+        timeZone: 'Europe/Rome',
+        region: 'europe-west1',
+        memory: '512MiB',
+        timeoutSeconds: 540,
+    },
+    async () => {
+        await eseguiSyncConsegne(mesiTargetDefault());
+    }
+);
+
+// Trigger manuale (admin/staff): opzionale { mese: 'YYYY-MM' } per backfill
+exports.syncConsegne = onRequest(
+    {
+        region: 'europe-west1',
+        cors: ALLOWED_ORIGINS,
+        memory: '512MiB',
+        timeoutSeconds: 540,
+    },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+        res.set('Access-Control-Allow-Origin', allowedOrigin);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+        const authHeader = req.headers.authorization || '';
+        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+
+        let email = '';
+        try {
+            const decoded = await admin.auth().verifyIdToken(idToken);
+            email = (decoded.email || '').toLowerCase();
+        } catch (e) {
+            res.status(401).json({ error: 'Token non valido' });
+            return;
+        }
+        const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com'];
+        if (!ADMIN_EMAILS.includes(email)) { res.status(403).json({ error: 'Non autorizzato' }); return; }
+
+        const meseSpecifico = (req.body && req.body.mese) || null;
+        const mesi = (meseSpecifico && /^\d{4}-\d{2}$/.test(meseSpecifico))
+            ? [meseSpecifico]
+            : mesiTargetDefault();
+
+        try {
+            const r = await eseguiSyncConsegne(mesi);
+            res.json({ success: true, mesi, totUpserted: r.totUpserted, errori: r.errori, dettagli: r.dettagli });
+        } catch (e) {
+            console.error('[syncConsegne]', e);
+            res.status(500).json({ error: e.message });
+        }
+    }
+);

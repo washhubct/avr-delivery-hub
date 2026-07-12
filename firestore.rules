@@ -194,6 +194,25 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // SYNC GOOGLE SHEETS — stato/log scritti dalla Cloud Function
+    // (admin SDK bypassa le rules); config fogli gestita da superadmin
+    // ═══════════════════════════════════════════════════════════
+    match /syncStatus/{doc} {
+      allow read: if isAdminOrStaff();
+      allow write: if false;
+    }
+
+    match /syncLog/{doc} {
+      allow read: if isAdminOrStaff();
+      allow write: if false;
+    }
+
+    match /driveSheets/{doc} {
+      allow read: if isAdminOrStaff();
+      allow write: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // DEFAULT DENY — qualsiasi altra collezione resta chiusa
     // ═══════════════════════════════════════════════════════════
     match /{document=**} {

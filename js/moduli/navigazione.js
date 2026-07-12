@@ -47,6 +47,7 @@ function refreshCurrentModule() {
         case 'fatturazione': renderFatturazione(); break;
         case 'report-finanziario': renderReportFinanziario(); break;
         case 'log-accessi': renderLogAccessi(); break;
+        case 'import': if (typeof loadSyncStatus === 'function') loadSyncStatus(); break;
         case 'driver-consegne': renderDriverConsegne(); break;
         case 'driver-compensi': renderDriverCompensi(); break;
     }
