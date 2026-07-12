@@ -768,20 +768,51 @@ function parseTabRows(rows, fonte, sheetName) {
     return { consegne, ritorni, scarti, struttura: true };
 }
 
+// Estrae lo spreadsheetId da un link Google Sheets
+function sheetIdFromLink(link) {
+    const m = String(link || '').match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]{20,})/);
+    return m ? m[1] : null;
+}
+
+// Fonte primaria: collection `filiali` (campo sheetLink, gestito dalla
+// schermata Filiali della dash — è lì che sono censiti tutti i fogli).
+// In aggiunta: collection `driveSheets` per fogli extra manuali.
+// Fallback: DEFAULT_SHEETS se non c'è nulla.
 async function loadSheetConfig() {
+    const byId = {}; // dedup per spreadsheetId (più filiali possono condividere un foglio)
+
     try {
-        const snap = await db.collection('driveSheets').get();
-        const configured = [];
+        const snap = await db.collection('filiali').get();
         snap.forEach(doc => {
             const d = doc.data();
-            if (d.spreadsheetId && d.attivo !== false) {
-                configured.push({ spreadsheetId: d.spreadsheetId, nome: d.nome || doc.id });
+            const id = sheetIdFromLink(d.sheetLink);
+            if (!id) return;
+            if (!byId[id]) {
+                byId[id] = { spreadsheetId: id, nome: 'FILIALE ' + (d.codice || doc.id) + (d.nome ? ' — ' + d.nome : '') };
+            } else {
+                byId[id].nome += ' + ' + (d.codice || doc.id);
             }
         });
-        if (configured.length > 0) return configured;
+    } catch (e) {
+        console.warn('[sync] filiali config:', e.message);
+    }
+
+    try {
+        const snap = await db.collection('driveSheets').get();
+        snap.forEach(doc => {
+            const d = doc.data();
+            if (d.spreadsheetId && d.attivo !== false && !byId[d.spreadsheetId]) {
+                byId[d.spreadsheetId] = { spreadsheetId: d.spreadsheetId, nome: d.nome || doc.id };
+            }
+            // attivo:false su driveSheets disattiva anche un foglio da filiali
+            if (d.spreadsheetId && d.attivo === false) delete byId[d.spreadsheetId];
+        });
     } catch (e) {
         console.warn('[sync] driveSheets config:', e.message);
     }
+
+    const configured = Object.values(byId);
+    if (configured.length > 0) return configured;
     return DEFAULT_SHEETS;
 }
 
