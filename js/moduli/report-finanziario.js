@@ -1,8 +1,9 @@
 // DELIVERY HUB v2 — Report Finanziario (P&L mensile — allineato con logica alias dashboard)
 
 var COSTI_VOCI = [
-    { key: 'compensiDriver', label: 'Compensi driver (bonifici)', auto: true },
-    { key: 'presidente', label: 'Presidente', default: 2500 },
+    { key: 'compensiDriver', label: 'Stipendi/compensi driver', auto: true },
+    { key: 'nettoRizzuto', label: 'Netto busta paga — Rizzuto', default: 1500 },
+    { key: 'nettoFaro', label: 'Netto busta paga — Faro', default: 2000 },
     { key: 'hr', label: 'HR', default: 1000 },
     { key: 'finance', label: 'Finance', default: 2500 },
     { key: 'consulenteLavoro', label: 'Consulente del lavoro', default: 600 },
@@ -96,21 +97,30 @@ async function renderReportFinanziario() {
         if (existingWarn) existingWarn.remove();
     }
 
-    // Compensi driver automatici — usa stessa logica
-    var compensiDriver = 0;
-    var driverData = {};
-    cmAvr.forEach(function(c) {
-        var drv = normalizeDriverName(c.driver || c.rider);
-        if (!drv) return;
-        if (!driverData[drv]) driverData[drv] = 0;
-        driverData[drv]++;
-    });
-    Object.keys(driverData).forEach(function(drv) {
-        var ana = typeof findDriverAnagrafica === 'function' ? findDriverAnagrafica(drv) : null;
-        var costo = ana ? (ana.costoConsegna || state.costoPerConsegna) : state.costoPerConsegna;
-        compensiDriver += driverData[drv] * costo;
-    });
-    costiData.compensiDriver = compensiDriver;
+    // Stipendi/compensi driver:
+    // - mesi storici: auto = consegne × €3,50 (pagamento a consegna)
+    // - da luglio 2026 (stipendio fisso): valore manuale da costiMensili
+    //   (totale netti buste paga driver del mese)
+    var compensiDriver;
+    if (!schemaFlat) {
+        compensiDriver = 0;
+        var driverData = {};
+        cmAvr.forEach(function(c) {
+            var drv = normalizeDriverName(c.driver || c.rider);
+            if (!drv) return;
+            if (!driverData[drv]) driverData[drv] = 0;
+            driverData[drv]++;
+        });
+        Object.keys(driverData).forEach(function(drv) {
+            var ana = typeof findDriverAnagrafica === 'function' ? findDriverAnagrafica(drv) : null;
+            var costo = ana ? (ana.costoConsegna || state.costoPerConsegna) : state.costoPerConsegna;
+            compensiDriver += driverData[drv] * costo;
+        });
+        costiData.compensiDriver = compensiDriver;
+    } else {
+        compensiDriver = parseFloat(costiData.compensiDriver) || 0;
+        costiData.compensiDriver = compensiDriver;
+    }
 
     var totCosti = 0;
     var costiHtml = '';
@@ -124,26 +134,45 @@ async function renderReportFinanziario() {
     document.getElementById('rfTotCosti').innerHTML = '<strong>' + formatCurrency(totCosti) + '</strong>';
 
     // === FATTURATO E MARGINE PER CITTÀ ===
-    // Costi ripartiti pro-quota sulle consegne (stipendi, mezzi, F24…
-    // sono voci globali: la quota consegne è l'allocazione più onesta)
+    // Ripartizione costi:
+    // - stipendi driver → quota FISSA per città, in base ai driver attivi
+    //   assegnati a ciascuna città in anagrafica
+    // - ufficio/responsabili e altri costi (Rizzuto, Faro, HR, finance,
+    //   consulente, carburante, F24, mezzi, altro) → pro-quota consegne
     var cittaEl = document.getElementById('rfTblCitta');
     if (cittaEl) {
         var totConsegneCitta = 0;
         Object.values(perCitta).forEach(function(x) { totConsegneCitta += x.consegne; });
+
+        // Driver attivi per città (anagrafica)
+        var driverPerCitta = {};
+        var totDriverAttivi = 0;
+        (state.driverList || []).forEach(function(dr) {
+            if (dr.attivo === false) return;
+            var ct = dr.citta || '?';
+            driverPerCitta[ct] = (driverPerCitta[ct] || 0) + 1;
+            totDriverAttivi++;
+        });
+
+        var costiUfficio = totCosti - compensiDriver;
+
         var cittaHtml = '';
         var tcCons = 0, tcFatt = 0, tcCosti = 0, tcMarg = 0;
         Object.keys(perCitta).sort(function(a, b) { return perCitta[b].fatturato - perCitta[a].fatturato; }).forEach(function(area) {
             var x = perCitta[area];
-            var quota = totConsegneCitta > 0 ? totCosti * (x.consegne / totConsegneCitta) : 0;
+            var quotaDriver = totDriverAttivi > 0 ? compensiDriver * ((driverPerCitta[area] || 0) / totDriverAttivi) : 0;
+            var quotaUfficio = totConsegneCitta > 0 ? costiUfficio * (x.consegne / totConsegneCitta) : 0;
+            var quota = quotaDriver + quotaUfficio;
             var marg = x.fatturato - quota;
             var margPct = x.fatturato > 0 ? Math.round(marg / x.fatturato * 100) : 0;
             var col = marg >= 0 ? 'var(--success)' : 'var(--danger)';
             tcCons += x.consegne; tcFatt += x.fatturato; tcCosti += quota; tcMarg += marg;
             cittaHtml += '<tr>' +
-                '<td><strong>' + area + '</strong> — ' + (AREA_LABELS[area] || area) + '</td>' +
+                '<td><strong>' + area + '</strong> — ' + (AREA_LABELS[area] || area) +
+                    '<div style="font-size:10px;color:var(--text-light)">' + (driverPerCitta[area] || 0) + ' driver</div></td>' +
                 '<td style="text-align:right">' + x.consegne + '</td>' +
                 '<td style="text-align:right">' + formatCurrency(x.fatturato) + '</td>' +
-                '<td style="text-align:right;color:var(--text-muted)">' + formatCurrency(quota) + '</td>' +
+                '<td style="text-align:right;color:var(--text-muted)" title="Driver (quota fissa): ' + formatCurrency(quotaDriver) + ' · Ufficio (pro-quota): ' + formatCurrency(quotaUfficio) + '">' + formatCurrency(quota) + '</td>' +
                 '<td style="text-align:right;font-weight:700;color:' + col + '">' + formatCurrency(marg) + '</td>' +
                 '<td style="text-align:right;font-weight:700;color:' + col + '">' + margPct + '%</td>' +
             '</tr>';
@@ -175,8 +204,9 @@ async function renderReportFinanziario() {
             plRow('IVA 22%', totIva, false) +
             plRow('Fatturato lordo', totLordo, false) +
             '<div style="border-top:2px solid var(--border);margin:4px 0"></div>' +
-            plRow('Compensi driver', -compensiDriver, true) +
-            plRow('Presidente', -(costiData.presidente || 2500), true) +
+            plRow('Stipendi/compensi driver', -compensiDriver, true) +
+            plRow('Netto b.p. Rizzuto', -(costiData.nettoRizzuto !== undefined ? costiData.nettoRizzuto : 1500), true) +
+            plRow('Netto b.p. Faro', -(costiData.nettoFaro !== undefined ? costiData.nettoFaro : 2000), true) +
             plRow('HR', -(costiData.hr || 1000), true) +
             plRow('Finance', -(costiData.finance || 2500), true) +
             plRow('Cons. lavoro', -(costiData.consulenteLavoro || 600), true) +
