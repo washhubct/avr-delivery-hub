@@ -314,7 +314,7 @@ body {
 .topbar {
     position: sticky; top: 0;
     height: var(--topbar-h);
-    background: rgba(8, 11, 18, 0.88);
+    background: var(--topbar-bg, rgba(8, 11, 18, 0.88));
     backdrop-filter: blur(24px) saturate(120%);
     -webkit-backdrop-filter: blur(24px) saturate(120%);
     border-bottom: 1px solid var(--border);
@@ -988,3 +988,88 @@ textarea.input { resize: vertical; min-height: 56px; line-height: 1.5; }
 @media (max-width: 480px) {
     .kpi-grid { grid-template-columns: 1fr; }
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   TEMA CHIARO (default) — riposante per lavoro prolungato.
+   La sidebar resta scura per contrasto. Toggle ☀️/🌙 in topbar,
+   preferenza salvata in localStorage (lm_theme).
+   ══════════════════════════════════════════════════════════════ */
+html.theme-light body {
+    --bg: #eef1f6;
+    --bg-elevated: #ffffff;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f1f5f9;
+    --bg-input: #f8fafc;
+    --bg-surface: #ffffff;
+
+    --text: #1e293b;
+    --text-muted: #5b6b84;
+    --text-light: #94a3b8;
+
+    --accent: #0284c7;
+    --accent-glow: rgba(2, 132, 199, 0.10);
+    --accent-2: #0891b2;
+
+    --border: rgba(15, 23, 42, 0.10);
+    --border-hover: rgba(15, 23, 42, 0.20);
+    --border-accent: rgba(2, 132, 199, 0.30);
+
+    --danger: #e11d48;
+    --danger-bg: rgba(225, 29, 72, 0.08);
+    --warning: #d97706;
+    --warning-bg: rgba(217, 119, 6, 0.08);
+    --success: #059669;
+    --success-bg: rgba(5, 150, 105, 0.08);
+    --info: #0284c7;
+    --info-bg: rgba(2, 132, 199, 0.08);
+
+    --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 20px rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.14);
+    --shadow-glow: none;
+
+    --gradient-subtle: linear-gradient(180deg, rgba(2, 132, 199, 0.03) 0%, transparent 60%);
+    --gradient-card: linear-gradient(160deg, rgba(2, 132, 199, 0.02) 0%, transparent 40%);
+
+    --topbar-bg: rgba(255, 255, 255, 0.88);
+}
+
+/* La sidebar mantiene la palette scura anche in tema chiaro */
+html.theme-light .sidebar {
+    --text: #e2e8f0;
+    --text-muted: #7c8db5;
+    --text-light: #4a5878;
+    --bg-card: #111620;
+    --bg-card-hover: #161d2a;
+    --border: rgba(148, 163, 184, 0.08);
+    --border-hover: rgba(148, 163, 184, 0.15);
+    --accent: #38bdf8;
+    --accent-glow: rgba(56, 189, 248, 0.12);
+    --info-bg: rgba(56, 189, 248, 0.08);
+}
+
+html.theme-light ::selection { background: rgba(2, 132, 199, 0.18); color: inherit; }
+html.theme-light ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, 0.15); }
+html.theme-light ::-webkit-scrollbar-thumb:hover { background: rgba(15, 23, 42, 0.28); }
+html.theme-light .btn-primary { color: #ffffff; }
+html.theme-light .btn-primary:hover { background: #0369a1; border-color: #0369a1; box-shadow: 0 4px 16px rgba(2, 132, 199, 0.25); }
+html.theme-light .main-content::before {
+    background-image:
+        linear-gradient(rgba(15, 23, 42, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 23, 42, 0.025) 1px, transparent 1px);
+}
+
+/* Bottone toggle tema */
+.theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 15px;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all .15s;
+}
+.theme-toggle:hover { border-color: var(--border-hover); color: var(--text); }

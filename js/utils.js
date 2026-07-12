@@ -57,6 +57,23 @@ function getMesiOptions() {
     return mesi;
 }
 
+// ── Tema chiaro/scuro (default: chiaro) ──
+function toggleTheme() {
+    var isLight = document.documentElement.classList.toggle('theme-light');
+    try { localStorage.setItem('lm_theme', isLight ? 'light' : 'dark'); } catch (e) {}
+    aggiornaIconaTema();
+}
+
+function aggiornaIconaTema() {
+    var btn = document.getElementById('btnTheme');
+    if (!btn) return;
+    var isLight = document.documentElement.classList.contains('theme-light');
+    btn.textContent = isLight ? '🌙' : '☀️';
+    btn.title = isLight ? 'Passa al tema scuro' : 'Passa al tema chiaro';
+}
+
+document.addEventListener('DOMContentLoaded', aggiornaIconaTema);
+
 // ── Prezzo automatico consegna secondo lo schema del mese ──
 // Da luglio 2026: €9,70 flat; >€499 → null (prezzo da definire a mano).
 // Prima: €6,90 <250 / €10,00 ≥250. Ritorni e pane/gastro/sushi: €6,90.
