@@ -89,9 +89,21 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /reportDriver/{doc} {
       allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      // Validazioni anti-abuso: da questi dati dipendono classifica e premi.
+      // numConsegne 1–10 (come il limite dell'app), durataMin plausibile se
+      // presente (report vecchi non ce l'hanno), mese nel formato YYYY-MM.
       allow create: if isSignedIn()
                        && request.resource.data.driverEmail is string
-                       && request.resource.data.driverEmail.lower() == userEmail();
+                       && request.resource.data.driverEmail.lower() == userEmail()
+                       && request.resource.data.numConsegne is int
+                       && request.resource.data.numConsegne >= 1
+                       && request.resource.data.numConsegne <= 10
+                       && request.resource.data.mese is string
+                       && request.resource.data.mese.matches('[0-9]{4}-[0-9]{2}')
+                       && (!('durataMin' in request.resource.data)
+                           || (request.resource.data.durataMin is number
+                               && request.resource.data.durataMin > 0
+                               && request.resource.data.durataMin <= 720));
       allow update: if isAdminOrStaff();
       allow delete: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
     }

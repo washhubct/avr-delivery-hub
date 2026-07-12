@@ -15,6 +15,11 @@ function prodToDay(d) {
     return d.toISOString().slice(0, 10);
 }
 
+// Oggi in TZ Europe/Rome (toISOString è UTC: slitterebbe tra 00:00 e le 02:00)
+function prodOggiRoma() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
 function fmtMinuti(min) {
     if (min == null || isNaN(min)) return '—';
     min = Math.round(min);
@@ -53,7 +58,7 @@ function renderProduttivita() {
     var perDriver = prodAggrega();
     var searchEl = document.getElementById('searchProduttivita');
     var searchTerm = searchEl ? searchEl.value.toUpperCase().trim() : '';
-    var oggi = new Date().toISOString().slice(0, 10);
+    var oggi = prodOggiRoma();
 
     var rows = Object.keys(perDriver).map(function(drv) {
         var pd = perDriver[drv];
@@ -95,8 +100,8 @@ function renderProduttivita() {
         var isOpen = !!prodExpanded[key];
         var tempoColor = r.tempoMedio == null ? 'var(--text-light)' : (r.tempoMedio > 30 ? 'var(--danger)' : (r.tempoMedio > 20 ? 'var(--warning)' : 'var(--success, #16a34a)'));
         var html = '<tr style="cursor:pointer" onclick="prodToggle(\'' + key + '\')">' +
-            '<td>' + (isOpen ? '▼' : '▶') + ' <strong>' + r.drv + '</strong></td>' +
-            '<td><span class="badge badge-info">' + r.citta + '</span></td>' +
+            '<td>' + (isOpen ? '▼' : '▶') + ' <strong>' + escapeHtml(r.drv) + '</strong></td>' +
+            '<td><span class="badge badge-info">' + escapeHtml(r.citta) + '</span></td>' +
             '<td>' + r.oggi + '</td>' +
             '<td>' + r.nGiorni + '</td>' +
             '<td>' + r.consegne + '</td>' +
@@ -113,7 +118,7 @@ function renderProduttivita() {
                     var dd = new Date(g.day + 'T12:00:00');
                     var label = dd.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
                     return '<tr>' +
-                        '<td>' + label + (g.day === new Date().toISOString().slice(0,10) ? ' <span class="badge badge-info">oggi</span>' : '') + '</td>' +
+                        '<td>' + label + (g.day === oggi ? ' <span class="badge badge-info">oggi</span>' : '') + '</td>' +
                         '<td>' + g.fasce + '</td>' +
                         '<td><strong>' + g.consegne + '</strong></td>' +
                         '<td>' + (g.minuti > 0 ? fmtMinuti(g.minuti) : '—') + '</td>' +

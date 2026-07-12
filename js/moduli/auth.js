@@ -152,8 +152,4 @@ function initMeseSelector() {
     state.meseCorrente = sel.value;
 }
 
-async function onMeseChange() {
-    state.meseCorrente = document.getElementById('meseSelector').value;
-    await loadConsegnePerMese();
-    refreshCurrentModule();
-}
+// onMeseChange è definita in js/main.js (carica anche reportDriver e ritorni).

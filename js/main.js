@@ -34,6 +34,13 @@ function setCache(collection, mese, data) {
 
 async function loadAllData() {
     try {
+        if (state.userRole === 'driver') {
+            // I driver non possono leggere consegne/danni/reportDriver globali
+            // (negati dalle rules): caricano solo filiali + i propri report
+            // (via loadMyReports nel modulo driver-app).
+            await loadFiliali();
+            return;
+        }
         await Promise.all([
             loadConsegnePerMese(),
             loadFiliali(),
@@ -214,11 +221,13 @@ async function loadRitorniMese() {
 
 async function onMeseChange() {
     state.meseCorrente = document.getElementById('meseSelector').value;
-    await Promise.all([
-        loadConsegnePerMese(),
-        loadReportDriver(),
-        loadRitorniMese()
-    ]);
+    if (state.userRole !== 'driver') {
+        await Promise.all([
+            loadConsegnePerMese(),
+            loadReportDriver(),
+            loadRitorniMese()
+        ]);
+    }
     refreshCurrentModule();
 }
 

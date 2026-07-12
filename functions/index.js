@@ -4,6 +4,7 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -301,17 +302,29 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
         d.posPrec = posPrec || null;
     });
 
-    // Versione anonima (letta dai driver): solo campi neutri
-    const anon = drivers.map(d => ({
-        driver: d.driver,
-        consegne: d.consegne,
-        danni: d.danni,
-        bonusZeroDanni: d.bonusZeroDanni,
-        tempoMedioMin: d.tempoMedioMin,
-        bonusVelocita: d.bonusVelocita,
-        score: d.score,
-        posPrec: d.posPrec,
-    }));
+    // Versione anonima (letta dai driver): NESSUN dato identificativo.
+    // `h` = sha256(email)[0:16] — l'app calcola lo stesso hash della propria
+    // email per riconoscere la riga "SEI TU" e derivare il nickname.
+    // Driver senza email in anagrafica: hash del cognome con prefisso
+    // (non ricostruibile lato client, quindi comunque anonimo).
+    const anon = drivers.map(d => {
+        const a = anagByCognome[d.driver];
+        const email = a && a.email ? String(a.email).toLowerCase().trim() : null;
+        const h = crypto.createHash('sha256')
+            .update(email || ('cognome:' + d.driver))
+            .digest('hex')
+            .slice(0, 16);
+        return {
+            h,
+            consegne: d.consegne,
+            danni: d.danni,
+            bonusZeroDanni: d.bonusZeroDanni,
+            tempoMedioMin: d.tempoMedioMin,
+            bonusVelocita: d.bonusVelocita,
+            score: d.score,
+            posPrec: d.posPrec,
+        };
+    });
 
     // Versione full (letta da admin): include nome reale dall'anagrafica
     const full = drivers.map(d => {
@@ -337,7 +350,9 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
 
 async function loadPrevMesePositions(mesePrec) {
     try {
-        const doc = await db.collection('leaderboard').doc(mesePrec).get();
+        // Legge leaderboardFull (non anon): serve il cognome per il match,
+        // che nella versione anonima non esiste più.
+        const doc = await db.collection('leaderboardFull').doc(mesePrec).get();
         if (!doc.exists) return null;
         const arr = doc.data().drivers || [];
         const map = {};
