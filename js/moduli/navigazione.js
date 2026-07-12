@@ -3,7 +3,7 @@ const MODULE_TITLES = {
     dashboard: 'Dashboard',
     consegne: 'Consegne',
     'anagrafica-driver': 'Anagrafica Driver',
-    compensi: 'Compensi Driver',
+    compensi: 'Compensi Driver (storico)',
     produttivita: 'Produttività Driver',
     danni: 'Danni / Furgoni',
     ritorni: 'Ritorni',

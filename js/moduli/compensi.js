@@ -1,7 +1,14 @@
 // DELIVERY HUB v2 — Compensi Driver (allineato con logica alias dashboard)
+// STORICO: da MESE_STIPENDIO_FISSO i driver sono dipendenti a stipendio
+// fisso — il calcolo a consegna vale solo per i mesi precedenti.
+
+var MESE_STIPENDIO_FISSO = '2026-07';
 
 async function renderCompensi() {
     var mese = state.meseCorrente;
+
+    var avviso = document.getElementById('compensiAvviso');
+    if (avviso) avviso.style.display = (mese >= MESE_STIPENDIO_FISSO) ? 'block' : 'none';
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     var searchTerm = document.getElementById('searchCompensi') ? document.getElementById('searchCompensi').value.toUpperCase().trim() : '';
 
