@@ -70,6 +70,7 @@ async function handleImportFiles(files) {
                 }
 
                 const consegne = [];
+                let ritorniSkippati = 0;
                 for (let i = headerIdx + 1; i < rows.length; i++) {
                     const row = rows[i];
                     if (!row || row.length === 0) continue;
@@ -84,6 +85,16 @@ async function handleImportFiles(files) {
                     if (!filiale && !cognome) continue;
                     if (!data) continue;
 
+                    // I RITORNI annotati nei fogli filiale NON sono consegne:
+                    // vengono fatturati a parte (modulo Ritorni, da app driver).
+                    // Importarli gonfierebbe la fattura consegne.
+                    const richiesta = (getVal(row, colMap.richiesta) || '').toUpperCase();
+                    const targaRaw = (getVal(row, colMap.targa) || '').toUpperCase();
+                    if (richiesta.includes('RITORNO') || targaRaw === 'RITORNO') {
+                        ritorniSkippati++;
+                        continue;
+                    }
+
                     // Parse date
                     let dateObj = parseExcelDate(data);
                     if (!dateObj) continue;
@@ -97,10 +108,15 @@ async function handleImportFiles(files) {
                         citta: getVal(row, colMap.citta) || null,
                         indirizzo: getVal(row, colMap.indirizzo) || null,
                         importo: importo,
-                        fascia: getVal(row, colMap.fascia) || null,
+                        fascia: getVal(row, colMap.fascia) || getVal(row, colMap.oraConsegna) || null,
                         driver: getVal(row, colMap.driver) || null,
                         targa: getVal(row, colMap.targa) || null,
                         consegnata: (consegnata || '').toUpperCase() === 'SI',
+                        // Esplicitamente marcata NON consegnata (≠ colonna assente)
+                        nonConsegnata: (consegnata || '').toUpperCase() === 'NO',
+                        // PRESTAZIONE (AVR/INTERNA) dal foglio filiale: fonte
+                        // autoritativa per la classificazione in fattura
+                        prestazione: getVal(row, colMap.prestazione) || null,
                         orderId: getVal(row, colMap.orderId) || null,
                         pagamento: getVal(row, colMap.pagamento) || null,
                         codiceDomicilio: getVal(row, colMap.codiceDom) || null,
@@ -114,7 +130,7 @@ async function handleImportFiles(files) {
                     consegne.push(record);
                 }
 
-                logEl.textContent += `   ✅ ${sheetName}: ${consegne.length} consegne estratte\n`;
+                logEl.textContent += `   ✅ ${sheetName}: ${consegne.length} consegne estratte` + (ritorniSkippati > 0 ? ` (${ritorniSkippati} ritorni esclusi — fatturati a parte)` : '') + `\n`;
 
                 // Save to Firestore in batches
                 if (consegne.length > 0) {
@@ -328,7 +344,11 @@ function detectColumns(rows) {
                     codiceDom: headers.findIndex(h => h.includes('CODICE DOMICILIO') || h.includes('CODICE_DOM')),
                     driver: headers.findIndex(h => h === 'RIDER' || h === 'DRIVER'),
                     targa: headers.findIndex(h => h.includes('TARGA')),
-                    consegnata: headers.findIndex(h => h.includes('CONSEGNATA'))
+                    consegnata: headers.findIndex(h => h.includes('CONSEGNATA')),
+                    // Colonne dei fogli filiale Decò più recenti
+                    prestazione: headers.findIndex(h => h === 'PRESTAZIONE'),
+                    richiesta: headers.findIndex(h => h.includes('RICHIESTA')),
+                    oraConsegna: headers.findIndex(h => h.includes('ORA CONSEGNA'))
                 }
             };
         }

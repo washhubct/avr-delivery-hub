@@ -112,6 +112,28 @@ function isDriverAvr(riderName, avrSet) {
     return false;
 }
 
+// Classificazione consegna: usa PRESTAZIONE dal foglio filiale quando
+// presente (fonte autoritativa scritta dalla filiale), altrimenti
+// euristica sul nome rider. Esclude ritorni e non-consegnate esplicite.
+function isConsegnaAvr(c, avrSet) {
+    if (c.tipo === 'ritorno') return false;
+    if (c.nonConsegnata === true) return false;
+    var p = (c.prestazione || '').toUpperCase().trim();
+    if (p === 'AVR') return true;
+    if (p.indexOf('INTERN') >= 0) return false;
+    var rider = c.driver || c.rider || '';
+    return isDriverAvr(rider, avrSet);
+}
+
+function isConsegnaInterna(c, avrSet) {
+    var p = (c.prestazione || '').toUpperCase().trim();
+    if (p.indexOf('INTERN') >= 0) return true;
+    if (p === 'AVR') return false;
+    var rider = c.driver || c.rider || '';
+    if (!rider.trim()) return false;
+    return !isDriverAvr(rider, avrSet);
+}
+
 function normalizeRiderForDisplay(riderName) {
     if (!riderName) return '—';
     var name = riderName.toUpperCase().trim();
@@ -132,15 +154,8 @@ function renderDashboard() {
 
     var avrSet = buildDriverAvrSet();
 
-    var consegneAvr = allConsegne.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        return isDriverAvr(rider, avrSet);
-    });
-    var consegneInt = allConsegne.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        if (!rider.trim()) return false;
-        return !isDriverAvr(rider, avrSet);
-    });
+    var consegneAvr = allConsegne.filter(function(c) { return isConsegnaAvr(c, avrSet); });
+    var consegneInt = allConsegne.filter(function(c) { return isConsegnaInterna(c, avrSet); });
 
     // ═══ KPI — escludi consegne interne (tipoDriver='interna': fatte da Decò, non fatturabili) ═══
     // AVR/FARO (nostre senza driver specifico) hanno tipoDriver='avr' o rider vuoto → incluse
@@ -308,11 +323,7 @@ function exportConsegneInterne() {
     var mese = state.meseCorrente;
     var allConsegne = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     var avrSet = buildDriverAvrSet();
-    var consegneInt = allConsegne.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        if (!rider.trim()) return false;
-        return !isDriverAvr(rider, avrSet);
-    });
+    var consegneInt = allConsegne.filter(function(c) { return isConsegnaInterna(c, avrSet); });
 
     if (consegneInt.length === 0) { toast('Nessuna consegna interna', 'warning'); return; }
 

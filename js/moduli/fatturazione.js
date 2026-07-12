@@ -5,12 +5,10 @@ function renderFatturazione() {
     if (!mese) return;
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
 
-    // Filtra solo AVR usando la stessa logica del dashboard
+    // Solo consegne AVR fatturabili: PRESTAZIONE dal foglio quando presente,
+    // esclusi ritorni e non-consegnate esplicite (stessa logica del dashboard)
     var avrSet = buildDriverAvrSet();
-    var cmAvr = cm.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        return isDriverAvr(rider, avrSet);
-    });
+    var cmAvr = cm.filter(function(c) { return isConsegnaAvr(c, avrSet); });
 
     // Raggruppa per filiale (solo AVR)
     var filialiData = {};
@@ -123,12 +121,9 @@ function exportFatturazione() {
     var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
     if (cm.length === 0) { toast('Nessun dato', 'warning'); return; }
 
-    // Filtra solo AVR
+    // Solo consegne AVR fatturabili (stessa logica di renderFatturazione)
     var avrSet = buildDriverAvrSet();
-    var cmAvr = cm.filter(function(c) {
-        var rider = c.driver || c.rider || '';
-        return isDriverAvr(rider, avrSet);
-    });
+    var cmAvr = cm.filter(function(c) { return isConsegnaAvr(c, avrSet); });
 
     // Raggruppa per filiale
     var filialiData = {};
