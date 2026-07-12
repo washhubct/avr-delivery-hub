@@ -974,3 +974,118 @@ exports.syncConsegne = onRequest(
         }
     }
 );
+
+// ═══════════════════════════════════════════════════════════════════
+// INGEST CONSEGNE DA APPS SCRIPT (push)
+//
+// Alternativa alla lettura diretta via Sheets API che NON richiede di
+// condividere i fogli col service account: lo script GAS
+// (scripts/sync-consegne-firestore.gs) gira sull'account che ha già
+// accesso ai fogli filiale e spinge i record qui.
+//
+// Protetto da secret condiviso (SYNC_INGEST_SECRET):
+//   firebase functions:secrets:set SYNC_INGEST_SECRET
+// e stesso valore nelle Script Properties del GAS (chiave SYNC_SECRET).
+//
+// Stesso docId di dedup del sync/import → nessun duplicato anche se
+// convivono più canali di importazione.
+// ═══════════════════════════════════════════════════════════════════
+
+const SYNC_INGEST_SECRET = defineSecret('SYNC_INGEST_SECRET');
+
+exports.ingestConsegne = onRequest(
+    {
+        region: 'europe-west1',
+        secrets: [SYNC_INGEST_SECRET],
+        memory: '512MiB',
+        timeoutSeconds: 300,
+    },
+    async (req, res) => {
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+        const secret = req.headers['x-sync-secret'] || '';
+        if (!secret || secret !== SYNC_INGEST_SECRET.value()) {
+            res.status(401).json({ error: 'Secret non valido' });
+            return;
+        }
+
+        const body = req.body || {};
+
+        try {
+            // ── Chiusura run: salva riepilogo in syncStatus/syncLog ──
+            if (body.type === 'summary') {
+                const summary = {
+                    at: admin.firestore.FieldValue.serverTimestamp(),
+                    fonteTipo: 'apps_script',
+                    mesi: Array.isArray(body.mesi) ? body.mesi.slice(0, 12) : [],
+                    totUpserted: Number(body.totUpserted) || 0,
+                    totRitorniEsclusi: Number(body.totRitorniEsclusi) || 0,
+                    totScarti: Number(body.totScarti) || 0,
+                    errori: Number(body.errori) || 0,
+                    dettagli: Array.isArray(body.dettagli) ? body.dettagli.slice(0, 100) : [],
+                };
+                await db.collection('syncStatus').doc('last').set(summary);
+                await db.collection('syncLog').add(summary);
+                res.json({ success: true });
+                return;
+            }
+
+            // ── Batch di record ──
+            const records = Array.isArray(body.records) ? body.records : [];
+            if (records.length === 0) { res.json({ success: true, upserted: 0 }); return; }
+            if (records.length > 500) { res.status(400).json({ error: 'Max 500 record per richiesta' }); return; }
+
+            const validi = [];
+            let scarti = 0;
+            for (const r of records) {
+                // Validazione minima anti-garbage
+                if (!r || typeof r !== 'object') { scarti++; continue; }
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.data || ''))) { scarti++; continue; }
+                const filiale = String(r.filiale || '').trim().replace(/\.0$/, '');
+                if (!filiale && !r.cliente) { scarti++; continue; }
+                const importo = Number(r.importo);
+                validi.push({
+                    filiale,
+                    data: new Date(r.data + 'T12:00:00Z'),
+                    mese: String(r.data).slice(0, 7),
+                    cliente: r.cliente ? String(r.cliente).slice(0, 120) : null,
+                    provincia: r.provincia ? String(r.provincia).slice(0, 4) : null,
+                    citta: r.citta ? String(r.citta).slice(0, 80) : null,
+                    indirizzo: r.indirizzo ? String(r.indirizzo).slice(0, 160) : null,
+                    importo: isNaN(importo) ? 0 : Math.max(0, Math.min(importo, 100000)),
+                    fascia: r.fascia ? String(r.fascia).slice(0, 20) : null,
+                    driver: r.driver ? String(r.driver).slice(0, 60) : null,
+                    targa: r.targa ? String(r.targa).slice(0, 20) : null,
+                    consegnata: r.consegnata === true,
+                    nonConsegnata: r.nonConsegnata === true,
+                    prestazione: r.prestazione ? String(r.prestazione).slice(0, 20) : null,
+                    orderId: r.orderId ? String(r.orderId).slice(0, 40) : null,
+                    pagamento: r.pagamento ? String(r.pagamento).slice(0, 30) : null,
+                    codiceDomicilio: r.codiceDomicilio ? String(r.codiceDomicilio).slice(0, 40) : null,
+                    area: syncAreaFromProvincia(r.provincia),
+                    fonte: r.fonte ? String(r.fonte).slice(0, 80) : 'apps_script',
+                    sheetName: r.sheetName ? String(r.sheetName).slice(0, 40) : null,
+                });
+            }
+
+            for (let i = 0; i < validi.length; i += 400) {
+                const batch = db.batch();
+                validi.slice(i, i + 400).forEach(c => {
+                    const docRef = db.collection('consegne').doc(syncConsegnaDocId(c));
+                    batch.set(docRef, {
+                        ...c,
+                        data: admin.firestore.Timestamp.fromDate(c.data),
+                        syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+                        fonteTipo: 'apps_script',
+                    }, { merge: true });
+                });
+                await batch.commit();
+            }
+
+            res.json({ success: true, upserted: validi.length, scarti });
+        } catch (e) {
+            console.error('[ingestConsegne]', e);
+            res.status(500).json({ error: e.message });
+        }
+    }
+);
