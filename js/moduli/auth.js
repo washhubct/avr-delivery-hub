@@ -71,6 +71,12 @@ function canManageTimbrature(role) {
     return role === 'superadmin' || role === 'amministratore' || role === 'risorse_umane';
 }
 
+// True se il ruolo può vedere il fatturato (ricavi vs Fratelli Arena).
+// Le Risorse Umane vedono tutto il gestionale TRANNE la fatturazione.
+function canSeeFatturato(role) {
+    return role !== 'risorse_umane';
+}
+
 // True se il ruolo ha accesso admin/staff completo alla dashboard (senza P&L).
 function isAdminOrStaffRole(role) {
     return role === 'superadmin'
@@ -163,6 +169,12 @@ function initAuth() {
                 var timbratureItems = document.querySelectorAll('.nav-timbrature-admin');
                 timbratureItems.forEach(function(el) {
                     el.style.display = canManageTimbrature(role) ? 'block' : 'none';
+                });
+
+                // Fatturazione — nascosta alle Risorse Umane (tutto tranne il fatturato)
+                var fatturatoItems = document.querySelectorAll('.nav-fatturato');
+                fatturatoItems.forEach(function(el) {
+                    el.style.display = canSeeFatturato(role) ? 'block' : 'none';
                 });
 
                 // Label sidebar

@@ -23,6 +23,10 @@ const MODULE_TITLES = {
     'driver-bustepaga': 'Buste paga'
 };
 function navigateTo(module) {
+    // Guardia ruoli: le Risorse Umane vedono tutto tranne il fatturato
+    if (module === 'fatturazione' && state.userRole === 'risorse_umane') {
+        module = 'consegne';
+    }
     state.currentModule = module;
     document.querySelectorAll('.nav-item').forEach(n =>
         n.classList.toggle('active', n.dataset.module === module));
