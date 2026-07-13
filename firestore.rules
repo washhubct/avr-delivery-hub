@@ -74,8 +74,8 @@ service cloud.firestore {
                      || (isDriver()
                          && resource.data.email is string
                          && resource.data.email == userEmail());
-      allow create, delete: if isAdminOrStaff();
-      allow update: if isAdminOrStaff()
+      allow create, delete: if canManageAnagrafica();
+      allow update: if canManageAnagrafica()
                        || (isDriver()
                            && resource.data.email == userEmail()
                            && request.resource.data.email == resource.data.email
@@ -245,6 +245,11 @@ service cloud.firestore {
     }
     function canManageTimbrature() {
       return isSuperAdmin() || isAmministratore() || isRisorseUmane();
+    }
+    // Gestione anagrafica driver: admin/staff + amministratore + HR.
+    // (I responsabili leggono soltanto, via isGestionale.)
+    function canManageAnagrafica() {
+      return isAdminOrStaff() || isAmministratore() || isRisorseUmane();
     }
     function isResponsabile() {
       return isSignedIn()
