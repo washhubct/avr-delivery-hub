@@ -100,6 +100,23 @@ exports.requestPasswordReset = onRequest(
 // usava auth.sendPasswordResetEmail del client SDK (mail da dominio
 // firebaseapp.com, spesso bloccata da Gmail come spam).
 // ═══════════════════════════════════════════════════════════════════
+// Autorizzazione "gestione personale" (accessi driver, anagrafica):
+// superadmin/staff hardcoded + amministratore/HR attivi dalla collection utenti.
+// Allineato alle Firestore rules canManageAnagrafica().
+const STAFF_ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com'];
+async function canManageDriverAccess(callerEmail) {
+    if (STAFF_ADMIN_EMAILS.includes(callerEmail)) return true;
+    try {
+        const doc = await db.collection('utenti').doc(callerEmail).get();
+        if (!doc.exists) return false;
+        const d = doc.data();
+        return (d.mansione === 'amministratore' || d.mansione === 'risorse_umane') && d.attivo !== false;
+    } catch (e) {
+        console.error('[canManageDriverAccess] lookup error:', e.message);
+        return false;
+    }
+}
+
 exports.inviaCredenzialiDriver = onRequest(
     {
         secrets: [RESEND_API_KEY],
@@ -128,8 +145,7 @@ exports.inviaCredenzialiDriver = onRequest(
             res.status(401).json({ error: 'Token non valido' });
             return;
         }
-        const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com'];
-        if (!ADMIN_EMAILS.includes(callerEmail)) { res.status(403).json({ error: 'Non autorizzato' }); return; }
+        if (!(await canManageDriverAccess(callerEmail))) { res.status(403).json({ error: 'Non autorizzato' }); return; }
 
         const email = ((req.body && req.body.email) || '').trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
