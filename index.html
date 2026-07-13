@@ -57,7 +57,7 @@
                 <a class="nav-item" data-module="compensi" onclick="navigateTo('compensi')">
                     <span class="nav-icon">💰</span> Compensi (storico)
                 </a>
-                <a class="nav-item nav-superadmin" data-module="produttivita" onclick="navigateTo('produttivita')">
+                <a class="nav-item" data-module="produttivita" onclick="navigateTo('produttivita')">
                     <span class="nav-icon">⏱️</span> Produttività
                 </a>
                 <a class="nav-item" data-module="danni" onclick="navigateTo('danni')">
@@ -201,14 +201,14 @@
                     <div class="kpi-detail" id="kpiFatturatoDetail"></div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-label">Costo driver</div>
-                    <div class="kpi-value" id="kpiCostoDriver">—</div>
-                    <div class="kpi-detail" id="kpiCostoDriverDetail"></div>
+                    <div class="kpi-label">Media consegne/giorno</div>
+                    <div class="kpi-value" id="kpiMediaGiorno">—</div>
+                    <div class="kpi-detail" id="kpiMediaGiornoDetail"></div>
                 </div>
                 <div class="kpi-card accent">
-                    <div class="kpi-label">Margine lordo</div>
-                    <div class="kpi-value" id="kpiMargine">—</div>
-                    <div class="kpi-detail" id="kpiMargineDetail"></div>
+                    <div class="kpi-label">Driver attivi</div>
+                    <div class="kpi-value" id="kpiDriverAttivi">—</div>
+                    <div class="kpi-detail" id="kpiDriverAttiviDetail"></div>
                 </div>
             </div>
 
@@ -217,11 +217,11 @@
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Area</th><th>Filiali</th><th>≥€250</th><th>&lt;€250</th><th>Totale</th><th>Fatturato</th><th>Costo driver</th><th>Margine</th>
+                            <th>Area</th><th>Filiali</th><th>&gt;€499</th><th>Ordinarie</th><th>Totale</th><th>Fatturato</th>
                         </tr></thead>
                         <tbody id="tblAree"></tbody>
                         <tfoot><tr class="totals-row">
-                            <td><strong>TOTALE</strong></td><td id="totFiliali"></td><td id="totMaggiori"></td><td id="totMinori"></td><td id="totConsegne"></td><td id="totFatturato"></td><td id="totCostoDriver"></td><td id="totMargine"></td>
+                            <td><strong>TOTALE</strong></td><td id="totFiliali"></td><td id="totMaggiori"></td><td id="totMinori"></td><td id="totConsegne"></td><td id="totFatturato"></td>
                         </tr></tfoot>
                     </table>
                 </div>
@@ -241,7 +241,7 @@
                     <h3 class="card-title">Performance driver</h3>
                     <div class="table-wrap">
                         <table class="data-table">
-                            <thead><tr><th>Driver</th><th>Consegne</th><th>Compenso</th><th>Filiali</th></tr></thead>
+                            <thead><tr><th>Driver</th><th>Consegne</th><th>Media/giorno</th><th>Filiali</th></tr></thead>
                             <tbody id="tblTopDriver"></tbody>
                         </table>
                     </div>
@@ -543,7 +543,7 @@
             <div class="card">
                 <h3 class="card-title">Punti di timbratura provinciali</h3>
                 <p class="card-desc">
-                    Un punto per provincia (CT, SR, ME, PA, EN) con QR code stampato in sede: il driver lo inquadra con l'app e la posizione GPS viene verificata nel raggio impostato. Genera il token con 🔄 e stampa il QR con 🖨️. Se un QR viene compromesso, rigenera il token e ristampa.
+                    Un punto per provincia (CT, SR, ME, PA, EN) con <strong>tag NFC</strong> e/o <strong>QR code</strong> in sede: il driver appoggia il telefono al tag (o inquadra il QR) e la posizione GPS viene verificata nel raggio impostato. 🔄 genera il token · 🖨️ stampa il QR · 📶 link da scrivere sul tag NFC. Se un token viene compromesso, rigeneralo: QR da ristampare e tag da riscrivere.
                 </p>
                 <div class="table-wrap">
                     <table class="data-table">

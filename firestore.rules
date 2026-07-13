@@ -57,7 +57,8 @@ service cloud.firestore {
     // OPERATIVITÀ AVR — admin + staff R/W
     // ═══════════════════════════════════════════════════════════
     match /consegne/{doc} {
-      allow read, write: if isAdminOrStaff();
+      allow read: if isGestionale();
+      allow write: if isAdminOrStaff();
     }
 
     match /filiali/{doc} {
@@ -69,7 +70,7 @@ service cloud.firestore {
     // DRIVER ANAGRAFICA — admin/staff full; driver legge solo proprio
     // ═══════════════════════════════════════════════════════════
     match /driverAnagrafica/{doc} {
-      allow read: if isAdminOrStaff()
+      allow read: if isGestionale()
                      || (isDriver()
                          && resource.data.email is string
                          && resource.data.email == userEmail());
@@ -88,7 +89,7 @@ service cloud.firestore {
     // REPORT DRIVER — admin/staff full; driver crea + legge/elimina suoi
     // ═══════════════════════════════════════════════════════════
     match /reportDriver/{doc} {
-      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow read: if isGestionale() || (isDriver() && isOwnByEmail());
       // Validazioni anti-abuso: da questi dati dipendono classifica e premi.
       // numConsegne 1–10 (come il limite dell'app), durataMin plausibile se
       // presente (report vecchi non ce l'hanno), mese nel formato YYYY-MM.
@@ -112,7 +113,7 @@ service cloud.firestore {
     // RITORNI — admin/staff full; driver crea + legge/elimina suoi
     // ═══════════════════════════════════════════════════════════
     match /ritorni/{doc} {
-      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow read: if isGestionale() || (isDriver() && isOwnByEmail());
       allow create: if isSignedIn()
                        && request.resource.data.driverEmail is string
                        && request.resource.data.driverEmail.lower() == userEmail();
@@ -124,7 +125,7 @@ service cloud.firestore {
     // SEGNALAZIONI — admin/staff full; driver crea + legge sue
     // ═══════════════════════════════════════════════════════════
     match /segnalazioni/{doc} {
-      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow read: if isGestionale() || (isDriver() && isOwnByEmail());
       allow create: if isSignedIn()
                        && request.resource.data.driverEmail is string
                        && request.resource.data.driverEmail.lower() == userEmail();
@@ -150,7 +151,7 @@ service cloud.firestore {
     // DANNI — admin/staff full; driver legge solo suoi
     // ═══════════════════════════════════════════════════════════
     match /danni/{doc} {
-      allow read: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
+      allow read: if isGestionale() || (isDriver() && isOwnByEmail());
       allow write: if isAdminOrStaff();
     }
 
@@ -245,6 +246,18 @@ service cloud.firestore {
     function canManageTimbrature() {
       return isSuperAdmin() || isAmministratore() || isRisorseUmane();
     }
+    function isResponsabile() {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/utenti/$(userEmail()))
+             && get(/databases/$(database)/documents/utenti/$(userEmail())).data.mansione == 'responsabile'
+             && get(/databases/$(database)/documents/utenti/$(userEmail())).data.attivo != false;
+    }
+    // Tutti gli utenti del gestionale (superadmin/staff hardcoded +
+    // amministratori, HR e responsabili dalla collection utenti):
+    // vedono produttività, danni, ritorni, segnalazioni, consegne.
+    function isGestionale() {
+      return isAdminOrStaff() || isAmministratore() || isRisorseUmane() || isResponsabile();
+    }
 
     match /puntiTimbratura/{provincia} {
       allow read: if isSignedIn();
@@ -271,7 +284,7 @@ service cloud.firestore {
                        && request.resource.data.driverId is string
                        && request.resource.data.driverId == userEmail()
                        && request.resource.data.fonte == 'app'
-                       && request.resource.data.metodo == 'app-qr-geo'
+                       && (request.resource.data.metodo == 'app-qr-geo' || request.resource.data.metodo == 'app-nfc-geo')
                        && (request.resource.data.tipo == 'in' || request.resource.data.tipo == 'out')
                        && request.resource.data.filialeId is string
                        && request.resource.data.giorno is string

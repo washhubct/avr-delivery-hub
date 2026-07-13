@@ -97,6 +97,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
   <div id="viewHome" class="hidden">
     <div class="card">
       <p class="hello">Ciao <strong id="homeNome">—</strong></p>
+      <div id="nfcBanner" class="hidden" style="background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px"></div>
       <div class="clock" id="clock">--:--</div>
       <div class="clock-date" id="clockDate"></div>
       <button class="btn btn-in" id="btnIn" onclick="avviaTimbratura('in')">▶ &nbsp;TIMBRA ENTRATA</button>
@@ -177,6 +178,24 @@ var scanRaf = null;
 var scanAttivo = false;
 var jsQRPromise = null;
 
+// ── Tag NFC: il tag scritto in sede contiene l'URL
+//    /timbra/?p=PROV&t=TOKEN — l'appoggio del telefono apre questa
+//    pagina già "armata": stessa validazione del QR, senza fotocamera.
+//    Funziona su Android e iPhone (lettura NFC nativa del sistema).
+var nfcParams = null;
+(function(){
+  try {
+    var q = new URLSearchParams(location.search);
+    var p = (q.get('p')||'').toUpperCase().trim();
+    var t = (q.get('t')||'').trim();
+    if (p && t && /^[A-Z]{2}$/.test(p) && /^[a-f0-9]{32,}$/i.test(t)) {
+      nfcParams = { prov: p, token: t };
+      // pulisce l'URL (il token non resta in barra/refresh)
+      history.replaceState(null, '', location.pathname);
+    }
+  } catch (e) {}
+})();
+
 // ── Utils ──
 function $(id){ return document.getElementById(id); }
 function show(id){ ['viewLogin','viewHome','viewFlow','viewDone'].forEach(function(v){ $(v).classList.toggle('hidden', v!==id); }); }
@@ -215,6 +234,11 @@ auth.onAuthStateChanged(async function(u){
     $('homeNome').textContent = (profilo.nome || profilo.cognome || u.email);
     $('btnLogout').classList.remove('hidden');
     show('viewHome');
+    if (nfcParams) {
+      var b = $('nfcBanner');
+      b.classList.remove('hidden');
+      b.innerHTML = '📶 <strong>Tag NFC letto — sede ' + nfcParams.prov + '</strong><br><span style="font-size:12px;color:var(--text2)">Premi Entrata o Uscita: niente fotocamera, la posizione viene comunque verificata.</span>';
+    }
     caricaStorico();
   } catch (e) {
     $('loginErr').textContent = 'Errore di connessione — riprova.';
@@ -263,23 +287,32 @@ async function avviaTimbratura(tipo){
   show('viewFlow');
   setStep('stepQr','run');
 
-  var qr;
-  try { qr = await scansionaQr(); }
-  catch (e) {
-    if (e && e.message==='annullato') { tornaHome(); return; }
-    setStep('stepQr','ko');
-    $('flowErr').textContent = e.message || 'Scansione non riuscita';
-    return;
-  }
+  var prov, token, viaNfc = false;
 
-  // Verifica token: payload atteso AVRT1|PROV|token
-  var parti = String(qr||'').split('|');
-  if (parti.length!==3 || parti[0]!=='AVRT1') {
-    setStep('stepQr','ko');
-    $('flowErr').textContent = 'QR non riconosciuto: usa il QR ufficiale esposto in sede.';
-    return;
+  if (nfcParams) {
+    // Arrivati dal tag NFC: token già in mano, niente fotocamera
+    prov = nfcParams.prov;
+    token = nfcParams.token;
+    viaNfc = true;
+    document.querySelector('#stepQr span:last-child').textContent = 'Tag NFC della sede';
+  } else {
+    var qr;
+    try { qr = await scansionaQr(); }
+    catch (e) {
+      if (e && e.message==='annullato') { tornaHome(); return; }
+      setStep('stepQr','ko');
+      $('flowErr').textContent = e.message || 'Scansione non riuscita';
+      return;
+    }
+    // Verifica token: payload atteso AVRT1|PROV|token
+    var parti = String(qr||'').split('|');
+    if (parti.length!==3 || parti[0]!=='AVRT1') {
+      setStep('stepQr','ko');
+      $('flowErr').textContent = 'QR non riconosciuto: usa il QR ufficiale esposto in sede.';
+      return;
+    }
+    prov = parti[1]; token = parti[2];
   }
-  var prov = parti[1], token = parti[2];
 
   var punto;
   try {
@@ -299,7 +332,9 @@ async function avviaTimbratura(tipo){
   var hashLetto = await sha256Hex(token);
   if (!punto.qrTokenHash || hashLetto !== punto.qrTokenHash) {
     setStep('stepQr','ko');
-    $('flowErr').textContent = 'QR non valido o scaduto: chiedi in sede il QR aggiornato.';
+    $('flowErr').textContent = viaNfc
+      ? 'Tag NFC non valido o scaduto: segnalalo in sede (va riscritto col nuovo link).'
+      : 'QR non valido o scaduto: chiedi in sede il QR aggiornato.';
     return;
   }
   setStep('stepQr','ok');
@@ -345,7 +380,7 @@ async function avviaTimbratura(tipo){
       giorno: giorno,
       mese: giorno.substring(0,7),
       fonte: 'app',
-      metodo: 'app-qr-geo',
+      metodo: viaNfc ? 'app-nfc-geo' : 'app-qr-geo',
       qrTokenLetto: hashLetto.substring(0,12),
       lat: pos.lat, lng: pos.lng, accuracy: Math.round(pos.accuracy||0),
       idTerminale: null,

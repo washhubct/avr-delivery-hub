@@ -70,6 +70,7 @@ function renderPuntiTimbratura() {
                 '<button class="btn btn-sm" onclick="openEditPuntoTimbratura(\'' + escapeHtml(prov) + '\')" title="Modifica">✏️</button> ' +
                 '<button class="btn btn-sm" onclick="rigeneraQrToken(\'' + escapeHtml(prov) + '\')" title="Genera/Rigenera token QR">🔄</button> ' +
                 '<button class="btn btn-sm" onclick="stampaQrPunto(\'' + escapeHtml(prov) + '\')" title="Stampa QR">🖨️</button> ' +
+                '<button class="btn btn-sm" onclick="mostraLinkNfc(\'' + escapeHtml(prov) + '\')" title="Link da scrivere sul tag NFC">📶</button> ' +
                 '<button class="btn btn-sm" onclick="togglePuntoTimbratura(\'' + escapeHtml(prov) + '\')" title="' + (p.attivo === false ? 'Riattiva' : 'Disattiva') + '">' + (p.attivo === false ? '✅' : '⏸️') + '</button>' +
             '</td>' +
         '</tr>';
@@ -258,6 +259,42 @@ async function stampaQrPunto(prov) {
         '<\/script></body></html>'
     );
     w.document.close();
+}
+
+// Link da scrivere sul tag NFC (record NDEF di tipo URL): stesso token
+// del QR. L'appoggio del telefono apre l'app timbratura già "armata".
+// Se rigeneri il token, i tag vanno riscritti col nuovo link.
+async function mostraLinkNfc(prov) {
+    var p = (state.puntiTimbraturaList || []).find(function(x) { return (x.provincia || x.id) === prov; });
+    if (!p || !p.qrTokenHash) { toast('Genera prima il token QR di ' + prov + ' (🔄)', 'error'); return; }
+    var tokenDoc;
+    try {
+        tokenDoc = await db.collection('qrTokens').doc(prov).get();
+    } catch (e) { toast('Errore lettura token: ' + e.message, 'error'); return; }
+    if (!tokenDoc.exists) { toast('Token non trovato — rigeneralo (🔄)', 'error'); return; }
+
+    var url = 'https://dashboard.avrlogisticarl.com/timbra/?p=' + prov + '&t=' + tokenDoc.data().token;
+    openModal('Tag NFC — ' + prov + ' ' + PT_PROVINCE_LABELS[prov],
+        '<p style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:12px">' +
+            'Scrivi questo link sul tag NFC come <strong>record URL (NDEF)</strong> usando un\'app come ' +
+            '<strong>NFC Tools</strong> (Android/iPhone): Scrivi → Aggiungi record → URL → incolla → Scrivi.<br>' +
+            'Consigliato: dopo la scrittura, <strong>blocca il tag in sola lettura</strong> dall\'app, così nessuno può riscriverlo.' +
+        '</p>' +
+        '<textarea id="nfcLinkText" class="input" readonly rows="4" style="font-family:var(--font-mono);font-size:11px;word-break:break-all">' + escapeHtml(url) + '</textarea>' +
+        '<button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="copiaLinkNfc()">📋 Copia link</button>' +
+        '<p style="font-size:11px;color:var(--text-light);margin-top:10px">⚠️ Se rigeneri il token (🔄), questo link smette di valere: riscrivi il tag e ristampa il QR.</p>'
+    );
+}
+
+function copiaLinkNfc() {
+    var ta = document.getElementById('nfcLinkText');
+    ta.select();
+    try {
+        navigator.clipboard.writeText(ta.value).then(function() { toast('Link copiato', 'success'); });
+    } catch (e) {
+        document.execCommand('copy');
+        toast('Link copiato', 'success');
+    }
 }
 
 async function togglePuntoTimbratura(prov) {

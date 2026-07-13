@@ -94,7 +94,7 @@ async function renderTimbrature() {
             : '<span class="badge" style="background:var(--info-bg);color:var(--info)">◀ Uscita</span>';
         var fonteBadge = t.fonte === 'terminale'
             ? '<span class="badge" style="background:rgba(148,163,184,0.12);color:var(--text-muted)" title="' + escapeHtml(t.idTerminale || '') + '">🏢 Terminale</span>'
-            : '<span class="badge badge-info" title="acc. ' + (t.accuracy != null ? Math.round(t.accuracy) + 'm' : '—') + '">📱 App QR</span>';
+            : '<span class="badge badge-info" title="acc. ' + (t.accuracy != null ? Math.round(t.accuracy) + 'm' : '—') + '">' + (t.metodo === 'app-nfc-geo' ? '📶 App NFC' : '📱 App QR') + '</span>';
         var sospBadge = t.sospetto
             ? '<span class="badge badge-warn" title="' + escapeHtml(t.note || 'GPS impreciso o anomalo') + '">⚠️ Sospetta</span>'
             : '';

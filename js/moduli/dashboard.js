@@ -176,10 +176,6 @@ function renderDashboard() {
         if (p !== null) fatturato += p;
     });
 
-    // Costo driver = solo consegne con driver AVR riconosciuto (non le AVR/FARO senza driver)
-    var costoDriver = consegneAvr.length * (state.costoPerConsegna || 3.50);
-    var margine = fatturato - costoDriver;
-
     document.getElementById('kpiConsegneMese').textContent = totale;
     document.getElementById('kpiConsegneDetail').innerHTML = (schemaFlat
         ? (maggiori + minori) + ' ordinarie · ' + manuali + ' >€499 · ' + speciali + ' ritorni/extra'
@@ -189,39 +185,56 @@ function renderDashboard() {
     document.getElementById('kpiFatturatoDetail').textContent = schemaFlat
         ? (maggiori + minori) + '×€9,70 + ' + speciali + '×€6,90' + (manuali > 0 ? ' (+' + manuali + ' >€499 manuali)' : '')
         : maggiori + '×€10 + ' + (minori + speciali) + '×€6,90';
-    document.getElementById('kpiCostoDriver').textContent = formatCurrency(costoDriver);
-    document.getElementById('kpiCostoDriverDetail').textContent = consegneAvr.length + ' × €' + ((state.costoPerConsegna || 3.50).toFixed(2).replace('.', ','));
-    document.getElementById('kpiMargine').textContent = formatCurrency(margine);
-    var margPerc = fatturato > 0 ? ((margine / fatturato) * 100).toFixed(1) : '0';
-    document.getElementById('kpiMargineDetail').textContent = margPerc + '% del fatturato';
+
+    // Media consegne/giorno (giorni con almeno una consegna nel mese)
+    var giorniAttivi = {};
+    consegneFatturabili.forEach(function(c) {
+        var d = c.data instanceof Date ? c.data : new Date(c.data);
+        if (!isNaN(d)) giorniAttivi[d.toISOString().slice(0, 10)] = true;
+    });
+    var nGiorni = Object.keys(giorniAttivi).length;
+    document.getElementById('kpiMediaGiorno').textContent = nGiorni > 0 ? Math.round(totale / nGiorni) : '—';
+    document.getElementById('kpiMediaGiornoDetail').textContent = nGiorni + ' giorni lavorati nel mese';
+
+    // Driver attivi: driver AVR distinti con almeno una consegna nel mese
+    var driverAttiviSet = {};
+    consegneAvr.forEach(function(c) {
+        var drv = normalizeRiderForDisplay(c.driver || c.rider || '');
+        if (drv && drv !== '—') driverAttiviSet[drv] = true;
+    });
+    var nDriverAttivi = Object.keys(driverAttiviSet).length;
+    document.getElementById('kpiDriverAttivi').textContent = nDriverAttivi;
+    document.getElementById('kpiDriverAttiviDetail').textContent = nDriverAttivi > 0 ? '~' + Math.round(consegneAvr.length / nDriverAttivi) + ' consegne/driver' : '';
 
     // ═══ Consegne per area (solo AVR) ═══
     var aree = {};
     var AREA_NAMES = { 'CT': 'Catania', 'ME': 'Messina', 'SR': 'Siracusa', 'PA': 'Palermo', 'EN': 'Enna' };
 
+    // Nello schema flat la colonna "speciali" conta le >€499 (prezzo manuale),
+    // in quello storico le ≥€250
     consegneAvr.forEach(function(c) {
         var area = c.area || '?';
         if (!aree[area]) aree[area] = { filiali: new Set(), maggiori: 0, minori: 0, fatturato: 0 };
         aree[area].filiali.add(c.filiale);
         var imp = c.importo || 0;
         var p = prezzoConsegnaMese(imp, mese, c.tipo);
-        if (imp >= 250 && c.tipo !== 'ritorno' && c.tipo !== 'pane_gastro_sushi') aree[area].maggiori++;
+        var isExtra = c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi';
+        var sogliaSup = schemaFlat ? imp > 499 : imp >= 250;
+        if (sogliaSup && !isExtra) aree[area].maggiori++;
         else aree[area].minori++;
         if (p !== null) aree[area].fatturato += p;
     });
 
     var tblAree = document.getElementById('tblAree');
     var rowsHtml = '';
-    var tFiliali = 0, tMagg = 0, tMin = 0, tTot = 0, tFatt = 0, tCosto = 0, tMarg = 0;
+    var tFiliali = 0, tMagg = 0, tMin = 0, tTot = 0, tFatt = 0;
 
     Object.keys(aree).sort().forEach(function(area) {
         var a = aree[area];
         var tot = a.maggiori + a.minori;
         var nFil = a.filiali.size;
-        var costo = tot * (state.costoPerConsegna || 3.50);
-        var marg = a.fatturato - costo;
         tFiliali += nFil; tMagg += a.maggiori; tMin += a.minori; tTot += tot;
-        tFatt += a.fatturato; tCosto += costo; tMarg += marg;
+        tFatt += a.fatturato;
 
         rowsHtml += '<tr>'
             + '<td><strong>' + area + '</strong> — ' + (AREA_NAMES[area] || area)
@@ -231,8 +244,6 @@ function renderDashboard() {
             + '<td>' + a.minori + '</td>'
             + '<td><strong>' + tot + '</strong></td>'
             + '<td>' + formatCurrency(a.fatturato) + '</td>'
-            + '<td>' + formatCurrency(costo) + '</td>'
-            + '<td style="color:' + (marg >= 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:600">' + formatCurrency(marg) + '</td>'
             + '</tr>';
     });
     tblAree.innerHTML = rowsHtml;
@@ -242,8 +253,6 @@ function renderDashboard() {
     document.getElementById('totMinori').textContent = tMin;
     document.getElementById('totConsegne').innerHTML = '<strong>' + tTot + '</strong>';
     document.getElementById('totFatturato').textContent = formatCurrency(tFatt);
-    document.getElementById('totCostoDriver').textContent = formatCurrency(tCosto);
-    document.getElementById('totMargine').innerHTML = '<strong style="color:' + (tMarg >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + formatCurrency(tMarg) + '</strong>';
 
     // ═══ Top 10 filiali (solo AVR) ═══
     var byFiliale = {};
@@ -277,8 +286,8 @@ function renderDashboard() {
 
     var topDrv = Object.entries(byDriver).sort(function(a, b) { return b[1].count - a[1].count; }).slice(0, 10);
     document.getElementById('tblTopDriver').innerHTML = topDrv.map(function(e) {
-        var compenso = e[1].count * (state.costoPerConsegna || 3.50);
-        return '<tr><td>' + e[0] + '</td><td>' + e[1].count + '</td><td>' + formatCurrency(compenso) + '</td><td>' + e[1].filiali.size + '</td></tr>';
+        var media = nGiorni > 0 ? (e[1].count / nGiorni).toFixed(1) : '—';
+        return '<tr><td>' + e[0] + '</td><td>' + e[1].count + '</td><td>' + media + '</td><td>' + e[1].filiali.size + '</td></tr>';
     }).join('');
 
     // ═══ Consegne Interne ═══
