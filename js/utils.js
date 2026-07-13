@@ -65,9 +65,11 @@ function toggleTheme() {
 }
 
 function aggiornaIconaTema() {
+    var isLight = document.documentElement.classList.contains('theme-light');
+    var meta = document.getElementById('metaTheme');
+    if (meta) meta.content = isLight ? '#eef1f6' : '#080b12';
     var btn = document.getElementById('btnTheme');
     if (!btn) return;
-    var isLight = document.documentElement.classList.contains('theme-light');
     btn.textContent = isLight ? '🌙' : '☀️';
     btn.title = isLight ? 'Passa al tema scuro' : 'Passa al tema chiaro';
 }
