@@ -144,7 +144,26 @@ service cloud.firestore {
                      || (isDriver()
                          && resource.data.email is string
                          && resource.data.email == userEmail());
-      allow update, delete: if isSuperAdmin();
+      // Chiusura turno dall'app driver: solo il proprio doc, solo i campi
+      // di chiusura (targa/data/oraInizio restano immutabili).
+      allow update: if isSuperAdmin()
+                       || (isDriver()
+                           && resource.data.email is string
+                           && resource.data.email == userEmail()
+                           && request.resource.data.diff(resource.data).affectedKeys()
+                              .hasOnly(['oraFine', 'durataTurnoMin', 'kmFine', 'chiusoIl']));
+      allow delete: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PUSH SUBSCRIPTIONS — l'app driver registra il proprio device;
+    // legge/invia solo la Cloud Function (admin SDK bypassa le rules)
+    // ═══════════════════════════════════════════════════════════
+    match /pushSubscriptions/{doc} {
+      allow create: if isSignedIn()
+                       && request.resource.data.email is string
+                       && request.resource.data.email == userEmail();
+      allow read, update, delete: if isSuperAdmin();
     }
 
     // ═══════════════════════════════════════════════════════════
