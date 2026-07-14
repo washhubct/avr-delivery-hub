@@ -308,7 +308,12 @@ service cloud.firestore {
                        && request.resource.data.driverId is string
                        && request.resource.data.driverId == userEmail()
                        && request.resource.data.fonte == 'app'
-                       && (request.resource.data.metodo == 'app-qr-geo' || request.resource.data.metodo == 'app-nfc-geo')
+                       && (request.resource.data.metodo == 'app-qr-geo'
+                           || request.resource.data.metodo == 'app-nfc-geo'
+                           // uscita comoda dall'app: niente scansione, ma geofence
+                           // sempre registrato (l'anti-frode forte resta sull'IN)
+                           || (request.resource.data.metodo == 'app-geo'
+                               && request.resource.data.tipo == 'out'))
                        && (request.resource.data.tipo == 'in' || request.resource.data.tipo == 'out')
                        && request.resource.data.filialeId is string
                        && request.resource.data.giorno is string
