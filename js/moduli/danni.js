@@ -165,11 +165,6 @@ async function saveDanno(editId) {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
-    // driverEmail permette al driver di vedere le proprie multe nell'app
-    // (le rules su danni consentono read-own solo via driverEmail)
-    var drSel = state.driverList.find(function(dr) { return dr.cognome === data.driver; });
-    data.driverEmail = drSel && drSel.email ? String(drSel.email).toLowerCase() : null;
-
     if (!data.driver) { toast('Seleziona il driver', 'error'); if (btn) { btn.disabled = false; btn.textContent = editId ? 'Aggiorna' : 'Registra danno'; } return; }
     if (!data.importo) { toast('Inserisci l\'importo', 'error'); if (btn) { btn.disabled = false; btn.textContent = editId ? 'Aggiorna' : 'Registra danno'; } return; }
 
