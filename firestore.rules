@@ -301,9 +301,11 @@ service cloud.firestore {
     // Nessuna modifica/cancellazione dal client: audit trail.
     // ═══════════════════════════════════════════════════════════
     match /timbrature/{doc} {
+      // I driver NON leggono le timbrature (nemmeno le proprie): il dato
+      // è visibile solo al team ufficio in dashboard. L'app driver tiene
+      // solo un flag locale sul device per gate e verso automatico.
       allow read: if isAdminOrStaff()
-                     || canManageTimbrature()
-                     || (isSignedIn() && resource.data.driverId == userEmail());
+                     || canManageTimbrature();
       allow create: if isSignedIn()
                        && request.resource.data.driverId is string
                        && request.resource.data.driverId == userEmail()
