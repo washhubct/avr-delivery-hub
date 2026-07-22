@@ -3,21 +3,37 @@
     "source": "functions",
     "runtime": "nodejs22"
   },
-  "hosting": {
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**",
-      "functions/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/auth/action",
-        "destination": "/auth/action/index.html"
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "functions/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/auth/action",
+          "destination": "/auth/action/index.html"
+        }
+      ],
+      "target": "dashboard"
+    },
+    {
+      "target": "app",
+      "public": "app-hosting",
+      "ignore": [
+        "**/.*"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

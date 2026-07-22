@@ -273,7 +273,7 @@ async function mostraLinkNfc(prov) {
     } catch (e) { toast('Errore lettura token: ' + e.message, 'error'); return; }
     if (!tokenDoc.exists) { toast('Token non trovato — rigeneralo (🔄)', 'error'); return; }
 
-    var url = 'https://dashboard.avrlogisticarl.com/timbra/?p=' + prov + '&t=' + tokenDoc.data().token;
+    var url = 'https://app.avrlogisticarl.com/?timbra=' + prov + '&t=' + tokenDoc.data().token + '&via=nfc';
     openModal('Tag NFC — ' + prov + ' ' + PT_PROVINCE_LABELS[prov],
         '<p style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:12px">' +
             'Scrivi questo link sul tag NFC come <strong>record URL (NDEF)</strong> usando un\'app come ' +
