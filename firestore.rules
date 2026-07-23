@@ -214,6 +214,15 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // CONFIG APP — feature flag remoti (es. timbratureAttive):
+    // letti da tutte le app, scritti solo dal superadmin.
+    // ═══════════════════════════════════════════════════════════
+    match /config/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // UTENTI — anagrafica utenti gestionale (amministratori, HR,
     // responsabili). Solo il superadmin hardcoded può scrivere qui.
     // Ogni utente può leggere il PROPRIO doc (per risolvere ruolo lato client).

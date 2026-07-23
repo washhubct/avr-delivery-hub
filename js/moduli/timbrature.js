@@ -19,7 +19,52 @@ function timbOggiRoma() {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
+// ══════════════════════════════════════════════════════════════
+// INTERRUTTORE TIMBRATURE APP — flag remoto config/app.timbratureAttive
+// Spento finché i tag NFC non sono installati: i driver vedono
+// "timbratura in arrivo" e l'app non chiede l'ingresso. Si accende
+// da qui (solo superadmin) senza alcun deploy.
+// ══════════════════════════════════════════════════════════════
+async function renderTimbFlag() {
+    var box = document.getElementById('timbFlagBox');
+    if (!box) return;
+    var attive = false;
+    try {
+        var doc = await db.collection('config').doc('app').get();
+        attive = doc.exists && doc.data().timbratureAttive === true;
+    } catch (e) { /* default: spente */ }
+    var isSuper = state.userRole === 'superadmin';
+    box.innerHTML =
+        '<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;border:1px solid ' +
+        (attive ? 'rgba(16,185,129,0.35);background:var(--success-bg)' : 'rgba(245,158,11,0.35);background:var(--warning-bg)') + '">' +
+            '<span style="font-size:20px">' + (attive ? '🟢' : '🕐') + '</span>' +
+            '<div style="flex:1"><strong>' + (attive ? 'Timbratura app ATTIVA' : 'Timbratura app in arrivo (spenta)') + '</strong>' +
+            '<div style="font-size:12px;color:var(--text-muted)">' + (attive
+                ? 'I driver timbrano con i tag NFC in sede.'
+                : 'I driver vedono "in arrivo". Accendila quando i tag NFC sono installati.') + '</div></div>' +
+            (isSuper ? '<button class="btn ' + (attive ? '' : 'btn-primary') + '" onclick="toggleTimbratureAttive(' + !attive + ')">' +
+                (attive ? '⏸️ Disattiva' : '🚀 Attiva ora') + '</button>' : '') +
+        '</div>';
+}
+
+async function toggleTimbratureAttive(attiva) {
+    if (!confirm(attiva
+        ? 'Attivare la timbratura per tutti i driver?\n\nDa subito l\'app chiederà di timbrare l\'ingresso a inizio giornata.'
+        : 'Disattivare la timbratura app?')) return;
+    try {
+        await db.collection('config').doc('app').set({
+            timbratureAttive: attiva,
+            aggiornatoIl: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        toast(attiva ? 'Timbratura ATTIVATA per tutti i driver 🚀' : 'Timbratura disattivata', 'success');
+        renderTimbFlag();
+    } catch (e) {
+        toast('Errore: ' + e.message, 'error');
+    }
+}
+
 async function renderTimbrature() {
+    renderTimbFlag();
     var giornoEl = document.getElementById('timbFiltroGiorno');
     if (giornoEl && !giornoEl.value) giornoEl.value = timbOggiRoma();
     var giorno = giornoEl ? giornoEl.value : timbOggiRoma();
