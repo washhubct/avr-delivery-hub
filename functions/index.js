@@ -2,14 +2,18 @@
 
 const { onRequest } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
+const webpush = require('web-push');
 
 admin.initializeApp();
 const db = admin.firestore();
 
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
+const VAPID_PUBLIC_KEY = defineSecret('VAPID_PUBLIC_KEY');
+const VAPID_PRIVATE_KEY = defineSecret('VAPID_PRIVATE_KEY');
 
 const ALLOWED_ORIGINS = [
     'https://dashboard.last-mile.it',
@@ -1355,6 +1359,194 @@ const _ingestConsegne_disattivato = onRequest(
         } catch (e) {
             console.error('[ingestConsegne]', e);
             res.status(500).json({ error: e.message });
+        }
+    }
+);
+
+// ═══════════════════════════════════════════════════════════
+// PUSH NOTIFICATIONS — Driver App (Web Push via VAPID)
+// Il client (driveravrapp/js/push.js) salva la PushSubscription in
+// pushSubscriptions/{auto} con email, driver (cognome), subscription.
+// Qui si invia con web-push; subscription morte (404/410) → delete doc.
+// Payload atteso dal service worker dell'app: { title, body, url? }.
+// ═══════════════════════════════════════════════════════════
+
+function giornoInRome(date) {
+    const r = meseInRome(date);
+    return `${r.mese}-${String(r.day).padStart(2, '0')}`;
+}
+
+function initWebpush() {
+    webpush.setVapidDetails(
+        'mailto:amministrazione@avrlogisticarl.com',
+        VAPID_PUBLIC_KEY.value().trim(),
+        VAPID_PRIVATE_KEY.value().trim()
+    );
+}
+
+// Invia il payload a una lista di doc pushSubscriptions.
+// Ritorna { sent, dead }: le subscription scadute vengono eliminate.
+async function inviaPushASubs(subs, payload) {
+    const body = JSON.stringify(payload);
+    let sent = 0, dead = 0;
+    await Promise.all(subs.map(async s => {
+        try {
+            await webpush.sendNotification(s.subscription, body);
+            sent++;
+        } catch (e) {
+            if (e.statusCode === 404 || e.statusCode === 410) {
+                dead++;
+                await db.collection('pushSubscriptions').doc(s.id).delete().catch(() => {});
+            } else {
+                console.warn('[push] invio fallito', s.email, e.statusCode || e.message);
+            }
+        }
+    }));
+    return { sent, dead };
+}
+
+// Carica le subscription per una lista di email (chunk da 30 per il limite 'in')
+async function subsPerEmails(emails) {
+    const subs = [];
+    for (let i = 0; i < emails.length; i += 30) {
+        const snap = await db.collection('pushSubscriptions')
+            .where('email', 'in', emails.slice(i, i + 30)).get();
+        snap.forEach(doc => subs.push({ id: doc.id, ...doc.data() }));
+    }
+    return subs;
+}
+
+// 21:00 — promemoria ai driver con turno ancora aperto oggi e nessun report
+exports.pushPromemoriaReport = onSchedule(
+    {
+        schedule: '0 21 * * *',
+        timeZone: 'Europe/Rome',
+        region: 'europe-west1',
+        secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY],
+    },
+    async () => {
+        const oggi = giornoInRome(new Date());
+        const mese = oggi.slice(0, 7);
+
+        const turniSnap = await db.collection('turniDriver').where('data', '==', oggi).get();
+        const conTurnoAperto = new Set();
+        turniSnap.forEach(doc => {
+            const t = doc.data();
+            if (t.email && !t.oraFine) conTurnoAperto.add(t.email.toLowerCase());
+        });
+        if (conTurnoAperto.size === 0) { console.log('[push] promemoria: nessun turno aperto'); return; }
+
+        // Report di oggi: filtro sul mese (indice esistente) + check giorno in memoria
+        const repSnap = await db.collection('reportDriver').where('mese', '==', mese).get();
+        const conReport = new Set();
+        repSnap.forEach(doc => {
+            const r = doc.data();
+            const dt = r.data && typeof r.data.toDate === 'function' ? r.data.toDate() : null;
+            if (dt && giornoInRome(dt) === oggi && r.driverEmail) conReport.add(r.driverEmail.toLowerCase());
+        });
+
+        const daAvvisare = [...conTurnoAperto].filter(em => !conReport.has(em));
+        if (daAvvisare.length === 0) { console.log('[push] promemoria: tutti hanno già il report'); return; }
+
+        initWebpush();
+        const subs = await subsPerEmails(daAvvisare);
+        const r = await inviaPushASubs(subs, {
+            title: 'Last Mile Driver',
+            body: 'Ricordati di registrare le consegne di oggi 📦',
+            url: './',
+        });
+        console.log(`[push] promemoria: ${daAvvisare.length} driver, ${subs.length} device, sent=${r.sent} dead=${r.dead}`);
+    }
+);
+
+// Cambio stato ritorno (accettato/rifiutato) → notifica al driver
+exports.pushEsitoRitorno = onDocumentUpdated(
+    {
+        document: 'ritorni/{id}',
+        region: 'europe-west1',
+        secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY],
+    },
+    async (event) => {
+        const before = event.data.before.data();
+        const after = event.data.after.data();
+        if (before.stato === after.stato) return;
+        if (after.stato !== 'accettato' && after.stato !== 'rifiutato') return;
+        const email = (after.driverEmail || '').toLowerCase();
+        if (!email) return;
+
+        const esito = after.stato === 'accettato' ? 'accettato ✓' : 'rifiutato ✕';
+        initWebpush();
+        const subs = await subsPerEmails([email]);
+        const r = await inviaPushASubs(subs, {
+            title: 'Last Mile Driver',
+            body: `Il tuo ritorno per ${after.cliente || 'il cliente'} è stato ${esito}`,
+            url: './',
+        });
+        console.log(`[push] esito ritorno ${event.params.id} → ${email}: sent=${r.sent}`);
+    }
+);
+
+// Segnalazione risolta → notifica al driver
+exports.pushEsitoSegnalazione = onDocumentUpdated(
+    {
+        document: 'segnalazioni/{id}',
+        region: 'europe-west1',
+        secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY],
+    },
+    async (event) => {
+        const before = event.data.before.data();
+        const after = event.data.after.data();
+        if (before.stato === after.stato || after.stato !== 'risolta') return;
+        const email = (after.driverEmail || '').toLowerCase();
+        if (!email) return;
+
+        initWebpush();
+        const subs = await subsPerEmails([email]);
+        const r = await inviaPushASubs(subs, {
+            title: 'Last Mile Driver',
+            body: `La tua segnalazione «${after.tipoLabel || after.tipo || ''}» è stata risolta ✓`,
+            url: './',
+        });
+        console.log(`[push] esito segnalazione ${event.params.id} → ${email}: sent=${r.sent}`);
+    }
+);
+
+// Ultimo giorno del mese, 18:00 — podio ai top 3 della classifica.
+// Cron senza supporto 'L': gira il 28-31 e scatta solo se domani è il giorno 1.
+exports.pushPodioMensile = onSchedule(
+    {
+        schedule: '0 18 28-31 * *',
+        timeZone: 'Europe/Rome',
+        region: 'europe-west1',
+        secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY],
+    },
+    async () => {
+        const now = new Date();
+        const domani = meseInRome(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+        if (domani.day !== 1) return; // non è l'ultimo giorno del mese
+
+        const mese = meseInRome(now).mese;
+        const doc = await db.collection('leaderboardFull').doc(mese).get();
+        if (!doc.exists) { console.log(`[push] podio: leaderboardFull/${mese} assente`); return; }
+        const top3 = (doc.data().drivers || []).slice(0, 3);
+        if (top3.length === 0) return;
+
+        initWebpush();
+        const medaglie = ['🥇', '🥈', '🥉'];
+        for (let i = 0; i < top3.length; i++) {
+            const cognome = (top3[i].driver || '').toUpperCase().trim();
+            if (!cognome) continue;
+            // Match per cognome: pushSubscriptions.driver è il cognome uppercase
+            const snap = await db.collection('pushSubscriptions').where('driver', '==', cognome).get();
+            const subs = [];
+            snap.forEach(d => subs.push({ id: d.id, ...d.data() }));
+            if (subs.length === 0) continue;
+            const r = await inviaPushASubs(subs, {
+                title: 'Last Mile Driver',
+                body: `${medaglie[i]} Sei sul podio! Hai chiuso il mese ${i + 1}° in classifica 🏆`,
+                url: './',
+            });
+            console.log(`[push] podio ${mese}: ${cognome} ${i + 1}° sent=${r.sent}`);
         }
     }
 );

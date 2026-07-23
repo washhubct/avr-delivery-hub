@@ -165,8 +165,8 @@ async function saveDanno(editId) {
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
-    if (!data.driver) { toast('Seleziona il driver', 'error'); return; }
-    if (!data.importo) { toast('Inserisci l\'importo', 'error'); return; }
+    if (!data.driver) { toast('Seleziona il driver', 'error'); if (btn) { btn.disabled = false; btn.textContent = editId ? 'Aggiorna' : 'Registra danno'; } return; }
+    if (!data.importo) { toast('Inserisci l\'importo', 'error'); if (btn) { btn.disabled = false; btn.textContent = editId ? 'Aggiorna' : 'Registra danno'; } return; }
 
     try {
         var fileInput = document.getElementById('danFiles');
