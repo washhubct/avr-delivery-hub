@@ -12,6 +12,8 @@ const db = admin.firestore();
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 
 const ALLOWED_ORIGINS = [
+    'https://dashboard.last-mile.it',
+    'https://app.last-mile.it',
     'https://dashboard.avrlogisticarl.com',
     'https://appdriver.avrlogisticarl.com',
     'https://app.avrlogisticarl.com',
@@ -76,7 +78,7 @@ exports.requestPasswordReset = onRequest(
 
         try {
             const link = await admin.auth().generatePasswordResetLink(email, {
-                url: 'https://dashboard.avrlogisticarl.com/auth/action/',
+                url: 'https://dashboard.last-mile.it/auth/action/',
                 handleCodeInApp: false,
             });
             await sendResendEmail({
@@ -173,7 +175,7 @@ exports.inviaCredenzialiDriver = onRequest(
             }
 
             const link = await admin.auth().generatePasswordResetLink(email, {
-                url: 'https://dashboard.avrlogisticarl.com/auth/action/',
+                url: 'https://dashboard.last-mile.it/auth/action/',
                 handleCodeInApp: false,
             });
             await sendResendEmail({
@@ -311,7 +313,7 @@ exports.creaUtenzaGestionale = onRequest(
 
             // [3] Genera link password reset e manda email di invito
             const link = await admin.auth().generatePasswordResetLink(email, {
-                url: 'https://dashboard.avrlogisticarl.com/auth/action/',
+                url: 'https://dashboard.last-mile.it/auth/action/',
                 handleCodeInApp: false,
             });
             const displayName = nome || email.split('@')[0];
