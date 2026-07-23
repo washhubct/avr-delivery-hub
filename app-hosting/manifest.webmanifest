@@ -1,7 +1,7 @@
 {
-  "name": "Last Mile - AVR Logistic",
+  "name": "Last Mile",
   "short_name": "Last Mile",
-  "description": "App driver Last Mile per AVR Logistic",
+  "description": "App driver Last Mile",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f1d3d",
