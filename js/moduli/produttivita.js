@@ -39,9 +39,19 @@ function prodAggrega() {
         return pd.giorni[day];
     }
 
+    // Solo driver censiti in anagrafica: la colonna rider dei fogli Decò
+    // contiene anche note libere ("FATTA 25/7", "?") che non sono driver.
+    // Il nome mostrato è sempre il cognome anagrafica (unifica le varianti).
+    function drvAnagrafica(nome) {
+        var drv = normalizeDriverName(nome || '');
+        if (!drv) return null;
+        var anag = findDriverAnagrafica(drv);
+        return anag ? (anag.cognome || drv).toUpperCase().trim() : null;
+    }
+
     // ── Fonte 1: report dei driver dall'app (con orari giro) ──
     (state.reportDriver || []).forEach(function(r) {
-        var drv = normalizeDriverName(r.driver || '');
+        var drv = drvAnagrafica(r.driver);
         if (!drv) return;
         var day = prodToDay(r.data);
         if (!day) return;
@@ -66,7 +76,7 @@ function prodAggrega() {
     (state.consegne || []).forEach(function(c) {
         if (meseFromDate(c.data) !== mese) return;
         if (c.tipo === 'ritorno') return;
-        var drv = normalizeDriverName(c.driver || c.rider || '');
+        var drv = drvAnagrafica(c.driver || c.rider);
         if (!drv) return;
         var day = prodToDay(c.data);
         if (!day) return;

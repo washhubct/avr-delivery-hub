@@ -58,13 +58,50 @@ var GRACE_DAYS = 5;              // primi N giorni del mese: sync anche mese pre
 var MAX_RUN_MS = 4.5 * 60 * 1000; // budget tempo prima di salvare checkpoint
 var CKPT_KEY = 'SYNC_MENSILI_CKPT';
 
-var DRIVER_LIST = [
+var DRIVER_LIST_FALLBACK = [
   'VISCONTI','ARICO','GALEAZZO','ROTOLO','TUMMINIA','BUCCHERI','SCHILLACI',
   'CARDILE','IMMORMINO','DI GIORGI','DI CANDIA','AREZZIO','GALLO','STURIALE',
   'MESSINA','VINCI','LA PORTA','BRUNO','ZAPPALA','SCABOTTI','DAL PIN','MASSIMINO',
   'SIYAMBALA GAMAGE','PITTA','BELLUARDO','ZOCCO','CANNARELLA','LI NOCE','DI PRIMA',
   'DI MARCO','GIACOBBE','ORLANDO','PRAINITO'
 ];
+
+// Lista driver letta da driverAnagrafica (attivi) — la lista fissa sotto
+// resta come fallback se la chiamata Firestore fallisce.
+var DRIVER_LIST_CACHE = null;
+function loadDriverList() {
+  if (DRIVER_LIST_CACHE) return DRIVER_LIST_CACHE;
+  try {
+    var token = ScriptApp.getOAuthToken();
+    var base = 'https://firestore.googleapis.com/v1/projects/' + FIREBASE_PROJECT_ID +
+               '/databases/(default)/documents/driverAnagrafica?pageSize=300' +
+               '&mask.fieldPaths=cognome&mask.fieldPaths=attivo';
+    var out = [];
+    var pageToken = '';
+    do {
+      var resp = UrlFetchApp.fetch(base + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''),
+        { headers: { 'Authorization': 'Bearer ' + token }, muteHttpExceptions: true });
+      if (resp.getResponseCode() >= 400) throw new Error('HTTP ' + resp.getResponseCode());
+      var data = JSON.parse(resp.getContentText());
+      var docs = data.documents || [];
+      for (var i = 0; i < docs.length; i++) {
+        var f = docs[i].fields || {};
+        var attivo = f.attivo && f.attivo.booleanValue === true;
+        var cog = f.cognome && f.cognome.stringValue;
+        if (attivo && cog) out.push(cog.toUpperCase().trim().replace(/['\u2019`]/g, ''));
+      }
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
+    if (out.length < 5) throw new Error('lista sospetta (' + out.length + ' nomi)');
+    DRIVER_LIST_CACHE = out;
+    Logger.log('DRIVER_LIST da anagrafica: ' + out.length + ' driver attivi');
+  } catch (e) {
+    Logger.log('WARN loadDriverList: ' + e.message + ' - uso fallback hardcoded');
+    DRIVER_LIST_CACHE = DRIVER_LIST_FALLBACK;
+  }
+  return DRIVER_LIST_CACHE;
+}
+
 
 var FILIALI = [
   { sheetId: '1Mbog1enTD18W0r7Ie03EzBchYR9lCF5yvpW6dQL1aBM', codice: '300', area: 'CT', nome: 'Balatelle' },
@@ -119,8 +156,9 @@ function isOurDriver(name) {
   if (!name) return false;
   var r = name.toString().trim().toUpperCase().replace(/['\u2019`]/g, '').replace(/\s+/g, ' ');
   if (!r) return false;
-  for (var i = 0; i < DRIVER_LIST.length; i++) {
-    if (r.indexOf(DRIVER_LIST[i]) >= 0 || DRIVER_LIST[i].indexOf(r) >= 0) return true;
+  var lista = loadDriverList();
+  for (var i = 0; i < lista.length; i++) {
+    if (r.indexOf(lista[i]) >= 0 || lista[i].indexOf(r) >= 0) return true;
   }
   return false;
 }
