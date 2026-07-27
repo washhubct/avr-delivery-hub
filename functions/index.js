@@ -206,9 +206,9 @@ async function sendResendEmail({ apiKey, to, link }) {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            from: 'Last Mile <noreply@avrlogisticarl.com>',
+            from: 'Last Mile <noreply@last-mile.it>',
             to: [to],
-            reply_to: 'amministrazione@avrlogisticarl.com',
+            reply_to: 'risorse.umane@last-mile.it',
             subject: 'Reimposta la tua password — Last Mile',
             html,
         }),
@@ -354,9 +354,9 @@ async function sendResendInvitoEmail({ apiKey, to, link, nome, mansione, provinc
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            from: 'Last Mile <noreply@avrlogisticarl.com>',
+            from: 'Last Mile <noreply@last-mile.it>',
             to: [to],
-            reply_to: 'amministrazione@avrlogisticarl.com',
+            reply_to: 'risorse.umane@last-mile.it',
             subject,
             html,
         }),
@@ -1379,7 +1379,7 @@ function giornoInRome(date) {
 
 function initWebpush() {
     webpush.setVapidDetails(
-        'mailto:amministrazione@avrlogisticarl.com',
+        'mailto:guido@last-mile.it',
         VAPID_PUBLIC_KEY.value().trim(),
         VAPID_PRIVATE_KEY.value().trim()
     );
