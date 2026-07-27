@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Manuale App Driver — Last Mile</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',-apple-system,'Segoe UI',sans-serif; color:#1e293b; font-size:11.5pt; line-height:1.55; }
+  .cover { text-align:center; padding:40px 0 26px; border-bottom:4px solid #0ea5e9; margin-bottom:28px; }
+  .cover .brand { font-size:26pt; font-weight:800; color:#0f1d3d; letter-spacing:3px; }
+  .cover .brand span { color:#0ea5e9; }
+  .cover h1 { font-size:15pt; font-weight:700; color:#334155; margin-top:8px; }
+  .cover .sub { font-size:10pt; color:#64748b; margin-top:6px; }
+  h2 { font-size:14pt; color:#0f1d3d; border-left:5px solid #0ea5e9; padding-left:10px; margin:26px 0 10px; page-break-after:avoid; }
+  p { margin-bottom:8px; }
+  ul, ol { margin:0 0 10px 22px; }
+  li { margin-bottom:5px; }
+  .step { display:flex; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:10px; page-break-inside:avoid; }
+  .step .n { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:#0f1d3d; color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:12pt; }
+  .box-warn { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  .box-ok { background:#ecfdf5; border:1px solid #6ee7b7; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  .big { background:#0f1d3d; color:#fff; border-radius:10px; padding:12px 16px; text-align:center; font-size:13pt; font-weight:800; letter-spacing:1px; margin:10px 0 16px; }
+  table { width:100%; border-collapse:collapse; margin:10px 0 14px; font-size:10.5pt; page-break-inside:avoid; }
+  th { background:#0f1d3d; color:#fff; text-align:left; padding:7px 10px; font-weight:700; }
+  td { border:1px solid #e2e8f0; padding:7px 10px; vertical-align:top; }
+  code { font-family:Menlo,monospace; font-size:9.5pt; background:#eef2f7; padding:1px 5px; border-radius:4px; }
+  .footer { margin-top:30px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:9pt; color:#94a3b8; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">LAST <span>MILE</span></div>
+  <h1>Manuale App Driver</h1>
+  <div class="sub">Come registrare consegne, timbrature e compensi · Luglio 2026</div>
+</div>
+
+<h2>1. Cos'è l'app e perché è obbligatoria</h2>
+<p>L'app driver è lo strumento di lavoro con cui registri i tuoi giri di consegna, timbri entrata e uscita e controlli i tuoi compensi. <strong>L'uso è obbligatorio ogni giorno lavorato:</strong> quello che registri è la base con cui viene calcolato e verificato il tuo compenso.</p>
+<div class="big">appdriver.last-mile.it</div>
+
+<h2>2. Installazione sul telefono (una volta sola)</h2>
+<div class="step"><div class="n">1</div><div>Apri il browser del telefono (Safari su iPhone, Chrome su Android) e vai su <strong>appdriver.last-mile.it</strong></div></div>
+<div class="step"><div class="n">2</div><div><strong>iPhone:</strong> tocca il tasto Condividi <span style="font-size:13pt">⬆️</span> in basso → <strong>"Aggiungi alla schermata Home"</strong><br><strong>Android:</strong> tocca i tre puntini <strong>⋮</strong> in alto a destra → <strong>"Aggiungi a schermata Home"</strong></div></div>
+<div class="step"><div class="n">3</div><div>Ora hai l'icona Last Mile sul telefono: usala sempre da lì, come una normale app.</div></div>
+
+<h2>3. Primo accesso</h2>
+<ol>
+  <li>Riceverai una <strong>email da Last Mile</strong> (mittente <code>noreply@last-mile.it</code> — controlla anche lo spam) con il link per impostare la tua password.</li>
+  <li>Imposta la password e accedi all'app con la <strong>tua email personale</strong> e la password scelta.</li>
+  <li><strong>Ogni notte a mezzanotte l'app ti disconnette</strong>: al mattino rifai il login. È normale.</li>
+</ol>
+<p>Password dimenticata? Nella schermata di login tocca <strong>"Password dimenticata"</strong>: ti arriva una mail per impostarne una nuova.</p>
+
+<h2>4. Registrare il giro — tab "Nuova"</h2>
+<p>Al termine di <strong>ogni giro/fascia</strong> registra subito il lavoro fatto:</p>
+<div class="step"><div class="n">1</div><div>Apri il tab <strong>Nuova</strong></div></div>
+<div class="step"><div class="n">2</div><div>Controlla la <strong>data</strong> (è già su oggi), scegli la <strong>filiale</strong> e la <strong>fascia oraria</strong></div></div>
+<div class="step"><div class="n">3</div><div>Inserisci il <strong>numero di consegne</strong> fatte in quella fascia (massimo 10)</div></div>
+<div class="step"><div class="n">4</div><div>Inserisci <strong>ora di inizio e fine giro reali</strong> — l'app segnala se gli orari non tornano</div></div>
+<div class="step"><div class="n">5</div><div>Aggiungi eventuali note e premi <strong>Salva</strong>. Fatto ✅</div></div>
+<div class="box-warn">⚠️ <strong>Regole importanti:</strong> registra lo stesso giorno (non accumulare); una registrazione per ogni fascia lavorata; orari veri, non a memoria il giorno dopo.</div>
+<div class="box-ok">📵 <strong>Sei senza campo?</strong> Salva lo stesso: l'app conserva il report e lo invia da sola appena torna la connessione. Vedrai un avviso finché non è stato inviato.</div>
+
+<h2>5. Le altre sezioni dell'app</h2>
+<table>
+  <tr><th>Tab</th><th>A cosa serve</th></tr>
+  <tr><td><strong>Oggi</strong></td><td>Riepilogo di quello che hai registrato oggi: fasce, consegne, orari.</td></tr>
+  <tr><td><strong>Compensi</strong></td><td>Le tue consegne del mese e il compenso maturato. Eventuali rate di multe/danni vengono detratte e le vedi indicate.</td></tr>
+  <tr><td><strong>Segnala</strong></td><td>Per segnalare problemi: danni al mezzo, problemi in filiale, ecc. Puoi allegare una foto.</td></tr>
+  <tr><td><strong>Ritorni</strong></td><td>Se una consegna torna indietro (cliente assente, reso), registrala qui.</td></tr>
+  <tr><td><strong>Classifica</strong></td><td>La classifica mensile dei driver, con i premi in palio.</td></tr>
+  <tr><td><strong>Profilo</strong></td><td>I tuoi dati e la targa del mezzo di oggi.</td></tr>
+</table>
+
+<h2>6. Timbratura entrata / uscita</h2>
+<p>In sede trovi un <strong>tag NFC</strong> (adesivo) al punto timbratura:</p>
+<div class="step"><div class="n">1</div><div><strong>Appoggia il telefono al tag</strong> — si apre da sola la pagina di timbratura (serve l'NFC attivo: su iPhone è sempre attivo, su Android controlla nelle impostazioni rapide)</div></div>
+<div class="step"><div class="n">2</div><div>Premi <strong>ENTRATA</strong> a inizio turno o <strong>USCITA</strong> a fine turno</div></div>
+<div class="step"><div class="n">3</div><div>Quando richiesto, <strong>consenti la posizione</strong>: la timbratura vale solo se sei davvero in sede</div></div>
+<p>In alternativa al tag puoi inquadrare il <strong>QR ufficiale</strong> esposto in sede, dalla stessa pagina.</p>
+<div class="box-warn">⚠️ Se compare "tag non valido o scaduto", avvisa il tuo responsabile: il tag va riprogrammato. Non è un tuo errore.</div>
+
+<h2>7. Problemi? </h2>
+<table>
+  <tr><th>Problema</th><th>Cosa fare</th></tr>
+  <tr><td>Non ricordo la password</td><td>Login → "Password dimenticata" → controlla la mail (anche spam)</td></tr>
+  <tr><td>"Account non abilitato"</td><td>Contatta l'ufficio: <code>risorse.umane@last-mile.it</code></td></tr>
+  <tr><td>L'app non invia il report</td><td>Probabile assenza di rete: si invia da solo appena torna il campo. Se l'avviso resta anche con la rete, fai uno screenshot e segnalalo.</td></tr>
+  <tr><td>Ho sbagliato una registrazione</td><td>Segnalalo subito all'ufficio indicando data, filiale e fascia: la correzione la fanno loro.</td></tr>
+</table>
+
+<div class="footer">Last Mile S.r.l. — Documento interno · Manuale App Driver · Luglio 2026</div>
+
+</body>
+</html>

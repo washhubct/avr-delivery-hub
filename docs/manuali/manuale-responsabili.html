@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Manuale Responsabili — Last Mile</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',-apple-system,'Segoe UI',sans-serif; color:#1e293b; font-size:11.5pt; line-height:1.55; }
+  .cover { text-align:center; padding:40px 0 26px; border-bottom:4px solid #0ea5e9; margin-bottom:28px; }
+  .cover .brand { font-size:26pt; font-weight:800; color:#0f1d3d; letter-spacing:3px; }
+  .cover .brand span { color:#0ea5e9; }
+  .cover h1 { font-size:15pt; font-weight:700; color:#334155; margin-top:8px; }
+  .cover .sub { font-size:10pt; color:#64748b; margin-top:6px; }
+  h2 { font-size:14pt; color:#0f1d3d; border-left:5px solid #0ea5e9; padding-left:10px; margin:26px 0 10px; page-break-after:avoid; }
+  p { margin-bottom:8px; }
+  ul, ol { margin:0 0 10px 22px; }
+  li { margin-bottom:5px; }
+  .step { display:flex; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:10px; page-break-inside:avoid; }
+  .step .n { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:#0f1d3d; color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:12pt; }
+  .box-warn { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  .box-ok { background:#ecfdf5; border:1px solid #6ee7b7; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  table { width:100%; border-collapse:collapse; margin:10px 0 14px; font-size:10.5pt; page-break-inside:avoid; }
+  th { background:#0f1d3d; color:#fff; text-align:left; padding:7px 10px; font-weight:700; }
+  td { border:1px solid #e2e8f0; padding:7px 10px; vertical-align:top; }
+  code { font-family:Menlo,monospace; font-size:9.5pt; background:#eef2f7; padding:1px 5px; border-radius:4px; }
+  .ok { color:#047857; font-weight:700; }
+  .no { color:#b91c1c; font-weight:700; }
+  .footer { margin-top:30px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:9pt; color:#94a3b8; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">LAST <span>MILE</span></div>
+  <h1>Manuale Operativo — Responsabili di Area</h1>
+  <div class="sub">Monitoraggio consegne, driver e segnalazioni · Luglio 2026</div>
+</div>
+
+<h2>1. Accesso al gestionale</h2>
+<p>Il gestionale è su <strong>dashboard.last-mile.it</strong>. Accedi con la tua email aziendale (es. <code>alfio@last-mile.it</code>, <code>alessio@last-mile.it</code>). In alto vedrai il tuo ruolo con le province di competenza (es. "Responsabile — CT, SR, EN").</p>
+<ul>
+  <li>Ogni notte a <strong>mezzanotte</strong> la sessione scade: al mattino rifai il login. È una misura di sicurezza, non un errore.</li>
+  <li>Password dimenticata? "Reimposta password" dalla schermata di login.</li>
+</ul>
+
+<h2>2. Cosa puoi fare (e cosa no)</h2>
+<table>
+  <tr><th>Sezione</th><th>Accesso</th><th>Note</th></tr>
+  <tr><td>Consegne</td><td class="ok">✔ Completo</td><td>Filtri per filiale, driver, periodo</td></tr>
+  <tr><td>Produttività</td><td class="ok">✔ Completo</td><td>Confronto app driver vs file Decò</td></tr>
+  <tr><td>Segnalazioni / Ritorni</td><td class="ok">✔ Completo</td><td>Le segnalazioni dei driver arrivano qui</td></tr>
+  <tr><td>Compensi / Fatturazione</td><td class="ok">✔ Consultazione</td><td>Per verifica e controllo</td></tr>
+  <tr><td>Anagrafica Driver</td><td class="ok">✔ Sola lettura</td><td>Per modifiche/nuovi driver → Risorse Umane</td></tr>
+  <tr><td>P&amp;L, Utenti, Timbrature, Log</td><td class="no">✘ Non visibili</td><td>Riservati ad amministrazione e HR</td></tr>
+</table>
+
+<h2>3. Il giro di controllo quotidiano (10 minuti)</h2>
+<div class="step"><div class="n">1</div><div><strong>Consegne</strong> — controlla la giornata di ieri per le tue province: i dati Decò si sincronizzano automaticamente ogni sera. Se una filiale risulta a zero in un giorno lavorativo, è un'anomalia: segnalala.</div></div>
+<div class="step"><div class="n">2</div><div><strong>Produttività</strong> — guarda la colonna "App driver" vs "File Decò": se un driver ha lavorato (consegne Decò presenti) ma non ha registrato nulla sull'app, va richiamato in giornata. L'uso dell'app è obbligatorio.</div></div>
+<div class="step"><div class="n">3</div><div><strong>Segnalazioni</strong> — leggi le segnalazioni nuove dei driver (danni, problemi in filiale) e prendile in carico. Quelle con foto contengono i dettagli allegati.</div></div>
+<div class="step"><div class="n">4</div><div><strong>Ritorni</strong> — verifica i ritorni registrati (cliente assente, resi): se una filiale ne accumula tanti, approfondisci il perché.</div></div>
+
+<h2>4. Controlli settimanali</h2>
+<ul>
+  <li><strong>Driver che non usano l'app:</strong> se dopo il richiamo verbale un driver continua a non registrare i giri, passa il nominativo alle Risorse Umane per il sollecito formale.</li>
+  <li><strong>Numeri per filiale:</strong> confronta le consegne della settimana con la media: cali o picchi anomali di una filiale vanno capiti (ferie? problema sul foglio? driver mancante?).</li>
+  <li><strong>Driver nuovi in zona:</strong> verifica che compaiano in dashboard dal primo giorno. Se un nuovo assunto non compare, il censimento in anagrafica non è completo → Risorse Umane.</li>
+</ul>
+
+<h2>5. Cosa passa da te e cosa no</h2>
+<table>
+  <tr><th>Situazione</th><th>Chi la gestisce</th></tr>
+  <tr><td>Driver non registra i giri sull'app</td><td><strong>Tu</strong> (richiamo) → se recidivo, Risorse Umane</td></tr>
+  <tr><td>Segnalazione danno/problema dal driver</td><td><strong>Tu</strong> (presa in carico e verifica sul posto)</td></tr>
+  <tr><td>Nuovo driver, credenziali, contratti, cessazioni</td><td>Risorse Umane — <code>risorse.umane@last-mile.it</code></td></tr>
+  <tr><td>Driver non riesce ad accedere all'app</td><td>Risorse Umane (verifica anagrafica e reinvio credenziali)</td></tr>
+  <tr><td>Dati consegne mancanti o strani in dashboard</td><td>Direzione — <code>guido@last-mile.it</code></td></tr>
+  <tr><td>Multe e danni con importi da detrarre</td><td>Amministrazione</td></tr>
+</table>
+
+<div class="box-ok">✅ <strong>In sintesi:</strong> il tuo lavoro sul gestionale è il monitoraggio: consegne regolari, driver che usano l'app, segnalazioni gestite. Tutto ciò che è anagrafica, accessi e contratti passa dalle Risorse Umane; i dati e i sistemi dalla direzione.</div>
+
+<h2>6. Problemi frequenti</h2>
+<table>
+  <tr><th>Problema</th><th>Cosa fare</th></tr>
+  <tr><td>Non vedo una sezione che mi serve</td><td>È riservata ad altri ruoli: se pensi ti serva davvero, chiedi alla direzione.</td></tr>
+  <tr><td>Un driver compare due volte con nomi simili</td><td>Segnalalo alla direzione: probabile variante del cognome sui fogli.</td></tr>
+  <tr><td>I dati di ieri non ci sono ancora</td><td>Il sync gira in serata: se a metà mattina mancano ancora, segnalalo.</td></tr>
+  <tr><td>La dashboard mi ha scollegato</td><td>Normale dopo mezzanotte: rifai il login.</td></tr>
+</table>
+
+<div class="footer">Last Mile S.r.l. — Documento interno · Manuale Responsabili di Area · Luglio 2026</div>
+
+</body>
+</html>

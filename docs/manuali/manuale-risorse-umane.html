@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Manuale Risorse Umane — Last Mile</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',-apple-system,'Segoe UI',sans-serif; color:#1e293b; font-size:11.5pt; line-height:1.55; }
+  .cover { text-align:center; padding:40px 0 26px; border-bottom:4px solid #0ea5e9; margin-bottom:28px; }
+  .cover .brand { font-size:26pt; font-weight:800; color:#0f1d3d; letter-spacing:3px; }
+  .cover .brand span { color:#0ea5e9; }
+  .cover h1 { font-size:15pt; font-weight:700; color:#334155; margin-top:8px; }
+  .cover .sub { font-size:10pt; color:#64748b; margin-top:6px; }
+  h2 { font-size:14pt; color:#0f1d3d; border-left:5px solid #0ea5e9; padding-left:10px; margin:26px 0 10px; page-break-after:avoid; }
+  h3 { font-size:11.5pt; color:#0f1d3d; margin:14px 0 6px; page-break-after:avoid; }
+  p { margin-bottom:8px; }
+  ul, ol { margin:0 0 10px 22px; }
+  li { margin-bottom:5px; }
+  .step { display:flex; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:10px; page-break-inside:avoid; }
+  .step .n { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:#0f1d3d; color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:12pt; }
+  .box-warn { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  .box-ok { background:#ecfdf5; border:1px solid #6ee7b7; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  table { width:100%; border-collapse:collapse; margin:10px 0 14px; font-size:10.5pt; page-break-inside:avoid; }
+  th { background:#0f1d3d; color:#fff; text-align:left; padding:7px 10px; font-weight:700; }
+  td { border:1px solid #e2e8f0; padding:7px 10px; vertical-align:top; }
+  code { font-family:'JetBrains Mono',Menlo,monospace; font-size:9.5pt; background:#eef2f7; padding:1px 5px; border-radius:4px; }
+  .footer { margin-top:30px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:9pt; color:#94a3b8; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">LAST <span>MILE</span></div>
+  <h1>Manuale Operativo — Risorse Umane</h1>
+  <div class="sub">Gestione driver: assunzione, accessi, controlli · Luglio 2026</div>
+</div>
+
+<h2>1. Accesso al gestionale</h2>
+<p>Il gestionale si trova su <strong>dashboard.last-mile.it</strong>. Accedi con la tua email aziendale (es. <code>risorse.umane@last-mile.it</code>) e la tua password.</p>
+<ul>
+  <li>Ogni notte a <strong>mezzanotte</strong> la sessione scade automaticamente: al mattino va rifatto il login. È normale, è una misura di sicurezza.</li>
+  <li>Password dimenticata? Usa "Reimposta password" nella schermata di login: arriva una mail con il link.</li>
+</ul>
+
+<h2>2. Nuovo dipendente driver — procedura completa</h2>
+
+<div class="step"><div class="n">1</div><div>
+<strong>Crea l'anagrafica.</strong> Menu <strong>Anagrafica Driver → Nuovo driver</strong>. Compila:
+<ul>
+  <li><strong>Cognome e Nome</strong> — esattamente come compaiono sui documenti (il cognome è la chiave con cui il sistema aggancia consegne, compensi e report: scrivilo giusto).</li>
+  <li><strong>Città/Provincia</strong> — la sede di lavoro (CT, ME, PA, SR, EN).</li>
+  <li><strong>Email personale del driver</strong> — sarà il suo nome utente per l'app. Scrivila in minuscolo e ricontrollala: un errore qui significa che il driver non riceverà le credenziali.</li>
+  <li><strong>Contratto</strong> (Full time / Part time) e <strong>scadenza</strong> (vuoto = indeterminato).</li>
+  <li><strong>Costo consegna</strong> — normalmente €3,50 (già preimpostato).</li>
+</ul>
+</div></div>
+
+<div class="step"><div class="n">2</div><div>
+<strong>Invia le credenziali.</strong> Dalla riga del driver in anagrafica premi <strong>Invia credenziali</strong>. Il driver riceve una mail da <code>noreply@last-mile.it</code> con il link per impostare la password.
+<div class="box-warn">⚠️ Avvisa il driver di controllare anche la <strong>cartella spam</strong>. Se il link è scaduto o la mail non arriva, premi di nuovo "Invia credenziali": si può rifare quante volte serve.</div>
+</div></div>
+
+<div class="step"><div class="n">3</div><div>
+<strong>Spiega gli obblighi al nuovo assunto.</strong> Consegna il manuale dell'app e chiarisci che:
+<ul>
+  <li>L'app è <strong>obbligatoria</strong>: ogni giro va registrato lo stesso giorno, con orari reali di inizio e fine.</li>
+  <li>La <strong>timbratura</strong> di entrata e uscita si fa in sede appoggiando il telefono al tag NFC.</li>
+  <li>Il mancato utilizzo dell'app incide sul calcolo dei compensi e viene verificato ogni settimana.</li>
+</ul>
+</div></div>
+
+<div class="step"><div class="n">4</div><div>
+<strong>Verifica il primo giorno.</strong> Controlla che il driver riesca a entrare nell'app e che il suo primo report giornaliero compaia nella sezione <strong>Produttività</strong>. Se compare, la pratica è chiusa.
+</div></div>
+
+<div class="box-ok">✅ <strong>Regola d'oro:</strong> l'anagrafica è la fonte unica. Una volta censito il driver, tutti i sistemi (app, report Decò, compensi, produttività) lo riconoscono da soli entro il giorno successivo. Non serve chiedere configurazioni tecniche a nessuno.</div>
+
+<h2>3. Controlli periodici</h2>
+<table>
+  <tr><th>Quando</th><th>Cosa controllare</th><th>Dove</th></tr>
+  <tr><td><strong>Ogni settimana</strong></td><td>Chi non sta registrando i giri sull'app (colonna "App driver" a zero con consegne Decò presenti)</td><td>Produttività</td></tr>
+  <tr><td><strong>Ogni settimana</strong></td><td>Timbrature mancanti o anomale</td><td>Timbrature</td></tr>
+  <tr><td><strong>Ogni mese</strong></td><td>Contratti in scadenza: badge <strong style="color:#b45309">giallo</strong> = scade entro 30 giorni, <strong style="color:#b91c1c">rosso</strong> = scaduto</td><td>Anagrafica Driver</td></tr>
+</table>
+<p>Per i solleciti sull'uso dell'app: prima un promemoria verbale/WhatsApp, se recidivo segnalazione alla direzione.</p>
+
+<h2>4. Modifiche e cessazioni</h2>
+<ul>
+  <li><strong>Rinnovo contratto:</strong> apri il driver in anagrafica e aggiorna tipo contratto e data di scadenza.</li>
+  <li><strong>Cambio email:</strong> correggi l'email in anagrafica e reinvia le credenziali.</li>
+  <li><strong>Cessazione:</strong> usa <strong>Disattiva</strong> — mai eliminare. Il driver disattivato non può più accedere all'app ma lo storico (consegne, compensi, timbrature) resta disponibile.</li>
+</ul>
+
+<h2>5. Problemi frequenti</h2>
+<table>
+  <tr><th>Problema</th><th>Soluzione</th></tr>
+  <tr><td>La mail con le credenziali non arriva</td><td>Far controllare lo spam → verificare l'email in anagrafica → premere di nuovo "Invia credenziali"</td></tr>
+  <tr><td>L'app dice "Account non abilitato"</td><td>Il driver non è censito, è disattivato, oppure sta usando un'email diversa da quella in anagrafica. Correggi l'anagrafica e fallo riprovare.</td></tr>
+  <tr><td>Password dimenticata</td><td>Il driver può farlo da solo dal login dell'app ("Password dimenticata"). In alternativa reinvia le credenziali dall'anagrafica.</td></tr>
+  <tr><td>Il driver nuovo non compare nei report</td><td>Verifica che sia censito in anagrafica come <strong>attivo</strong> e che il cognome sia scritto come sui fogli di consegna. I report si allineano entro il giorno dopo.</td></tr>
+  <tr><td>La timbratura dice "tag non valido"</td><td>Il tag NFC della sede va riprogrammato: segnalalo alla direzione.</td></tr>
+</table>
+
+<div class="footer">Last Mile S.r.l. — Documento interno · Manuale Risorse Umane · Luglio 2026</div>
+
+</body>
+</html>
