@@ -1,7 +1,8 @@
 // DELIVERY HUB v2 — Auth Module with roles + auto-logout a mezzanotte + log accessi
 
 var SUPER_ADMIN_EMAILS = [
-    'amministrazione@avrlogisticarl.com'
+    'amministrazione@avrlogisticarl.com', // legacy — rimuovere a spegnimento dominio AVR
+    'guido@last-mile.it'
 ];
 
 // Fallback hardcoded — attivo finché non completiamo la migrazione a

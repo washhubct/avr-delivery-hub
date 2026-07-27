@@ -73,5 +73,6 @@ const state = {
     ]
 };
 const ADMIN_EMAILS = [
-    'amministrazione@avrlogisticarl.com'
+    'amministrazione@avrlogisticarl.com', // legacy — rimuovere a spegnimento dominio AVR
+    'guido@last-mile.it'
 ];

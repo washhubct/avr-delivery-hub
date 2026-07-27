@@ -27,7 +27,11 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isSignedIn() && userEmail() == 'amministrazione@avrlogisticarl.com';
+      // Doppia allowlist durante il rebrand Last Mile: la mail AVR va
+      // rimossa allo spegnimento del dominio avrlogisticarl.com.
+      return isSignedIn()
+             && (userEmail() == 'amministrazione@avrlogisticarl.com'
+                 || userEmail() == 'guido@last-mile.it');
     }
 
     function isStaff() {

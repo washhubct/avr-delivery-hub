@@ -110,7 +110,7 @@ exports.requestPasswordReset = onRequest(
 // Autorizzazione "gestione personale" (accessi driver, anagrafica):
 // superadmin/staff hardcoded + amministratore/HR attivi dalla collection utenti.
 // Allineato alle Firestore rules canManageAnagrafica().
-const STAFF_ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com'];
+const STAFF_ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com', 'guido@last-mile.it'];
 async function canManageDriverAccess(callerEmail) {
     if (STAFF_ADMIN_EMAILS.includes(callerEmail)) return true;
     try {
@@ -256,7 +256,8 @@ exports.creaUtenzaGestionale = onRequest(
             res.status(401).json({ error: 'Token non valido' });
             return;
         }
-        if (callerEmail !== 'amministrazione@avrlogisticarl.com') {
+        const SUPERADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'guido@last-mile.it'];
+        if (!SUPERADMIN_EMAILS.includes(callerEmail)) {
             res.status(403).json({ error: 'Solo il Superadmin può creare utenze' });
             return;
         }
@@ -269,7 +270,7 @@ exports.creaUtenzaGestionale = onRequest(
         const rinviaSoloEmail = !!body.rinviaSoloEmail;
 
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.status(400).json({ error: 'Email non valida' }); return; }
-        if (email === 'amministrazione@avrlogisticarl.com') { res.status(400).json({ error: 'Superadmin gestito hardcoded — non registrabile qui' }); return; }
+        if (SUPERADMIN_EMAILS.includes(email)) { res.status(400).json({ error: 'Superadmin gestito hardcoded — non registrabile qui' }); return; }
         if (!nome && !rinviaSoloEmail) { res.status(400).json({ error: 'Nome obbligatorio' }); return; }
         if (!rinviaSoloEmail) {
             if (!VALID_MANSIONI.includes(mansione)) { res.status(400).json({ error: 'Mansione non valida' }); return; }
@@ -640,7 +641,7 @@ exports.rebuildLeaderboard = onRequest(
             res.status(401).json({ error: 'Token non valido' });
             return;
         }
-        const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com'];
+        const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com', 'guido@last-mile.it'];
         if (!ADMIN_EMAILS.includes(email)) { res.status(403).json({ error: 'Non autorizzato' }); return; }
 
         const meseSpecifico = (req.body && req.body.mese) || null;
@@ -1225,7 +1226,7 @@ const _syncConsegne_disattivato = onRequest(
             res.status(401).json({ error: 'Token non valido' });
             return;
         }
-        const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com'];
+        const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com', 'guido@last-mile.it'];
         if (!ADMIN_EMAILS.includes(email)) { res.status(403).json({ error: 'Non autorizzato' }); return; }
 
         const meseSpecifico = (req.body && req.body.mese) || null;
