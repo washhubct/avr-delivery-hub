@@ -19,7 +19,7 @@ const ALLOWED_ORIGINS = [
     'https://dashboard.last-mile.it',
     'https://app.last-mile.it',
     'https://appdriver.last-mile.it',
-    'https://dashboard.avrlogisticarl.com',
+    'https://dashboard.last-mile.it',
     'https://appdriver.avrlogisticarl.com',
     'https://app.avrlogisticarl.com',
     'https://avr-logistic-dashboard.firebaseapp.com',
@@ -743,8 +743,8 @@ function buildInvitoEmailHtml({ link, nome, mansione, province, nuovoAccount }) 
         <td style="background:#0d1117;padding:18px 40px;text-align:center;border-top:1px solid rgba(148,163,184,0.08)">
           <p style="margin:0;font-size:11px;color:#4a5878;line-height:1.7">
             Last Mile &mdash; AVR Logistic S.r.l.<br>
-            <a href="https://dashboard.avrlogisticarl.com" style="color:#38bdf8;text-decoration:none">
-              dashboard.avrlogisticarl.com
+            <a href="https://dashboard.last-mile.it" style="color:#38bdf8;text-decoration:none">
+              dashboard.last-mile.it
             </a>
           </p>
         </td>
@@ -824,8 +824,8 @@ function buildEmailHtml(link) {
         <td style="background:#0d1117;padding:18px 40px;text-align:center;border-top:1px solid rgba(148,163,184,0.08)">
           <p style="margin:0;font-size:11px;color:#4a5878;line-height:1.7">
             Last Mile &mdash; AVR Logistic S.r.l.<br>
-            <a href="https://dashboard.avrlogisticarl.com" style="color:#38bdf8;text-decoration:none">
-              dashboard.avrlogisticarl.com
+            <a href="https://dashboard.last-mile.it" style="color:#38bdf8;text-decoration:none">
+              dashboard.last-mile.it
             </a>
           </p>
         </td>
