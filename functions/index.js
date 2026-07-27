@@ -18,6 +18,7 @@ const VAPID_PRIVATE_KEY = defineSecret('VAPID_PRIVATE_KEY');
 const ALLOWED_ORIGINS = [
     'https://dashboard.last-mile.it',
     'https://app.last-mile.it',
+    'https://appdriver.last-mile.it',
     'https://dashboard.avrlogisticarl.com',
     'https://appdriver.avrlogisticarl.com',
     'https://app.avrlogisticarl.com',
