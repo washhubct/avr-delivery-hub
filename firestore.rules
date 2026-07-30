@@ -296,6 +296,14 @@ service cloud.firestore {
       return isAdminOrStaff() || isAmministratore() || isRisorseUmane() || isResponsabile();
     }
 
+    // ── ARCHIVIO DRIVER CESSATI — scritto solo dalla CF pulisciAnagrafica
+    // (admin SDK). L'ufficio lo legge per l'attribuzione storica delle
+    // consegne (cognomi/alias dei cessati restano riconosciuti).
+    match /driverArchivio/{doc} {
+      allow read: if isGestionale();
+      allow write: if false;
+    }
+
     match /puntiTimbratura/{provincia} {
       allow read: if isSignedIn();
       allow write: if canManageTimbrature();
