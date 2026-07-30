@@ -55,6 +55,12 @@ function buildDriverAvrSet() {
                 set.add((d.cognome + ' ' + d.nome).toUpperCase().trim());
                 set.add((d.nome + ' ' + d.cognome).toUpperCase().trim());
             }
+            // Alias gestiti in anagrafica (es. FELIX → Siyambala): stessa fonte del GAS
+            if (Array.isArray(d.alias)) {
+                d.alias.forEach(function(a) {
+                    if (a) { set.add(String(a).toUpperCase().trim()); set.add(String(a).toUpperCase().trim().replace(/\s+/g, '')); }
+                });
+            }
         });
     }
 

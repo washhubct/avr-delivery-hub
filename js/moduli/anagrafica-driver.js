@@ -80,6 +80,7 @@ function openAddDriver() {
         </div>
         <div class="form-group"><label>Scadenza contratto <span style="color:var(--text-light);font-weight:400">(vuoto = indeterminato)</span></label><input type="date" id="drScadenza" class="input"></div>
         <div class="form-group"><label>Email (per accesso driver app)</label><input type="email" id="drEmail" class="input" placeholder="obbligatoria per accesso app"></div>
+        <div class="form-group"><label>Alias sui fogli Decò <span style="color:var(--text-light);font-weight:400">(altri nomi con cui appare come rider, separati da virgola)</span></label><input type="text" id="drAlias" class="input" placeholder="es. FELIX"></div>
         <div style="display:flex;gap:8px;margin-top:8px">
             <button class="btn btn-primary" onclick="saveDriverAndCreateAccess()" style="flex:1">Salva + Crea accesso app</button>
         </div>
@@ -95,6 +96,7 @@ async function saveDriver(editId) {
         contratto: document.getElementById('drContratto').value,
         scadenzaContratto: document.getElementById('drScadenza')?.value || null,
         email: document.getElementById('drEmail')?.value.trim().toLowerCase() || null,
+        alias: (document.getElementById('drAlias')?.value || '').split(',').map(a => a.trim().toUpperCase()).filter(Boolean),
         attivo: true,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -185,6 +187,7 @@ async function editDriver(id) {
         </div>
         <div class="form-group"><label>Scadenza contratto <span style="color:var(--text-light);font-weight:400">(vuoto = indeterminato)</span></label><input type="date" id="drScadenza" class="input" value="${d.scadenzaContratto || ''}"></div>
         <div class="form-group"><label>Email</label><input type="email" id="drEmail" class="input" value="${d.email||''}"></div>
+        <div class="form-group"><label>Alias sui fogli Decò <span style="color:var(--text-light);font-weight:400">(separati da virgola)</span></label><input type="text" id="drAlias" class="input" value="${Array.isArray(d.alias)?d.alias.join(', '):''}"></div>
         <button class="btn btn-primary" onclick="saveDriver('${id}')" style="width:100%;margin-top:8px">Aggiorna</button>
         ${d.email ? `<button class="btn" onclick="reinviaResetPassword('${d.email}')" style="width:100%;margin-top:6px">📧 Reinvia password di accesso</button>` : `<button class="btn" onclick="creaAccessoDriver(document.getElementById('drEmail').value.trim().toLowerCase())" style="width:100%;margin-top:6px">🔑 Crea accesso app</button>`}
     `);

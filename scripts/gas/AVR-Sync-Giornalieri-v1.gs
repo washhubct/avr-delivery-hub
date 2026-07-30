@@ -18,6 +18,14 @@ var DRIVER_LIST_FALLBACK = [
   'DI MARCO','GIACOBBE','ORLANDO','PRAINITO'
 ];
 
+
+// Normalizza nome per confronto: maiuscole, niente accenti/apostrofi.
+function normNome(s) {
+  return String(s || '').toUpperCase().trim()
+    .replace(/[\u00C0-\u00C5]/g, 'A').replace(/[\u00C8-\u00CB]/g, 'E')
+    .replace(/[\u00CC-\u00CF]/g, 'I').replace(/[\u00D2-\u00D6]/g, 'O')
+    .replace(/[\u00D9-\u00DC]/g, 'U').replace(/['\u2019`]/g, '');
+}
 // Lista driver letta da driverAnagrafica (attivi) — la lista fissa sotto
 // resta come fallback se la chiamata Firestore fallisce.
 var DRIVER_LIST_CACHE = null;
@@ -27,7 +35,7 @@ function loadDriverList() {
     var token = ScriptApp.getOAuthToken();
     var base = 'https://firestore.googleapis.com/v1/projects/' + FIREBASE_PROJECT_ID +
                '/databases/(default)/documents/driverAnagrafica?pageSize=300' +
-               '&mask.fieldPaths=cognome&mask.fieldPaths=attivo';
+               '&mask.fieldPaths=cognome&mask.fieldPaths=attivo&mask.fieldPaths=alias';
     var out = [];
     var pageToken = '';
     do {
@@ -40,7 +48,11 @@ function loadDriverList() {
         var f = docs[i].fields || {};
         var attivo = f.attivo && f.attivo.booleanValue === true;
         var cog = f.cognome && f.cognome.stringValue;
-        if (attivo && cog) out.push(cog.toUpperCase().trim().replace(/['\u2019`]/g, ''));
+        if (attivo && cog) out.push(normNome(cog));
+        // Alias dai fogli (es. FELIX per Siyambala): campo array 'alias' in anagrafica
+        if (attivo && f.alias && f.alias.arrayValue && f.alias.arrayValue.values) {
+          f.alias.arrayValue.values.forEach(function(v) { if (v.stringValue) out.push(normNome(v.stringValue)); });
+        }
       }
       pageToken = data.nextPageToken || '';
     } while (pageToken);
@@ -83,7 +95,7 @@ function classificaTipoDriver(prest, rider, isAvr) {
 }
 function isDriver(name) {
   if (!name) return false;
-  var r = name.toString().trim().toUpperCase().replace(/['\u2019`]/g, '').replace(/\s+/g, '');
+  var r = normNome(name).replace(/\s+/g, '');
   if (!r) return false;
   var lista = loadDriverList();
   for (var i = 0; i < lista.length; i++) {
