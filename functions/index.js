@@ -1582,11 +1582,15 @@ exports.controlliAutomatici = onSchedule(
         const dayOf = (v) => { const d = v && v.toDate ? v.toDate() : new Date(v); return isNaN(d) ? null : fmt(d); };
         const norm = (s) => String(s || '').toUpperCase().replace(/['\u2019` ]/g, '').trim();
 
-        const [conSnap, repSnap, anagSnap] = await Promise.all([
+        const [conSnap, repSnap, anagSnap, cfgSnap] = await Promise.all([
             db.collection('consegne').where('mese', '==', mese).get(),
             db.collection('reportDriver').where('mese', '==', mese).get(),
             db.collection('driverAnagrafica').get(),
+            db.collection('config').doc('controlli').get(),
         ]);
+        // Rider Decò noti (config/controlli.riderDecoNoti): non nostri per
+        // conferma esplicita — la sentinella non li segnala come non censiti.
+        const decoNoti = new Set(((cfgSnap.exists && cfgSnap.data().riderDecoNoti) || []).map((x) => String(x).toUpperCase().replace(/['\u2019` ]/g, '')));
 
         const cognomi = [];
         anagSnap.forEach((d) => { const x = d.data(); if (x.attivo && x.cognome) cognomi.push(norm(x.cognome)); });
@@ -1608,7 +1612,7 @@ exports.controlliAutomatici = onSchedule(
                 if (c.tipoDriver === 'verifica') verificaIeri++;
                 const rider = norm(c.rider);
                 if (rider && c.tipoDriver === 'avr') decoDriverIeri[rider] = (decoDriverIeri[rider] || 0) + 1;
-                if (rider && c.tipoDriver === 'interna' && !matchAnag(rider)) riderInterniIeri[rider] = (riderInterniIeri[rider] || 0) + 1;
+                if (rider && c.tipoDriver === 'interna' && !matchAnag(rider) && !decoNoti.has(rider)) riderInterniIeri[rider] = (riderInterniIeri[rider] || 0) + 1;
             } else if (day < ieri && day >= fmt(new Date(Date.now() - 8 * 86400000))) {
                 filialePrima[fil] = (filialePrima[fil] || 0) + 1;
             }
