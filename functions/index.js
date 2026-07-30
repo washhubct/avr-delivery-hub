@@ -1604,6 +1604,7 @@ exports.controlliAutomatici = onSchedule(
         let maxSync = '';
         const filialeIeri = {}, filialePrima = {}, decoDriverIeri = {}, riderInterniIeri = {};
         let verificaIeri = 0, dateFuture = 0;
+        const importiSospetti = [];
         conSnap.forEach((d) => {
             const c = d.data();
             if (c.sync && c.sync > maxSync) maxSync = c.sync;
@@ -1614,6 +1615,7 @@ exports.controlliAutomatici = onSchedule(
             const fil = String(c.filiale || '?');
             if (day === ieri) {
                 filialeIeri[fil] = (filialeIeri[fil] || 0) + 1;
+                if ((c.importo || 0) > 5000) importiSospetti.push(fil + ' ' + (c.filialeNome || '') + ' — €' + c.importo.toFixed(2) + ' (' + (c.rider || c.cognome || '?') + ')');
                 if (c.tipoDriver === 'verifica') verificaIeri++;
                 const rider = norm(c.rider);
                 if (rider && c.tipoDriver === 'avr') decoDriverIeri[rider] = (decoDriverIeri[rider] || 0) + 1;
@@ -1632,6 +1634,7 @@ exports.controlliAutomatici = onSchedule(
         });
 
         const anomalie = [];
+        importiSospetti.forEach((x) => anomalie.push('🟣 <b>Scontrino sospetto</b> (>€5.000, probabile refuso — col prezziario vale €300): ' + x));
         const oreDaSync = maxSync ? (Date.now() - new Date(maxSync).getTime()) / 3600000 : 999;
         if (oreDaSync > 36) anomalie.push('🔴 <b>Sync GAS fermo</b>: ultima scrittura ' + (maxSync || 'mai') + ' (' + Math.round(oreDaSync) + ' ore fa). Controllare i trigger su script.google.com.');
 
