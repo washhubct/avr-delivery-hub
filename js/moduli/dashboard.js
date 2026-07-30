@@ -64,6 +64,21 @@ function buildDriverAvrSet() {
         });
     }
 
+    // Archivio cessati: le consegne dei mesi in cui lavoravano restano nostre
+    if (state.driverArchivio && state.driverArchivio.length > 0) {
+        state.driverArchivio.forEach(function(d) {
+            if (d.cognome) {
+                set.add(d.cognome.toUpperCase().trim());
+                set.add(d.cognome.toUpperCase().trim().replace(/\s+/g, ''));
+            }
+            if (Array.isArray(d.alias)) {
+                d.alias.forEach(function(a) {
+                    if (a) { set.add(String(a).toUpperCase().trim()); set.add(String(a).toUpperCase().trim().replace(/\s+/g, '')); }
+                });
+            }
+        });
+    }
+
     // Fallback da preload in state
     if (state.driverPreload) {
         state.driverPreload.forEach(function(d) {

@@ -1674,3 +1674,77 @@ exports.controlliAutomatici = onSchedule(
         console.log('[controlliAutomatici] ' + ieri + ': ' + anomalie.length + ' anomalie, email inviata');
     }
 );
+
+
+// ═══════════════════════════════════════════════════════════════════
+// STATO DRIVER → AUTH — il toggle Disattiva in anagrafica blocca DAVVERO
+// l'app: alla modifica di `attivo` l'utente Firebase Auth viene
+// disabilitato/riabilitato (il login smette di funzionare subito).
+// ═══════════════════════════════════════════════════════════════════
+exports.syncStatoDriver = onDocumentUpdated(
+    { document: 'driverAnagrafica/{id}', region: 'europe-west1' },
+    async (event) => {
+        const prima = event.data.before.data();
+        const dopo = event.data.after.data();
+        if (prima.attivo === dopo.attivo) return;
+        const email = (dopo.email || '').toLowerCase().trim();
+        if (!email) return;
+        try {
+            const user = await admin.auth().getUserByEmail(email);
+            const disabled = dopo.attivo === false;
+            if (user.disabled !== disabled) {
+                await admin.auth().updateUser(user.uid, { disabled });
+                console.log('[syncStatoDriver] ' + email + ' → ' + (disabled ? 'DISABILITATO' : 'riabilitato'));
+            }
+        } catch (e) {
+            if (e.code === 'auth/user-not-found') { console.log('[syncStatoDriver] ' + email + ': nessun utente Auth'); return; }
+            throw e;
+        }
+    }
+);
+
+// ═══════════════════════════════════════════════════════════════════
+// PULIZIA ANAGRAFICA — ogni notte: i driver disattivati da oltre 90
+// giorni vengono ARCHIVIATI in driverArchivio (non eliminati: il cognome
+// e gli alias servono per l'attribuzione storica delle consegne) e
+// l'utente Auth viene rimosso. Email di riepilogo a HR.
+// ═══════════════════════════════════════════════════════════════════
+exports.pulisciAnagrafica = onSchedule(
+    { schedule: '15 7 * * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [RESEND_API_KEY] },
+    async () => {
+        const db = admin.firestore();
+        const soglia = new Date(Date.now() - 90 * 86400000);
+        const snap = await db.collection('driverAnagrafica').where('attivo', '==', false).get();
+        const archiviati = [];
+        for (const doc of snap.docs) {
+            const x = doc.data();
+            const dis = x.disattivatoIl && x.disattivatoIl.toDate ? x.disattivatoIl.toDate() : null;
+            if (!dis || dis > soglia) continue;
+            await db.collection('driverArchivio').doc(doc.id).set(Object.assign({}, x, {
+                archiviatoIl: admin.firestore.FieldValue.serverTimestamp(),
+            }));
+            await doc.ref.delete();
+            if (x.email) {
+                try { const u = await admin.auth().getUserByEmail(x.email.toLowerCase()); await admin.auth().deleteUser(u.uid); }
+                catch (e) { if (e.code !== 'auth/user-not-found') console.warn('[pulisciAnagrafica] auth:', e.message); }
+            }
+            archiviati.push((x.cognome || doc.id) + ' ' + (x.nome || ''));
+        }
+        if (archiviati.length === 0) { console.log('[pulisciAnagrafica] niente da archiviare'); return; }
+        console.log('[pulisciAnagrafica] archiviati:', archiviati.join(', '));
+        const html = '<div style="font-family:sans-serif"><h3>Anagrafica driver — archiviazione automatica</h3>' +
+            '<p>Driver disattivati da oltre 90 giorni, spostati in archivio (accesso app rimosso, storico consegne conservato):</p>' +
+            '<ul>' + archiviati.map((n) => '<li>' + n + '</li>').join('') + '</ul></div>';
+        const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY.value(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                from: 'Last Mile <noreply@last-mile.it>',
+                to: ['guido@last-mile.it', 'risorse.umane@last-mile.it'],
+                subject: 'Anagrafica: ' + archiviati.length + ' driver archiviati automaticamente',
+                html,
+            }),
+        });
+        if (!res.ok) console.warn('[pulisciAnagrafica] email:', res.status);
+    }
+);

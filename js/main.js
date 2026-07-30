@@ -134,6 +134,11 @@ async function loadDriverAnagrafica() {
         var snap = await db.collection('driverAnagrafica').get();
         state.driverList = snap.docs.map(function(doc) { return Object.assign({ id: doc.id }, doc.data()); });
         console.log('Loaded ' + state.driverList.length + ' driver');
+        // Archivio cessati (per attribuzione storica consegne nei mesi passati)
+        try {
+            var arch = await db.collection('driverArchivio').get();
+            state.driverArchivio = arch.docs.map(function(doc) { return Object.assign({ id: doc.id }, doc.data()); });
+        } catch (e2) { state.driverArchivio = []; }
     } catch (e) {
         console.warn('Driver load:', e);
         state.driverList = [];

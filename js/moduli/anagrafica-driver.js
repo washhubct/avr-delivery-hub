@@ -34,8 +34,7 @@ function renderAnagraficaDriver() {
         <td><span class="badge ${d.attivo !== false ? 'badge-ok' : 'badge-err'}">${d.attivo !== false ? 'Attivo' : 'Inattivo'}</span></td>
         <td>
             <button class="btn btn-sm" onclick="editDriver('${idSafe}')">✏️</button>
-            <button class="btn btn-sm btn-danger" onclick="toggleDriverAttivo('${idSafe}')">⏸️</button>
-            <button class="btn btn-sm btn-danger" onclick="eliminaDriver('${idSafe}')">🗑️</button>
+            <button class="btn btn-sm btn-danger" title="Disattiva/riattiva (blocca l'app; archiviazione automatica dopo 90gg)" onclick="toggleDriverAttivo('${idSafe}')">⏸️</button>
         </td>
     </tr>`;
     }).join('');
@@ -211,10 +210,19 @@ async function toggleDriverAttivo(id) {
     if (!d) return;
     const newState = d.attivo === false ? true : false;
     const label = newState ? 'attivare' : 'disattivare';
-    if (!confirm(`Vuoi ${label} il driver ${d.cognome} ${d.nome || ''}?`)) return;
+    const avviso = newState
+        ? `Vuoi attivare il driver ${d.cognome} ${d.nome || ''}?`
+        : `Vuoi disattivare il driver ${d.cognome} ${d.nome || ''}?\n\n` +
+          `• L'accesso all'app viene bloccato subito\n` +
+          `• Le sue consegne restano attribuite a Last Mile\n` +
+          `• Dopo 90 giorni l'anagrafica viene archiviata automaticamente`;
+    if (!confirm(avviso)) return;
     try {
-        await db.collection('driverAnagrafica').doc(id).update({ attivo: newState });
-        toast(`Driver ${newState ? 'attivato' : 'disattivato'}`, 'success');
+        await db.collection('driverAnagrafica').doc(id).update({
+            attivo: newState,
+            disattivatoIl: newState ? firebase.firestore.FieldValue.delete() : firebase.firestore.FieldValue.serverTimestamp()
+        });
+        toast(`Driver ${newState ? 'attivato' : 'disattivato — accesso app bloccato'}`, 'success');
         await loadDriverAnagrafica();
         renderAnagraficaDriver();
     } catch (e) {
