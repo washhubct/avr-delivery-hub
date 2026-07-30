@@ -201,15 +201,15 @@ function renderDashboard() {
     var totale = consegneFatturabili.length;
     var daVerificareN = daVerificareArr.length;
     var totaleInterne = allConsegne.length - totale - daVerificareN;
-    var maggiori = 0, minori = 0, speciali = 0, manuali = 0;
+    var maggiori = 0, minori = 0, speciali = 0, prezziario = 0, fattPrezziario = 0;
     var fatturato = 0;
     var schemaFlat = mese >= MESE_SCHEMA_FLAT;
 
     consegneFatturabili.forEach(function(c) {
         var imp = c.importo || 0;
         var p = prezzoConsegnaMese(imp, mese, c.tipo);
-        if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') speciali++;
-        else if (p === null) manuali++; // >€499: prezzo a mano, non nel fatturato auto
+        if (schemaFlat && imp > 499) { prezziario++; fattPrezziario += p; }
+        else if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') speciali++;
         else if (imp >= 250) maggiori++;
         else minori++;
         if (p !== null) fatturato += p;
@@ -217,13 +217,13 @@ function renderDashboard() {
 
     document.getElementById('kpiConsegneMese').textContent = totale;
     document.getElementById('kpiConsegneDetail').innerHTML = (schemaFlat
-        ? (maggiori + minori) + ' ordinarie · ' + manuali + ' >€499 · ' + speciali + ' ritorni/extra'
+        ? (maggiori + minori + speciali) + ' ordinarie (ritorni inclusi) · ' + prezziario + ' >€499 a prezziario'
         : maggiori + ' ≥€250 · ' + minori + ' <€250 · ' + speciali + ' speciali')
         + (daVerificareN > 0 ? ' · <span style="color:var(--warning)">' + daVerificareN + ' da verificare</span>' : '')
         + (totaleInterne > 0 ? ' · <span style="color:var(--text-muted)">' + totaleInterne + ' interne escluse</span>' : '');
     document.getElementById('kpiFatturato').textContent = formatCurrency(fatturato);
     document.getElementById('kpiFatturatoDetail').textContent = schemaFlat
-        ? (maggiori + minori) + '×€9,70 + ' + speciali + '×€6,90' + (manuali > 0 ? ' (+' + manuali + ' >€499 manuali)' : '')
+        ? (maggiori + minori + speciali) + '×€9,70 + ' + formatCurrency(fattPrezziario) + ' prezziario (' + prezziario + ' speciali)'
         : maggiori + '×€10 + ' + (minori + speciali) + '×€6,90';
 
     // Media consegne/giorno (giorni con almeno una consegna nel mese)

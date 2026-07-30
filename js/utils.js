@@ -81,13 +81,30 @@ document.addEventListener('DOMContentLoaded', aggiornaIconaTema);
 // Prima: €6,90 <250 / €10,00 ≥250. Ritorni e pane/gastro/sushi: €6,90.
 var MESE_SCHEMA_FLAT = '2026-07';
 
+// Prezziario consegne speciali (scontrino > €499) — listino Arena lug 2026.
+// Fasce contigue: i "buchi" del listino (1001-1099 ecc.) ricadono nella
+// fascia superiore.
+function prezzoSpecialeArena(imp) {
+    if (imp <= 600) return 27.60;
+    if (imp <= 700) return 34.50;
+    if (imp <= 800) return 41.40;
+    if (imp <= 900) return 48.30;
+    if (imp <= 1000) return 55.20;
+    if (imp <= 2000) return 100.00;
+    if (imp <= 3000) return 200.00;
+    if (imp <= 4000) return 250.00;
+    return 300.00;
+}
+
 function prezzoConsegnaMese(importo, mese, tipo) {
-    if (tipo === 'ritorno' || tipo === 'pane_gastro_sushi') return 6.90;
     var imp = importo || 0;
     if ((mese || '') >= MESE_SCHEMA_FLAT) {
-        if (imp > 499) return null; // speciale: prezzo manuale
+        // Schema flat: tutto a €9,70 (ritorni e pane/gastro inclusi);
+        // sopra €499 si applica il prezziario speciali.
+        if (imp > 499) return prezzoSpecialeArena(imp);
         return 9.70;
     }
+    if (tipo === 'ritorno' || tipo === 'pane_gastro_sushi') return 6.90;
     return imp >= 250 ? 10.00 : 6.90;
 }
 
