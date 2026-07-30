@@ -46,11 +46,13 @@ function loadDriverList() {
       var docs = data.documents || [];
       for (var i = 0; i < docs.length; i++) {
         var f = docs[i].fields || {};
-        var attivo = f.attivo && f.attivo.booleanValue === true;
+        // TUTTA l'anagrafica, anche cessati: l'attribuzione delle consegne
+        // e' storica ('attivo' governa solo accesso app e solleciti) —
+        // disattivare un driver non deve declassare il suo mese a 'interna'.
         var cog = f.cognome && f.cognome.stringValue;
-        if (attivo && cog) out.push(normNome(cog));
+        if (cog) out.push(normNome(cog));
         // Alias dai fogli (es. FELIX per Siyambala): campo array 'alias' in anagrafica
-        if (attivo && f.alias && f.alias.arrayValue && f.alias.arrayValue.values) {
+        if (f.alias && f.alias.arrayValue && f.alias.arrayValue.values) {
           f.alias.arrayValue.values.forEach(function(v) { if (v.stringValue) out.push(normNome(v.stringValue)); });
         }
       }

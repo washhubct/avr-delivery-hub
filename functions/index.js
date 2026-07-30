@@ -1593,7 +1593,12 @@ exports.controlliAutomatici = onSchedule(
         const decoNoti = new Set(((cfgSnap.exists && cfgSnap.data().riderDecoNoti) || []).map((x) => String(x).toUpperCase().replace(/['\u2019` ]/g, '')));
 
         const cognomi = [];
-        anagSnap.forEach((d) => { const x = d.data(); if (x.attivo && x.cognome) cognomi.push(norm(x.cognome)); });
+        anagSnap.forEach((d) => {
+            const x = d.data();
+            if (!x.cognome) return;
+            cognomi.push(norm(x.cognome));
+            if (Array.isArray(x.alias)) x.alias.forEach((a) => { if (a) cognomi.push(norm(a)); });
+        });
         const matchAnag = (rider) => { const r = norm(rider); return r && cognomi.some((c) => r.includes(c) || c.includes(r)); };
 
         let maxSync = '';
