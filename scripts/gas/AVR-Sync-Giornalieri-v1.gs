@@ -71,12 +71,24 @@ function getIeri() {
   return { year: y, month: m, day: d, monthStr: String(m).padStart(2, '0'), mese: y + '-' + String(m).padStart(2, '0') };
 }
 
+
+// Classificazione consegna: la colonna PRESTAZIONE del foglio vince quando
+// e' esplicita; senza prestazione ne' rider la consegna va verificata a mano
+// ('verifica': esclusa dal fatturato automatico come le >€499).
+function classificaTipoDriver(prest, rider, isAvr) {
+  if (prest === 'AVR') return 'avr';
+  if (prest && prest.indexOf('INTERN') >= 0) return 'interna';
+  if (!String(rider || '').trim()) return 'verifica';
+  return isAvr ? 'avr' : 'interna';
+}
 function isDriver(name) {
   if (!name) return false;
-  var r = name.toString().trim().toUpperCase().replace(/['\u2019`]/g, '').replace(/\s+/g, ' ');
+  var r = name.toString().trim().toUpperCase().replace(/['\u2019`]/g, '').replace(/\s+/g, '');
+  if (!r) return false;
   var lista = loadDriverList();
   for (var i = 0; i < lista.length; i++) {
-    if (r.indexOf(lista[i]) >= 0 || lista[i].indexOf(r) >= 0) return true;
+    var L = lista[i].replace(/\s+/g, '');
+    if (r.indexOf(L) >= 0 || L.indexOf(r) >= 0) return true;
   }
   return false;
 }
@@ -185,8 +197,8 @@ function parseGiornalieri(filiale, ieri) {
           codiceDomicilio: String(row[12] || '').trim(), oraConsegna: String(row[13] || '').trim(),
           rider: rider.toUpperCase(), targa: String(row[15] || '').trim(),
           consegnata: String(row[16] || '').trim().toUpperCase(),
-          prestazione: String(row[17] || '').trim().toUpperCase() || 'AVR',
-          tipo: 'consegna', tipoDriver: isAvr ? 'avr' : 'interna',
+          prestazione: String(row[17] || '').trim().toUpperCase(),
+          tipo: 'consegna', tipoDriver: classificaTipoDriver(String(row[17] || '').trim().toUpperCase(), rider, isAvr),
           fonte: 'gas_giorn_v1', sync: new Date().toISOString()
         });
       }

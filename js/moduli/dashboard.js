@@ -134,6 +134,18 @@ function isConsegnaInterna(c, avrSet) {
     return !isDriverAvr(rider, avrSet);
 }
 
+// Consegne senza rider e senza prestazione esplicita (o marcate 'verifica'
+// dal GAS): escluse dal fatturato automatico come le >€499, in attesa di
+// classificazione manuale.
+function isConsegnaDaVerificare(c) {
+    if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') return false;
+    if (c.tipoDriver === 'verifica') return true;
+    var p = (c.prestazione || '').toUpperCase().trim();
+    if (p === 'AVR' || p.indexOf('INTERN') >= 0) return false;
+    var rider = String(c.driver || c.rider || '');
+    return !rider.trim();
+}
+
 function normalizeRiderForDisplay(riderName) {
     if (!riderName) return '—';
     var name = riderName.toUpperCase().trim();
@@ -157,11 +169,17 @@ function renderDashboard() {
     var consegneAvr = allConsegne.filter(function(c) { return isConsegnaAvr(c, avrSet); });
     var consegneInt = allConsegne.filter(function(c) { return isConsegnaInterna(c, avrSet); });
 
-    // ═══ KPI — escludi consegne interne (tipoDriver='interna': fatte da Decò, non fatturabili) ═══
-    // AVR/FARO (nostre senza driver specifico) hanno tipoDriver='avr' o rider vuoto → incluse
-    var consegneFatturabili = allConsegne.filter(function(c) { return c.tipoDriver !== 'interna'; });
+    // ═══ KPI — stessa classificazione del resto della dashboard (prestazione
+    // + alias anagrafica), NON il tipoDriver grezzo del GAS: i rider scritti
+    // senza spazi (LINOCE, LAPORTA...) sono nostri e fatturabili.
+    // Rider vuoto senza prestazione → 'da verificare', escluso dal fatturato.
+    var daVerificareArr = allConsegne.filter(isConsegnaDaVerificare);
+    var consegneFatturabili = allConsegne.filter(function(c) {
+        return !isConsegnaInterna(c, avrSet) && !isConsegnaDaVerificare(c);
+    });
     var totale = consegneFatturabili.length;
-    var totaleInterne = allConsegne.length - totale;
+    var daVerificareN = daVerificareArr.length;
+    var totaleInterne = allConsegne.length - totale - daVerificareN;
     var maggiori = 0, minori = 0, speciali = 0, manuali = 0;
     var fatturato = 0;
     var schemaFlat = mese >= MESE_SCHEMA_FLAT;
@@ -180,6 +198,7 @@ function renderDashboard() {
     document.getElementById('kpiConsegneDetail').innerHTML = (schemaFlat
         ? (maggiori + minori) + ' ordinarie · ' + manuali + ' >€499 · ' + speciali + ' ritorni/extra'
         : maggiori + ' ≥€250 · ' + minori + ' <€250 · ' + speciali + ' speciali')
+        + (daVerificareN > 0 ? ' · <span style="color:var(--warning)">' + daVerificareN + ' da verificare</span>' : '')
         + (totaleInterne > 0 ? ' · <span style="color:var(--text-muted)">' + totaleInterne + ' interne escluse</span>' : '');
     document.getElementById('kpiFatturato').textContent = formatCurrency(fatturato);
     document.getElementById('kpiFatturatoDetail').textContent = schemaFlat

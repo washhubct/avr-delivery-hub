@@ -152,13 +152,24 @@ function getTargets() {
 }
 
 // -- Helpers parsing -------------------------------------------------
+
+// Classificazione consegna: la colonna PRESTAZIONE del foglio vince quando
+// e' esplicita; senza prestazione ne' rider la consegna va verificata a mano
+// ('verifica': esclusa dal fatturato automatico come le >€499).
+function classificaTipoDriver(prest, rider, isAvr) {
+  if (prest === 'AVR') return 'avr';
+  if (prest && prest.indexOf('INTERN') >= 0) return 'interna';
+  if (!String(rider || '').trim()) return 'verifica';
+  return isAvr ? 'avr' : 'interna';
+}
 function isOurDriver(name) {
   if (!name) return false;
-  var r = name.toString().trim().toUpperCase().replace(/['\u2019`]/g, '').replace(/\s+/g, ' ');
+  var r = name.toString().trim().toUpperCase().replace(/['\u2019`]/g, '').replace(/\s+/g, '');
   if (!r) return false;
   var lista = loadDriverList();
   for (var i = 0; i < lista.length; i++) {
-    if (r.indexOf(lista[i]) >= 0 || lista[i].indexOf(r) >= 0) return true;
+    var L = lista[i].replace(/\s+/g, '');
+    if (r.indexOf(L) >= 0 || L.indexOf(r) >= 0) return true;
   }
   return false;
 }
@@ -492,7 +503,7 @@ function parseMensile(filiale, sheetName, meseFs) {
       if (importo === 0) { skipped.noImporto++; continue; }
 
       var rider = ci.rider >= 0 ? String(row[ci.rider] || '').trim() : '';
-      var prest = ci.prestazione >= 0 ? String(row[ci.prestazione] || '').trim().toUpperCase() : 'AVR';
+      var prest = ci.prestazione >= 0 ? String(row[ci.prestazione] || '').trim().toUpperCase() : '';
       var isAvr = isOurDriver(rider);
       var consegnata = ci.consegnata >= 0 ? String(row[ci.consegnata] || '').trim().toUpperCase() : '';
       var indirizzo = ci.indirizzo >= 0 ? String(row[ci.indirizzo] || '').trim() : '';
@@ -511,7 +522,7 @@ function parseMensile(filiale, sheetName, meseFs) {
         codiceDomicilio: ci.codiceDom >= 0 ? String(row[ci.codiceDom] || '').trim() : '',
         oraConsegna: ci.ora >= 0 ? String(row[ci.ora] || '').trim() : '',
         rider: rider.toUpperCase(), consegnata: consegnata,
-        prestazione: prest || 'AVR', tipo: 'consegna', tipoDriver: isAvr ? 'avr' : 'interna',
+        prestazione: prest, tipo: 'consegna', tipoDriver: classificaTipoDriver(prest, rider, isAvr),
         fonte: FONTE, sync: new Date().toISOString()
       });
     }
