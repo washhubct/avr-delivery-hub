@@ -1552,3 +1552,116 @@ exports.pushPodioMensile = onSchedule(
         }
     }
 );
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CONTROLLI AUTOMATICI GIORNALIERI — sentinella dati, ore 8:30.
+// Verifica la giornata di ieri e manda email SOLO se trova anomalie:
+//   1. sync GAS fermo (nessuna scrittura da >36h)
+//   2. filiali mute (attive nei 7gg precedenti ma 0 consegne ieri)
+//   3. driver con consegne Decò ma zero report app
+//   4. possibili driver non censiti in anagrafica (rider ricorrente marcato interna)
+//   5. consegne 'da verificare' (rider vuoto) e date future
+// ═══════════════════════════════════════════════════════════════════
+exports.controlliAutomatici = onSchedule(
+    {
+        schedule: '30 8 * * *',
+        timeZone: 'Europe/Rome',
+        region: 'europe-west1',
+        secrets: [RESEND_API_KEY],
+        timeoutSeconds: 300,
+        memory: '512MiB',
+    },
+    async () => {
+        const db = admin.firestore();
+        const fmt = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(d);
+        const oggi = fmt(new Date());
+        const ieri = fmt(new Date(Date.now() - 86400000));
+        const ieriDom = new Date(Date.now() - 86400000).getUTCDay() === 0;
+        const mese = ieri.slice(0, 7);
+        const dayOf = (v) => { const d = v && v.toDate ? v.toDate() : new Date(v); return isNaN(d) ? null : fmt(d); };
+        const norm = (s) => String(s || '').toUpperCase().replace(/['\u2019` ]/g, '').trim();
+
+        const [conSnap, repSnap, anagSnap] = await Promise.all([
+            db.collection('consegne').where('mese', '==', mese).get(),
+            db.collection('reportDriver').where('mese', '==', mese).get(),
+            db.collection('driverAnagrafica').get(),
+        ]);
+
+        const cognomi = [];
+        anagSnap.forEach((d) => { const x = d.data(); if (x.attivo && x.cognome) cognomi.push(norm(x.cognome)); });
+        const matchAnag = (rider) => { const r = norm(rider); return r && cognomi.some((c) => r.includes(c) || c.includes(r)); };
+
+        let maxSync = '';
+        const filialeIeri = {}, filialePrima = {}, decoDriverIeri = {}, riderInterniIeri = {};
+        let verificaIeri = 0, dateFuture = 0;
+        conSnap.forEach((d) => {
+            const c = d.data();
+            if (c.sync && c.sync > maxSync) maxSync = c.sync;
+            if (c.tipo && c.tipo !== 'consegna') return;
+            const day = dayOf(c.data);
+            if (!day) return;
+            if (day > oggi) dateFuture++;
+            const fil = String(c.filiale || '?');
+            if (day === ieri) {
+                filialeIeri[fil] = (filialeIeri[fil] || 0) + 1;
+                if (c.tipoDriver === 'verifica') verificaIeri++;
+                const rider = norm(c.rider);
+                if (rider && c.tipoDriver === 'avr') decoDriverIeri[rider] = (decoDriverIeri[rider] || 0) + 1;
+                if (rider && c.tipoDriver === 'interna' && !matchAnag(rider)) riderInterniIeri[rider] = (riderInterniIeri[rider] || 0) + 1;
+            } else if (day < ieri && day >= fmt(new Date(Date.now() - 8 * 86400000))) {
+                filialePrima[fil] = (filialePrima[fil] || 0) + 1;
+            }
+        });
+
+        const appIeri = {};
+        repSnap.forEach((d) => {
+            const r = d.data();
+            if (dayOf(r.data) !== ieri) return;
+            const k = norm(r.driver);
+            appIeri[k] = (appIeri[k] || 0) + (r.numConsegne || 0);
+        });
+
+        const anomalie = [];
+        const oreDaSync = maxSync ? (Date.now() - new Date(maxSync).getTime()) / 3600000 : 999;
+        if (oreDaSync > 36) anomalie.push('🔴 <b>Sync GAS fermo</b>: ultima scrittura ' + (maxSync || 'mai') + ' (' + Math.round(oreDaSync) + ' ore fa). Controllare i trigger su script.google.com.');
+
+        if (!ieriDom && oreDaSync <= 36) {
+            Object.keys(filialePrima).forEach((fil) => {
+                if (filialePrima[fil] >= 10 && !filialeIeri[fil]) anomalie.push('🟠 <b>Filiale ' + fil + ' muta</b>: ' + filialePrima[fil] + ' consegne nei 7gg precedenti, zero ieri.');
+            });
+        }
+
+        Object.keys(decoDriverIeri).forEach((rider) => {
+            if (decoDriverIeri[rider] >= 3 && !Object.keys(appIeri).some((a) => a.includes(rider) || rider.includes(a))) {
+                anomalie.push('🟡 <b>App non usata</b>: ' + rider + ' — ' + decoDriverIeri[rider] + ' consegne Decò ieri, zero report app.');
+            }
+        });
+
+        Object.keys(riderInterniIeri).forEach((rider) => {
+            if (riderInterniIeri[rider] >= 5) anomalie.push('🔵 <b>Possibile driver non censito</b>: rider "' + rider + '" con ' + riderInterniIeri[rider] + ' consegne ieri, marcato interno e assente in anagrafica.');
+        });
+
+        if (verificaIeri > 0) anomalie.push('⚪ ' + verificaIeri + ' consegne di ieri <b>senza rider</b> (da verificare, escluse dal fatturato automatico).');
+        if (dateFuture > 0) anomalie.push('⚪ ' + dateFuture + ' consegne nel mese con <b>data futura</b> (refuso sul foglio).');
+
+        if (anomalie.length === 0) { console.log('[controlliAutomatici] ' + ieri + ': tutto ok'); return; }
+
+        const html = '<div style="font-family:sans-serif;max-width:560px"><h2 style="color:#0f1d3d">Controlli automatici — ' + ieri + '</h2><ul style="line-height:1.9">' +
+            anomalie.map((a) => '<li>' + a + '</li>').join('') +
+            '</ul><p style="color:#64748b;font-size:13px">Report generato automaticamente ogni mattina alle 8:30 — solo quando ci sono anomalie. Dettagli su <a href="https://dashboard.last-mile.it">dashboard.last-mile.it</a></p></div>';
+
+        const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY.value(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                from: 'Last Mile <noreply@last-mile.it>',
+                to: ['guido@last-mile.it', 'risorse.umane@last-mile.it'],
+                subject: '⚠️ Controlli Last Mile ' + ieri + ': ' + anomalie.length + ' anomalie',
+                html,
+            }),
+        });
+        if (!res.ok) throw new Error('Resend: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+        console.log('[controlliAutomatici] ' + ieri + ': ' + anomalie.length + ' anomalie, email inviata');
+    }
+);
