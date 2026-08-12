@@ -171,11 +171,12 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // DANNI — admin/staff full; driver legge solo suoi
+    // DANNI — admin/staff/amministratore/HR full; driver legge solo suoi
+    // (HR registra multe/addebiti verbali e rateizzazioni)
     // ═══════════════════════════════════════════════════════════
     match /danni/{doc} {
       allow read: if isGestionale() || (isDriver() && isOwnByEmail());
-      allow write: if isAdminOrStaff();
+      allow write: if isAdminOrStaff() || isAmministratore() || isRisorseUmane();
     }
 
     // ═══════════════════════════════════════════════════════════
