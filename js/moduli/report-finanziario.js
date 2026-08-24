@@ -40,7 +40,7 @@ async function renderReportFinanziario() {
         perCitta[area].consegne++;
 
         if (schemaFlat) {
-            var p = prezzoConsegnaMese(importo, mese, c.tipo);
+            var p = prezzoConsegnaMese(importo, mese, c.tipo, c.data);
             if (p === null) { specialiManuali++; return; }
             arenaImponibile += p; // fattura unica F.lli Arena
             perCitta[area].fatturato += p;

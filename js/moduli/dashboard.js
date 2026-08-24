@@ -207,7 +207,7 @@ function renderDashboard() {
 
     consegneFatturabili.forEach(function(c) {
         var imp = c.importo || 0;
-        var p = prezzoConsegnaMese(imp, mese, c.tipo);
+        var p = prezzoConsegnaMese(imp, mese, c.tipo, c.data);
         if (schemaFlat && imp > 499) { prezziario++; fattPrezziario += p; }
         else if (c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi') speciali++;
         else if (imp >= 250) maggiori++;
@@ -257,7 +257,7 @@ function renderDashboard() {
         if (!aree[area]) aree[area] = { filiali: new Set(), maggiori: 0, minori: 0, fatturato: 0 };
         aree[area].filiali.add(c.filiale);
         var imp = c.importo || 0;
-        var p = prezzoConsegnaMese(imp, mese, c.tipo);
+        var p = prezzoConsegnaMese(imp, mese, c.tipo, c.data);
         var isExtra = c.tipo === 'ritorno' || c.tipo === 'pane_gastro_sushi';
         var sogliaSup = schemaFlat ? imp > 499 : imp >= 250;
         if (sogliaSup && !isExtra) aree[area].maggiori++;
@@ -300,7 +300,7 @@ function renderDashboard() {
         var key = c.filiale || '?';
         if (!byFiliale[key]) byFiliale[key] = { nome: c.filialeNome || key, area: c.area || '?', count: 0, fatturato: 0 };
         byFiliale[key].count++;
-        var p = prezzoConsegnaMese(c.importo || 0, mese, c.tipo);
+        var p = prezzoConsegnaMese(c.importo || 0, mese, c.tipo, c.data);
         if (p !== null) byFiliale[key].fatturato += p;
     });
 

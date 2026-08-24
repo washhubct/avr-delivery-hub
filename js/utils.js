@@ -80,6 +80,35 @@ document.addEventListener('DOMContentLoaded', aggiornaIconaTema);
 // Da luglio 2026: €9,70 flat; >€499 → null (prezzo da definire a mano).
 // Prima: €6,90 <250 / €10,00 ≥250. Ritorni e pane/gastro/sushi: €6,90.
 var MESE_SCHEMA_FLAT = '2026-07';
+var PREZZO_FLAT = 9.70;
+var PREZZO_FLAT_FESTIVO = 12.61; // +30% domeniche e festivi (rossi)
+
+// Festivi nazionali fissi (MM-DD) + Pasqua/Pasquetta calcolate.
+var FESTIVI_FISSI = ['01-01', '01-06', '04-25', '05-01', '06-02', '08-15', '11-01', '12-08', '12-25', '12-26'];
+function pasquaDate(y) {
+    var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+    var f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    var i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    var mese = Math.floor((h + l - 7 * m + 114) / 31), giorno = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(y, mese - 1, giorno);
+}
+function toDateObj(d) {
+    if (!d) return null;
+    if (d.toDate) d = d.toDate();
+    if (typeof d === 'string') d = new Date(d);
+    return (d instanceof Date && !isNaN(d)) ? d : null;
+}
+// Domenica o festivo nazionale (giorno "rosso") → maggiorazione.
+function isGiornoFestivo(data) {
+    var d = toDateObj(data);
+    if (!d) return false;
+    if (d.getDay() === 0) return true;
+    var md = String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    if (FESTIVI_FISSI.indexOf(md) !== -1) return true;
+    var pq = pasquaDate(d.getFullYear());
+    var pasquetta = new Date(pq.getFullYear(), pq.getMonth(), pq.getDate() + 1);
+    return d.getMonth() === pasquetta.getMonth() && d.getDate() === pasquetta.getDate();
+}
 
 // Prezziario consegne speciali (scontrino > €499) — listino Arena lug 2026.
 // Fasce contigue: i "buchi" del listino (1001-1099 ecc.) ricadono nella
@@ -96,13 +125,14 @@ function prezzoSpecialeArena(imp) {
     return 300.00;
 }
 
-function prezzoConsegnaMese(importo, mese, tipo) {
+function prezzoConsegnaMese(importo, mese, tipo, data) {
     var imp = importo || 0;
     if ((mese || '') >= MESE_SCHEMA_FLAT) {
-        // Schema flat: tutto a €9,70 (ritorni e pane/gastro inclusi);
-        // sopra €499 si applica il prezziario speciali.
+        // Schema flat: €9,70 (ritorni e pane/gastro inclusi), €12,61 nei
+        // giorni festivi/domeniche; sopra €499 prezziario speciali (senza
+        // maggiorazione festiva).
         if (imp > 499) return prezzoSpecialeArena(imp);
-        return 9.70;
+        return isGiornoFestivo(data) ? PREZZO_FLAT_FESTIVO : PREZZO_FLAT;
     }
     if (tipo === 'ritorno' || tipo === 'pane_gastro_sushi') return 6.90;
     return imp >= 250 ? 10.00 : 6.90;

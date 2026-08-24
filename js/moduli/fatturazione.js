@@ -7,8 +7,8 @@
 // Per i mesi precedenti resta lo schema storico €6,90 (<250) / €10 (≥250).
 
 var MESE_PREZZO_FLAT = '2026-07';
-var PREZZO_FLAT = 9.70;
 var SOGLIA_SPECIALE = 499;
+// PREZZO_FLAT / PREZZO_FLAT_FESTIVO / isGiornoFestivo in utils.js
 
 function isSchemaFlat(mese) {
     return mese >= MESE_PREZZO_FLAT;
@@ -82,59 +82,65 @@ function renderFatturazioneFlat(d) {
         if (importo > SOGLIA_SPECIALE) { speciali.push(c); return; }
         var fil = String(c.filiale || '?').replace(/\.0$/, '');
         if (!filialiData[fil]) {
-            filialiData[fil] = { filiale: fil, area: c.area || c.provincia || '?', count: 0, specialiCount: 0 };
+            filialiData[fil] = { filiale: fil, area: c.area || c.provincia || '?', count: 0, feriali: 0, festivi: 0, specialiCount: 0 };
         }
         filialiData[fil].count++;
+        if (isGiornoFestivo(c.data)) filialiData[fil].festivi++; else filialiData[fil].feriali++;
     });
     // Conteggio speciali per filiale (solo informativo in tabella)
     speciali.forEach(function(c) {
         var fil = String(c.filiale || '?').replace(/\.0$/, '');
         if (!filialiData[fil]) {
-            filialiData[fil] = { filiale: fil, area: c.area || c.provincia || '?', count: 0, specialiCount: 0 };
+            filialiData[fil] = { filiale: fil, area: c.area || c.provincia || '?', count: 0, feriali: 0, festivi: 0, specialiCount: 0 };
         }
         filialiData[fil].specialiCount++;
     });
 
     var righe = fatOrdinaSort(Object.values(filialiData));
 
-    var totConsegne = 0, totFatt = 0, totSpeciali = speciali.length;
+    var totConsegne = 0, totFeriali = 0, totFestivi = 0, totFatt = 0, totSpeciali = speciali.length;
     righe.forEach(function(r) {
-        r.fatt = r.count * PREZZO_FLAT;
+        r.fatt = r.feriali * PREZZO_FLAT + r.festivi * PREZZO_FLAT_FESTIVO;
         totConsegne += r.count;
+        totFeriali += r.feriali;
+        totFestivi += r.festivi;
         totFatt += r.fatt;
     });
 
-    document.getElementById('fatDesc').innerHTML = 'Schema in vigore da luglio 2026: <strong>€9,70 per consegna</strong>, senza distinzioni di volume, con <strong>fattura unica a F.lli Arena</strong> (Palermo inclusa). Le consegne con importo merce &gt; €499 sono elencate a parte e vanno prezzate a mano.';
+    document.getElementById('fatDesc').innerHTML = 'Schema in vigore da luglio 2026: <strong>€9,70 per consegna feriale</strong>, <strong>€12,61 domeniche e festivi</strong> (+30%), senza distinzioni di volume, con <strong>fattura unica a F.lli Arena</strong> (Palermo inclusa). Le consegne con importo merce &gt; €499 sono elencate a parte e vanno prezzate a mano.';
     document.getElementById('fatKpiGrid').innerHTML =
-        fatKpi('Consegne (×€9,70)', formatNumber(totConsegne)) +
+        fatKpi('Feriali (×€9,70)', formatNumber(totFeriali)) +
+        fatKpi('Festivi (×€12,61)', formatNumber(totFestivi)) +
         fatKpi('Fatturato automatico', formatCurrency(totFatt), true) +
-        fatKpi('Speciali > €499', formatNumber(totSpeciali)) +
-        fatKpi('Prezzo speciali', 'manuale', true);
+        fatKpi('Speciali > €499', formatNumber(totSpeciali));
 
     document.getElementById('fatThead').innerHTML = '<tr>' +
         '<th>Filiale</th><th>Area</th>' +
-        '<th style="text-align:right">Consegne</th>' +
-        '<th style="text-align:right">Fatturato (×€9,70)</th>' +
+        '<th style="text-align:right">Feriali</th>' +
+        '<th style="text-align:right">Festivi</th>' +
+        '<th style="text-align:right">Fatturato</th>' +
         '<th style="text-align:right">Speciali &gt;€499</th>' +
     '</tr>';
 
     var lastArea = '';
     var html = '';
     righe.forEach(function(r) {
-        if (r.area !== lastArea) { html += fatAreaHeaderRow(r, 5); lastArea = r.area; }
+        if (r.area !== lastArea) { html += fatAreaHeaderRow(r, 6); lastArea = r.area; }
         html += '<tr>' +
             '<td><strong>FILIALE ' + r.filiale + '</strong></td>' +
             '<td style="text-align:center">' + r.area + '</td>' +
-            '<td style="text-align:right"><strong>' + r.count + '</strong></td>' +
+            '<td style="text-align:right"><strong>' + r.feriali + '</strong></td>' +
+            '<td style="text-align:right;color:' + (r.festivi > 0 ? 'var(--accent)' : 'var(--text-light)') + '">' + (r.festivi || '—') + '</td>' +
             '<td style="text-align:right"><strong>' + formatCurrency(r.fatt) + '</strong></td>' +
             '<td style="text-align:right;color:' + (r.specialiCount > 0 ? 'var(--warning)' : 'var(--text-light)') + '">' + (r.specialiCount || '—') + '</td>' +
         '</tr>';
     });
-    document.getElementById('tblFattBody').innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Nessuna consegna nel mese</td></tr>';
+    document.getElementById('tblFattBody').innerHTML = html || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Nessuna consegna nel mese</td></tr>';
 
     document.getElementById('fatTfoot').innerHTML = '<tr class="totals-row">' +
-        '<td colspan="2"><strong>TOTALE</strong></td>' +
-        '<td style="text-align:right"><strong>' + totConsegne + '</strong></td>' +
+        '<td colspan="2"><strong>TOTALE</strong> <span style="font-weight:400;color:var(--text-muted)">(' + totConsegne + ' consegne)</span></td>' +
+        '<td style="text-align:right"><strong>' + totFeriali + '</strong></td>' +
+        '<td style="text-align:right"><strong>' + totFestivi + '</strong></td>' +
         '<td style="text-align:right"><strong>' + formatCurrency(totFatt) + '</strong></td>' +
         '<td style="text-align:right"><strong>' + (totSpeciali || '—') + '</strong></td>' +
     '</tr>';
@@ -263,23 +269,31 @@ function exportFatturazioneFlat(d) {
         var importo = parseFloat(c.importo) || 0;
         if (importo > SOGLIA_SPECIALE) { speciali.push(c); return; }
         var fil = String(c.filiale || '?').replace(/\.0$/, '');
-        if (!filialiData[fil]) filialiData[fil] = { filiale: fil, area: c.area || '?', count: 0 };
+        if (!filialiData[fil]) filialiData[fil] = { filiale: fil, area: c.area || '?', count: 0, feriali: 0, festivi: 0 };
         filialiData[fil].count++;
+        if (isGiornoFestivo(c.data)) filialiData[fil].festivi++; else filialiData[fil].feriali++;
     });
     var righe = fatOrdinaSort(Object.values(filialiData));
 
     var rows = [
         ['FATTURAZIONE — ' + meseLabel(mese)],
-        ['Schema €9,70 per consegna (da luglio 2026) — speciali >€499 su foglio separato'],
+        ['Schema da luglio 2026: €9,70 feriali / €12,61 domeniche e festivi — speciali >€499 su foglio separato'],
         [],
         ['Prodotto', 'Quantità', 'Prezzo unitario', 'Importo (netto)', 'IVA']
     ];
     var totImponibile = 0;
     righe.forEach(function(r) {
         if (r.count === 0) return;
-        var netto = r.count * PREZZO_FLAT;
-        rows.push(['FILIALE ' + r.filiale, r.count, '9,70', netto.toFixed(2), '22%']);
-        totImponibile += netto;
+        if (r.feriali > 0) {
+            var nettoFer = r.feriali * PREZZO_FLAT;
+            rows.push(['FILIALE ' + r.filiale + ' — feriali', r.feriali, PREZZO_FLAT.toFixed(2).replace('.', ','), nettoFer.toFixed(2), '22%']);
+            totImponibile += nettoFer;
+        }
+        if (r.festivi > 0) {
+            var nettoFes = r.festivi * PREZZO_FLAT_FESTIVO;
+            rows.push(['FILIALE ' + r.filiale + ' — festivi', r.festivi, PREZZO_FLAT_FESTIVO.toFixed(2).replace('.', ','), nettoFes.toFixed(2), '22%']);
+            totImponibile += nettoFes;
+        }
     });
     var iva = totImponibile * 0.22;
     rows.push([]);
