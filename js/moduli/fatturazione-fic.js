@@ -60,6 +60,7 @@ async function ficHandleFile(files) {
         it.acconto = it.acconto || { importo: '', riferimento: '' };
         ficRebuild();
         ficAggiornaStato(false);
+        ficPrecompilaNumero();
     } catch (e) {
         console.error(e);
         box.innerHTML = '<div class="fic-alert fic-alert-error">❌ File non valido: ' + escapeHtml(e.message) + '</div>';
@@ -81,11 +82,29 @@ function ficOnIntestazioneChange() {
     it.numero = g('ficNumero').trim();
     it.data = g('ficData');
     it.scadenza = g('ficScadenza');
-    if (it.data !== dataPrima && ficState.cfg) it.scadenza = FicCore.addDays(it.data, ficState.cfg.core.scadenzaGiorni);
+    if (it.data !== dataPrima && ficState.cfg) {
+        it.scadenza = FicCore.addDays(it.data, ficState.cfg.core.scadenzaGiorni);
+        if (it.data.slice(0, 4) !== (dataPrima || '').slice(0, 4)) { it.numero = ''; ficPrecompilaNumero(); }
+    }
     it.metodoPagamento = g('ficMetodo');
     it.acconto.importo = g('ficAccontoImporto').trim();
     it.acconto.riferimento = g('ficAccontoRif').trim();
     try { ficRebuild(); } catch (e) { toast(e.message, 'error'); }
+}
+
+// Numero continuativo: ultimo usato su FIC per l'anno della data + 1 (resta modificabile)
+async function ficPrecompilaNumero() {
+    var it = ficState.intestazione;
+    if (!it || it.numero) return;
+    try {
+        var out = await ficCall('ficProssimoNumero', { data: it.data });
+        if (it.numero) return; // l'utente l'ha scritto nel frattempo
+        it.numero = String(out.prossimo);
+        ficState.numeroFic = out;
+        ficRenderAnteprima();
+    } catch (e) {
+        toast('Numero fattura non recuperato da FIC: ' + e.message, 'error');
+    }
 }
 
 // ── Anteprima ───────────────────────────────────────────────────────
@@ -124,7 +143,7 @@ function ficRenderAnteprima() {
     var dis = giaCreata ? ' disabled' : '';
     h += '<div class="fic-grid">' +
         ficField('Cliente', '<input class="fic-input" value="' + escapeHtml((cliente.ragioneSociale || 'Fratelli Arena') + (cliente.piva ? ' — P.IVA ' + cliente.piva : ' — P.IVA non configurata (config/fic)')) + '" disabled>') +
-        ficField('Numero fattura', '<input class="fic-input" id="ficNumero" value="' + escapeHtml(it.numero) + '" placeholder="es. 12" onchange="ficOnIntestazioneChange()"' + dis + '>') +
+        ficField('Numero fattura' + (ficState.numeroFic ? ' (ultimo su FIC ' + ficState.numeroFic.anno + ': n. ' + ficState.numeroFic.ultimo + ')' : ''), '<input class="fic-input" id="ficNumero" value="' + escapeHtml(it.numero) + '" placeholder="…da FIC" onchange="ficOnIntestazioneChange()"' + dis + '>') +
         ficField('Data', '<input class="fic-input" type="date" id="ficData" value="' + it.data + '" onchange="ficOnIntestazioneChange()"' + dis + '>') +
         ficField('Scadenza (' + cfg.scadenzaGiorni + ' gg)', '<input class="fic-input" type="date" id="ficScadenza" value="' + it.scadenza + '" onchange="ficOnIntestazioneChange()"' + dis + '>') +
         ficField('Metodo di pagamento', '<input class="fic-input" id="ficMetodo" value="' + escapeHtml(it.metodoPagamento) + '" onchange="ficOnIntestazioneChange()"' + dis + '>') +

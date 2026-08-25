@@ -117,6 +117,12 @@ function createFicClient(opts) {
             return list[0] || null;
         },
 
+        // Ultimo numero usato per anno/numerazione: { "2026": { "": 20 } }
+        async getNumerazioni() {
+            const r = await request('GET', c + '/issued_documents/info?type=invoice&fieldset=numerations');
+            return (r && r.data && r.data.numerations) || {};
+        },
+
         async createInvoice(data) {
             const r = await request('POST', c + '/issued_documents', { data });
             return r && r.data;

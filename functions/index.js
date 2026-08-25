@@ -1820,3 +1820,4 @@ function ficEndpoint(nome, azione) {
 exports.ficCreaFattura = ficEndpoint('ficCreaFattura', 'creaFattura');
 exports.ficInviaSdi = ficEndpoint('ficInviaSdi', 'inviaSdi');
 exports.ficStato = ficEndpoint('ficStato', 'stato');
+exports.ficProssimoNumero = ficEndpoint('ficProssimoNumero', 'prossimoNumero');

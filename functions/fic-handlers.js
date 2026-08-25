@@ -235,6 +235,19 @@ function createHandlers(deps) {
         return { ok: true, esiste: true, stato: doc.stato, eiStatus, eiErrori: eiRaw && eiRaw.errors ? eiRaw.errors : (doc.eiErrori || null), ultimoErrore: doc.ultimoErrore || null, doc: pubblico(doc) };
     }
 
+    // ── 4. Prossimo numero fattura (continuità numerazione da FIC) ───
+    async function prossimoNumero(body) {
+        const data = body && body.data ? validaData(body.data, 'Data') : null;
+        const anno = String(data ? data.slice(0, 4) : new Date().getFullYear());
+        const numerazione = body && body.numerazione ? String(body.numerazione) : '';
+        const fic = await deps.getFic();
+        let num;
+        try { num = await fic.getNumerazioni(); } catch (e) { throw new HttpError(502, 'Numerazione FIC non disponibile: ' + e.message); }
+        const perAnno = num[anno] || {};
+        const ultimo = Number(perAnno[numerazione] || 0);
+        return { ok: true, anno, numerazione, ultimo, prossimo: ultimo + 1 };
+    }
+
     function pubblico(doc) {
         return {
             mese: doc.mese, stato: doc.stato, intestazione: doc.intestazione, totali: doc.totali, righe: doc.righe,
@@ -244,7 +257,7 @@ function createHandlers(deps) {
         };
     }
 
-    return { creaFattura, inviaSdi, stato, buildFicPayload };
+    return { creaFattura, inviaSdi, stato, prossimoNumero, buildFicPayload };
 }
 
 module.exports = { createHandlers, buildFicPayload, HttpError, STATI_INVIABILI };

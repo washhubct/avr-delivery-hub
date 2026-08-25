@@ -252,3 +252,10 @@ test('buildFicPayload: importi decimali esatti e totale quadrato', () => {
     assert.equal(data.items_list[1].net_price, 12.61);
     assert.equal(data.currency.id, 'EUR');
 });
+
+test('handler: prossimo numero dalla numerazione FIC (continuità)', async () => {
+    const f = mockFetch([{ method: 'GET', match: '/issued_documents/info', respond: { status: 200, body: { data: { numerations: { '2025': { '': 2 }, '2026': { '': 20 } } } } } }]);
+    const h = handlersWith(mockDb(CONFIG), f);
+    assert.deepEqual(await h.prossimoNumero({ data: '2026-08-25' }), { ok: true, anno: '2026', numerazione: '', ultimo: 20, prossimo: 21 });
+    assert.equal((await h.prossimoNumero({ data: '2027-01-10' })).prossimo, 1);
+});
