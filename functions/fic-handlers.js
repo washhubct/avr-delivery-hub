@@ -136,8 +136,15 @@ function createHandlers(deps) {
         try {
             vatId = await fic.findVatTypeId(cfg.ivaPercento);
             const cl = await fic.findClientByVat(cliente.piva);
-            if (cl) entity = { id: cl.id };
-            else {
+            if (cl) {
+                // FIC richiede name (e i dati fiscali) anche quando si passa l'id del cliente esistente
+                entity = {
+                    id: cl.id, name: cl.name || cliente.ragioneSociale, vat_number: cl.vat_number || cliente.piva, tax_code: cl.tax_code || cliente.codiceFiscale || cliente.piva,
+                    address_street: cl.address_street || cliente.indirizzo || '', address_postal_code: cl.address_postal_code || cliente.cap || '',
+                    address_city: cl.address_city || cliente.citta || '', address_province: cl.address_province || cliente.provincia || '',
+                    country: cl.country || 'Italia', e_invoice: true, ei_code: cl.ei_code || cliente.eiCode || '',
+                };
+            } else {
                 if (!cliente.ragioneSociale || !cliente.eiCode) throw new HttpError(500, 'Cliente P.IVA ' + cliente.piva + ' non trovato su FIC e anagrafica config/fic.cliente incompleta (ragioneSociale, eiCode).');
                 entity = {
                     name: cliente.ragioneSociale, vat_number: cliente.piva, tax_code: cliente.codiceFiscale || cliente.piva,

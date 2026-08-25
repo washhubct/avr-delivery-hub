@@ -112,7 +112,7 @@ function createFicClient(opts) {
 
         async findClientByVat(vatNumber) {
             const q = "vat_number = '" + String(vatNumber).replace(/'/g, '') + "'";
-            const r = await request('GET', c + '/entities/clients?q=' + encodeURIComponent(q));
+            const r = await request('GET', c + '/entities/clients?fields=id,name,vat_number,tax_code,address_street,address_postal_code,address_city,address_province,country,ei_code,e_invoice&q=' + encodeURIComponent(q));
             const list = (r && r.data) || [];
             return list[0] || null;
         },

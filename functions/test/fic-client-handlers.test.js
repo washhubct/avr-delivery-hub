@@ -33,7 +33,7 @@ function client(fetchImpl) { return createFicClient({ token: 'tok-secret', compa
 test('client: header bearer, ricerca cliente, vat 22% da info/vat_types', async () => {
     const f = mockFetch([
         { method: 'GET', match: '/info/vat_types', respond: { status: 200, body: { data: [{ id: 5, value: 10 }, { id: 7, value: 22, is_default: true }, { id: 9, value: 22 }] } } },
-        { method: 'GET', match: '/entities/clients?q=', respond: { status: 200, body: { data: [{ id: 42, name: 'X' }] } } },
+        { method: 'GET', match: '/entities/clients?', respond: { status: 200, body: { data: [{ id: 42, name: 'X' }] } } },
     ]);
     const c = client(f);
     assert.equal(await c.findVatTypeId(22), 7);
@@ -117,7 +117,7 @@ const INTESTAZIONE = { numero: '12', data: '2026-08-05', scadenza: '2026-08-10',
 function ficRoutes(extra) {
     return [
         { method: 'GET', match: '/info/vat_types', respond: { status: 200, body: { data: [{ id: 7, value: 22 }] } } },
-        { method: 'GET', match: '/entities/clients?q=', respond: { status: 200, body: { data: [{ id: 42 }] } } },
+        { method: 'GET', match: '/entities/clients?', respond: { status: 200, body: { data: [{ id: 42, name: 'FRATELLI ARENA SRL', vat_number: '01234567890', ei_code: 'SUBM70N' }] } } },
         { method: 'POST', match: /\/issued_documents$/, respond: { status: 200, body: { data: { id: 777, number: 12, amount_gross: 28349.43 } } } },
         { method: 'POST', match: '/e_invoice/send', respond: { status: 200, body: { data: { success: true } } } },
         { method: 'GET', match: '/issued_documents/777', respond: { status: 200, body: { data: { id: 777, ei_status: 'sent' } } } },
@@ -157,7 +157,10 @@ test('handler: crea → dry-run → invia, con audit e totali server-side', asyn
     const payload = f.calls.find(c => /issued_documents$/.test(c.url)).body.data;
     assert.equal(payload.type, 'invoice');
     assert.equal(payload.e_invoice, true);
-    assert.deepEqual(payload.entity, { id: 42 });
+    assert.equal(payload.entity.id, 42);
+    assert.equal(payload.entity.name, 'FRATELLI ARENA SRL');
+    assert.equal(payload.entity.ei_code, 'SUBM70N');
+    assert.equal(payload.entity.e_invoice, true);
     assert.equal(payload.items_list.length, 3);
     assert.equal(payload.items_list[0].net_price, 9.7);
     assert.equal(payload.items_list[0].vat.id, 7);
