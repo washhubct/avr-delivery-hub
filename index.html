@@ -612,6 +612,19 @@
                     </table>
                 </div>
             </div>
+            <!-- FATTURA ELETTRONICA — Fatture in Cloud (solo superadmin/amministratore, schema flat) -->
+            <div class="card" id="cardFic" style="display:none">
+                <h3 class="card-title">⚡ Fattura elettronica — Fatture in Cloud</h3>
+                <p class="card-desc">Carica il file Excel mensile dei conteggi confermato con Fratelli Arena. Il sistema ricalcola i totali dalle righe di dettaglio, evidenzia gli scostamenti, e crea la fattura su Fatture in Cloud solo dopo la tua approvazione. L'invio allo SDI è un passaggio separato con verifica XML preventiva.</p>
+                <div id="ficStatoBox" style="margin:12px 0"></div>
+                <div class="import-zone" id="ficDropZone" style="margin-top:12px"
+                     ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')"
+                     ondrop="event.preventDefault();this.classList.remove('dragover');ficHandleFile(event.dataTransfer.files)">
+                    <p>Trascina qui il file <code>.xlsx</code> del mese<br>oppure <label class="import-link" for="ficFile">sfoglia</label></p>
+                    <input type="file" id="ficFile" accept=".xlsx" style="display:none" onchange="ficHandleFile(this.files);this.value=''">
+                </div>
+                <div id="ficAnteprima"></div>
+            </div>
         </section>
 
         <!-- ═══ REPORT FINANZIARIO ═══ -->
@@ -851,7 +864,9 @@
     <script src="js/moduli/punti-timbratura.js"></script>
     <script src="js/moduli/timbrature.js"></script>
     <script src="js/moduli/riconciliazione.js"></script>
+    <script src="js/fic/fic-core.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
+    <script src="js/moduli/fatturazione-fic.js"></script>
     <script src="js/moduli/report-finanziario.js"></script>
     <script src="js/moduli/importa.js"></script>
     <script src="js/moduli/log-accessi.js"></script>

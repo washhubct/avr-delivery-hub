@@ -67,6 +67,8 @@ function renderFatturazione() {
     if (!d.mese) return;
     if (isSchemaFlat(d.mese)) renderFatturazioneFlat(d);
     else renderFatturazioneStorica(d);
+    // Card fattura elettronica (js/moduli/fatturazione-fic.js)
+    if (typeof renderFatturazioneFic === 'function') renderFatturazioneFic();
 }
 
 // ══════════════════════════════════════════════

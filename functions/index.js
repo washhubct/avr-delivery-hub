@@ -1751,3 +1751,72 @@ exports.pulisciAnagrafica = onSchedule(
         if (!res.ok) console.warn('[pulisciAnagrafica] email:', res.status);
     }
 );
+
+// ═══════════════════════════════════════════════════════════════════
+// FATTURAZIONE ELETTRONICA — Fatture in Cloud (API v2)
+// Secrets: FIC_TOKEN (token manuale FIC), FIC_COMPANY_ID.
+// Logica in fic-handlers.js (testabile); qui solo auth/CORS/wiring.
+// Chi può approvare/inviare: superadmin hardcoded + mansione 'amministratore'.
+// ═══════════════════════════════════════════════════════════════════
+const FIC_TOKEN = defineSecret('FIC_TOKEN');
+const FIC_COMPANY_ID = defineSecret('FIC_COMPANY_ID');
+const { createFicClient } = require('./fic-client.js');
+const { createHandlers, HttpError: FicHttpError } = require('./fic-handlers.js');
+
+const FIC_SUPERADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'guido@last-mile.it'];
+async function canFatturare(callerEmail) {
+    if (FIC_SUPERADMIN_EMAILS.includes(callerEmail)) return true;
+    try {
+        const doc = await db.collection('utenti').doc(callerEmail).get();
+        if (!doc.exists) return false;
+        const d = doc.data();
+        return d.mansione === 'amministratore' && d.attivo !== false;
+    } catch (e) {
+        console.error('[canFatturare] lookup error:', e.message);
+        return false;
+    }
+}
+
+function ficEndpoint(nome, azione) {
+    return onRequest(
+        { secrets: [FIC_TOKEN, FIC_COMPANY_ID], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 120 },
+        async (req, res) => {
+            const origin = req.headers.origin || '';
+            res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+            res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+            if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+            const authHeader = req.headers.authorization || '';
+            const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+            if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+            let caller;
+            try {
+                const decoded = await admin.auth().verifyIdToken(idToken);
+                caller = { uid: decoded.uid, email: (decoded.email || '').toLowerCase() };
+            } catch (e) { res.status(401).json({ error: 'Sessione non valida, rifai il login' }); return; }
+            if (!(await canFatturare(caller.email))) { res.status(403).json({ error: 'Solo superadmin e amministratori possono gestire la fatturazione elettronica' }); return; }
+            if (!checkRateLimit('fic:' + caller.email)) { res.status(429).json({ error: 'Troppe richieste, attendi un minuto' }); return; }
+
+            const handlers = createHandlers({
+                db,
+                getFic: async () => createFicClient({ token: FIC_TOKEN.value(), companyId: FIC_COMPANY_ID.value() }),
+            });
+            try {
+                const out = await handlers[azione](req.body || {}, caller);
+                // Log audit minimale: mai token, mai anagrafiche
+                console.log('[' + nome + ']', caller.uid, req.body && req.body.mese, out && out.stato);
+                res.status(200).json(out);
+            } catch (e) {
+                const status = e instanceof FicHttpError ? e.status : 500;
+                if (status >= 500) console.error('[' + nome + '] ' + (e.message || e));
+                res.status(status).json({ error: e.message || 'Errore interno', dettagli: e.extra || null });
+            }
+        }
+    );
+}
+
+exports.ficCreaFattura = ficEndpoint('ficCreaFattura', 'creaFattura');
+exports.ficInviaSdi = ficEndpoint('ficInviaSdi', 'inviaSdi');
+exports.ficStato = ficEndpoint('ficStato', 'stato');

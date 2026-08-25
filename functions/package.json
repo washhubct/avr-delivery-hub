@@ -1,9 +1,11 @@
 {
   "name": "avr-delivery-hub-functions",
-  "description": "Firebase Functions — Last Mile (AVR Logistic Delivery Hub)",
+  "description": "Firebase Functions \u2014 Last Mile (AVR Logistic Delivery Hub)",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions --project avr-logistic-dashboard"
+    "deploy": "firebase deploy --only functions --project avr-logistic-dashboard",
+    "copy-core": "cp ../js/fic/fic-core.js ./fic-core.js",
+    "test": "npm run copy-core && node --test test/*.test.js"
   },
   "engines": {
     "node": "22"

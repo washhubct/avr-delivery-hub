@@ -3,3 +3,8 @@ node_modules/
 *.log
 .firebase/
 firebase-debug.log
+.env
+.env.*
+!.env.example
+functions/.env
+functions/.env.*
