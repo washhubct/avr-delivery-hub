@@ -297,6 +297,13 @@ service cloud.firestore {
       return isAdminOrStaff() || isAmministratore() || isRisorseUmane() || isResponsabile();
     }
 
+    // ── FATTURE ELETTRONICHE (Fatture in Cloud) — scritte solo dalle CF fic*
+    // Lettura: superadmin + amministratore (stato/anteprima in dashboard).
+    match /fattureFic/{mese} {
+      allow read: if isSuperAdmin() || isAmministratore();
+      allow write: if false;
+    }
+
     // ── ARCHIVIO DRIVER CESSATI — scritto solo dalla CF pulisciAnagrafica
     // (admin SDK). L'ufficio lo legge per l'attribuzione storica delle
     // consegne (cognomi/alias dei cessati restano riconosciuti).
