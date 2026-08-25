@@ -129,7 +129,7 @@ function ficRenderAnteprima() {
         ficField('Scadenza (' + cfg.scadenzaGiorni + ' gg)', '<input class="fic-input" type="date" id="ficScadenza" value="' + it.scadenza + '" onchange="ficOnIntestazioneChange()"' + dis + '>') +
         ficField('Metodo di pagamento', '<input class="fic-input" id="ficMetodo" value="' + escapeHtml(it.metodoPagamento) + '" onchange="ficOnIntestazioneChange()"' + dis + '>') +
         ficField('Acconto già fatturato (€)', '<input class="fic-input" id="ficAccontoImporto" inputmode="decimal" value="' + escapeHtml(it.acconto.importo) + '" placeholder="0,00" onchange="ficOnIntestazioneChange()"' + dis + '>') +
-        ficField('Riferimento acconto', '<input class="fic-input" id="ficAccontoRif" value="' + escapeHtml(it.acconto.riferimento) + '" placeholder="es. FT 10 del 05/07/2026" onchange="ficOnIntestazioneChange()"' + dis + '>') +
+        ficField('Riferimento acconto', '<input class="fic-input" id="ficAccontoRif" value="' + escapeHtml(it.acconto.riferimento) + '" placeholder="es. fattura n. 6 del 03/08/2026" onchange="ficOnIntestazioneChange()"' + dis + '>') +
         '</div>';
 
     // Tabella righe con subtotali per area

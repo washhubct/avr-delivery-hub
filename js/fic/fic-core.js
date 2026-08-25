@@ -630,11 +630,19 @@
             if (f.feriali > 0) righe.push(riga('feriali', f, 'Filiale ' + f.codice + ' (' + f.area + ') - consegne giorni feriali ' + periodo, f.feriali, tFer));
             if (f.festivi > 0) righe.push(riga('festivi', f, 'Filiale ' + f.codice + ' (' + f.area + ') - consegne giorni festivi ' + periodo, f.festivi, tFes));
         });
-        ordinate.forEach(function (f) {
+        // Speciali: una riga per filiale, nell'ordine dei blocchi "Consegne speciali" del foglio
+        // (Gruppo Arena poi Palermo Retail, come nella fattura di riferimento)
+        var ordSpec = [];
+        parsed.riepilogo.specialiBlocchi.forEach(function (b) { b.righe.forEach(function (r) { if (ordSpec.indexOf(r.codice) === -1) ordSpec.push(r.codice); }); });
+        ordinate.slice().sort(function (a, b) {
+            var ia = ordSpec.indexOf(a.codice), ib = ordSpec.indexOf(b.codice);
+            if (ia === -1) ia = 999; if (ib === -1) ib = 999;
+            return ia - ib || parseInt(a.codice, 10) - parseInt(b.codice, 10);
+        }).forEach(function (f) {
             var imp = parsed.riepilogo.speciali[f.codice];
             if (imp === undefined || imp === ZERO) return;
             var n = f.nSpeciali || (parsed.speciali && parsed.speciali.perFiliale[f.codice] ? parsed.speciali.perFiliale[f.codice].n : 0);
-            righe.push(riga('speciali', f, 'Filiale ' + f.codice + ' (' + f.area + ') - n. ' + n + ' consegne speciali ' + periodo, 1, imp));
+            righe.push(riga('speciali', f, 'Filiale ' + f.codice + ' (' + f.area + ') - consegne speciali ' + periodo + ' (n. ' + n + (n === 1 ? ' consegna)' : ' consegne)'), 1, imp));
         });
         // speciali per filiali non presenti nel dettaglio (tollerante)
         Object.keys(parsed.riepilogo.speciali).forEach(function (k) {
@@ -645,8 +653,8 @@
             var acc = toCents(opts.acconto.importo);
             if (acc < ZERO) acc = -acc;
             if (acc > ZERO) {
-                var rif = opts.acconto.riferimento ? ' (' + opts.acconto.riferimento + ')' : '';
-                righe.push({ tipo: 'acconto', area: null, codice: null, descrizione: 'Detrazione acconto già fatturato' + rif, qty: 1, prezzoCents: -acc, totaleCents: -acc });
+                var rif = opts.acconto.riferimento ? ' con ns. ' + String(opts.acconto.riferimento).trim() : '';
+                righe.push({ tipo: 'acconto', area: null, codice: null, descrizione: "A dedurre: acconto gia' fatturato" + rif, qty: 1, prezzoCents: -acc, totaleCents: -acc });
             }
         }
         return righe;

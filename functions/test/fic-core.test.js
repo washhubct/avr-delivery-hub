@@ -73,7 +73,7 @@ test('luglio 2026: 52 righe, 8892 feriali, 698 festivi, 23 speciali €651,20; t
     assert.equal(Core.centsToString(c.euroSpeciali), '651.20');
     assert.equal(p.speciali.righe.length, 23);
 
-    const righe = Core.buildRighe(p, { acconto: { importo: '50000', riferimento: 'FT 10/2026' } });
+    const righe = Core.buildRighe(p, { acconto: { importo: '50000', riferimento: 'fattura n. 6 del 03/08/2026' } });
     assert.equal(righe.length, 52);
     const t = Core.totali(righe, 22);
     assert.equal(Core.centsToString(t.imponibile), '45705.38');
@@ -87,7 +87,9 @@ test('luglio 2026: 52 righe, 8892 feriali, 698 festivi, 23 speciali €651,20; t
     assert.equal(righe[righe.length - 1].prezzoCents, -5000000n);
     const speciali = righe.filter(r => r.tipo === 'speciali');
     assert.equal(speciali.length, 5);
-    assert.equal(speciali[0].descrizione, 'Filiale 524 (CT) - n. 7 consegne speciali luglio 2026');
+    assert.equal(speciali[0].descrizione, 'Filiale 411 (SR) - consegne speciali luglio 2026 (n. 6 consegne)');
+    assert.deepEqual(speciali.map(r => r.codice), ['411', '524', '528', '631', '543']);
+    assert.equal(righe[51].descrizione, "A dedurre: acconto gia' fatturato con ns. fattura n. 6 del 03/08/2026");
     // senza acconto
     assert.equal(Core.buildRighe(p, {}).length, 51);
     // nessuno scostamento reale sul file (Foglio1 assente → solo info)
@@ -134,7 +136,7 @@ test('fixture sintetica: righe, salto zero, totali', () => {
     const righe = Core.buildRighe(p, {});
     // 300 fer+fes, 301 fer (fes=0 saltata), 634 fer+fes, speciali 300 → 6
     assert.equal(righe.length, 6);
-    assert.equal(righe[5].descrizione, 'Filiale 300 (CT) - n. 2 consegne speciali agosto 2026');
+    assert.equal(righe[5].descrizione, 'Filiale 300 (CT) - consegne speciali agosto 2026 (n. 2 consegne)');
     const t = Core.totali(righe, 22);
     // 320*9.70 + 30*12.61 + 37.60 = 3104 + 378.30 + 37.60 = 3519.90
     assert.equal(Core.centsToString(t.imponibile), '3519.90');
