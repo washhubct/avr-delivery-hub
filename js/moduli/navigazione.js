@@ -27,6 +27,10 @@ function navigateTo(module) {
     if (module === 'fatturazione' && state.userRole === 'risorse_umane') {
         module = 'consegne';
     }
+    // Danni/Multe: solo superadmin, amministratore, risorse umane
+    if (module === 'danni' && !['superadmin', 'amministratore', 'risorse_umane'].includes(state.userRole)) {
+        module = 'consegne';
+    }
     state.currentModule = module;
     document.querySelectorAll('.nav-item').forEach(n =>
         n.classList.toggle('active', n.dataset.module === module));

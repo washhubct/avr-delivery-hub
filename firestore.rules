@@ -175,8 +175,10 @@ service cloud.firestore {
     // DANNI — admin/staff/amministratore/HR full; driver legge solo suoi
     // (HR registra multe/addebiti verbali e rateizzazioni)
     // ═══════════════════════════════════════════════════════════
+    // Danni/multe: SOLO superadmin, amministratore, risorse umane (+ driver i propri).
+    // Responsabili di zona e staff esclusi (decisione 22/09/2026).
     match /danni/{doc} {
-      allow read: if isGestionale() || (isDriver() && isOwnByEmail());
+      allow read: if isSuperAdmin() || isAmministratore() || isRisorseUmane() || (isDriver() && isOwnByEmail());
       allow write: if isAdminOrStaff() || isAmministratore() || isRisorseUmane();
     }
 

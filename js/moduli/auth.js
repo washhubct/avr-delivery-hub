@@ -78,6 +78,11 @@ function canSeeFatturato(role) {
     return role !== 'risorse_umane';
 }
 
+// True se il ruolo può vedere Danni/Multe (solo direzione e Risorse Umane).
+function canSeeDanni(role) {
+    return role === 'superadmin' || role === 'amministratore' || role === 'risorse_umane';
+}
+
 // True se il ruolo ha accesso admin/staff completo alla dashboard (senza P&L).
 function isAdminOrStaffRole(role) {
     return role === 'superadmin'
@@ -176,6 +181,11 @@ function initAuth() {
                 var fatturatoItems = document.querySelectorAll('.nav-fatturato');
                 fatturatoItems.forEach(function(el) {
                     el.style.display = canSeeFatturato(role) ? 'block' : 'none';
+                });
+
+                // Danni/Multe — solo direzione e Risorse Umane
+                document.querySelectorAll('.nav-danni').forEach(function(el) {
+                    el.style.display = canSeeDanni(role) ? 'block' : 'none';
                 });
 
                 // Label sidebar
