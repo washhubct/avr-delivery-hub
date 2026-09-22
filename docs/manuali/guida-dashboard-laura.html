@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Guida al gestionale — Laura</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',-apple-system,'Segoe UI',sans-serif; color:#1e293b; font-size:11.5pt; line-height:1.55; max-width:820px; margin:0 auto; padding:24px; }
+  .cover { text-align:center; padding:40px 0 26px; border-bottom:4px solid #0ea5e9; margin-bottom:28px; }
+  .cover .brand { font-size:26pt; font-weight:800; color:#0f1d3d; letter-spacing:3px; }
+  .cover .brand span { color:#0ea5e9; }
+  .cover h1 { font-size:15pt; font-weight:700; color:#334155; margin-top:8px; }
+  .cover .sub { font-size:10pt; color:#64748b; margin-top:6px; }
+  h2 { font-size:14pt; color:#0f1d3d; border-left:5px solid #0ea5e9; padding-left:10px; margin:26px 0 10px; page-break-after:avoid; }
+  h3 { font-size:11.5pt; color:#0f1d3d; margin:14px 0 6px; page-break-after:avoid; }
+  p { margin-bottom:8px; }
+  ul, ol { margin:0 0 10px 22px; }
+  li { margin-bottom:5px; }
+  .step { display:flex; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:10px; page-break-inside:avoid; }
+  .step .n { flex-shrink:0; width:28px; height:28px; border-radius:50%; background:#0f1d3d; color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:12pt; }
+  .box-warn { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  .box-ok { background:#ecfdf5; border:1px solid #6ee7b7; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  .box-info { background:#eff6ff; border:1px solid #93c5fd; border-radius:10px; padding:10px 14px; margin:10px 0; page-break-inside:avoid; }
+  table { width:100%; border-collapse:collapse; margin:10px 0 14px; font-size:10.5pt; page-break-inside:avoid; }
+  th { background:#0f1d3d; color:#fff; text-align:left; padding:7px 10px; font-weight:700; }
+  td { border:1px solid #e2e8f0; padding:7px 10px; vertical-align:top; }
+  code { font-family:'JetBrains Mono',Menlo,monospace; font-size:9.5pt; background:#eef2f7; padding:1px 5px; border-radius:4px; }
+  a { color:#0369a1; }
+  .footer { margin-top:30px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:9pt; color:#94a3b8; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">LAST <span>MILE</span></div>
+  <h1>Guida al gestionale — benvenuta Laura</h1>
+  <div class="sub">Accesso, attività quotidiane e mappa del gestionale · Settembre 2026</div>
+</div>
+
+<h2>1. Accesso</h2>
+<table>
+  <tr><th style="width:32%">Cosa</th><th>Dove / come</th></tr>
+  <tr><td><strong>Gestionale (dashboard)</strong></td><td><a href="https://dashboard.last-mile.it">https://dashboard.last-mile.it</a></td></tr>
+  <tr><td><strong>Tuo utente</strong></td><td><code>risorse.umane@last-mile.it</code> — ruolo <strong>Amministratore</strong></td></tr>
+  <tr><td><strong>Prima password</strong></td><td>Nella schermata di login premi <strong>Password dimenticata</strong>, inserisci la tua email e segui il link che arriva (controlla anche lo spam). Da lì imposti la password che vuoi.</td></tr>
+  <tr><td><strong>App driver</strong> (quella usata dai driver)</td><td><a href="https://appdriver.last-mile.it">https://appdriver.last-mile.it</a> — tu non la usi, ma ti serve sapere cosa vedono loro.</td></tr>
+  <tr><td><strong>Casella email</strong></td><td>Le mail automatiche ai driver partono da <code>noreply@last-mile.it</code> e le risposte arrivano a <code>risorse.umane@last-mile.it</code>: controllala ogni giorno.</td></tr>
+</table>
+<ul>
+  <li>Ogni notte a <strong>mezzanotte</strong> la sessione scade: al mattino rifai il login. È normale.</li>
+  <li>Il gestionale funziona da computer e da telefono. Per caricare documenti è più comodo il computer.</li>
+</ul>
+
+<h2>2. Le tue attività</h2>
+
+<h3>A. Multe e danni ai furgoni</h3>
+<p>È il lavoro più frequente. Ogni multa, sinistro o danno va registrato nel menu <strong>Danni / Multe</strong>: da lì il sistema calcola in automatico la trattenuta mensile al driver e la mostra in <strong>Compensi</strong>.</p>
+
+<div class="step"><div class="n">1</div><div>
+<strong>Premi "Registra danno"</strong> e compila:
+<ul>
+  <li><strong>Data danno</strong> — la data del fatto (per una multa: la data dell'infrazione, non quella in cui arriva il verbale).</li>
+  <li><strong>Driver responsabile</strong> — scegli dall'elenco. Se non c'è, prima censiscilo in Anagrafica.</li>
+  <li><strong>Targa furgone</strong>.</li>
+  <li><strong>Descrizione</strong> — breve e chiara (es. "Eccesso di velocità SS114, verbale n. 12345", "Specchietto dx rotto in manovra").</li>
+  <li><strong>Importo totale (€)</strong> — quanto effettivamente si trattiene al driver.</li>
+  <li><strong>Rateizzazione</strong> — pagamento unico oppure da 2 a 6 rate mensili. La prima rata parte dal mese della data danno.</li>
+  <li><strong>Tipo sinistro</strong> — Multa, Franchigia assicurativa, Riparazione carrozzeria, Riparazione meccanica, Altro.</li>
+  <li><strong>Numero sinistro / riferimento</strong> — numero del verbale o della pratica assicurativa (facoltativo ma utile).</li>
+  <li><strong>Documenti</strong> — allega verbale, foto del danno, fattura del carrozziere, perizia. Puoi allegare più file.</li>
+</ul>
+</div></div>
+<div class="step"><div class="n">2</div><div>
+<strong>Salva.</strong> Il danno compare nella tabella con lo stato delle rate. Cliccando la riga vedi il dettaglio, puoi modificarlo o aggiungere documenti arrivati dopo (es. la fattura).
+</div></div>
+<div class="step"><div class="n">3</div><div>
+<strong>Verifica in Compensi.</strong> Nel mese giusto, nella colonna "Danni (rata mese)" del driver deve comparire la rata. Se non compare, il cognome del driver nel danno non corrisponde a quello in anagrafica: correggilo.
+</div></div>
+<div class="box-warn">⚠️ I driver <strong>non vedono</strong> importi, multe o trattenute nell'app. La comunicazione della trattenuta al driver la fai tu, a voce o via email.</div>
+
+<h3>B. Anagrafica driver</h3>
+<p>Menu <strong>Anagrafica Driver</strong>. È la fonte unica: tutto il resto (app, report, compensi, classifica) si aggancia al cognome e all'email scritti qui.</p>
+<ul>
+  <li><strong>Nuovo driver:</strong> "Aggiungi driver" → cognome e nome come sui documenti, provincia, contratto e scadenza, <strong>email personale in minuscolo</strong> (sarà il suo login), eventuali alias con cui compare sui fogli Decò. Premi <strong>"Salva + Crea accesso app"</strong>: il driver riceve una mail da <code>noreply@last-mile.it</code> con il link per impostare la password.</li>
+  <li><strong>Mail non arrivata:</strong> fai controllare lo spam, ricontrolla l'email, poi rimanda le credenziali dalla riga del driver. Si può rifare quante volte serve.</li>
+  <li><strong>Cessazione:</strong> usa il bottone <strong>⏸️ Disattiva</strong>, mai eliminare. Il driver non entra più nell'app, lo storico resta, e dopo 90 giorni viene archiviato da solo.</li>
+  <li><strong>Colonna Patente:</strong> i dati li inserisce il driver dal suo Profilo nell'app. Badge <strong style="color:#b45309">giallo</strong> = mancante o scade entro 30 giorni, <strong style="color:#b91c1c">rosso</strong> = scaduta. Chi ha la patente scaduta o mancante <strong>è bloccato nell'app</strong> finché non la inserisce. Chiedi sempre la foto fronte/retro e conservala nella cartella del driver.</li>
+  <li><strong>Colonna Scadenza contratto:</strong> stessi colori. Rinnovo = apri il driver e aggiorna tipo contratto e data.</li>
+</ul>
+
+<h3>C. Controlli settimanali (lunedì mattina)</h3>
+<table>
+  <tr><th style="width:30%">Cosa</th><th>Dove</th><th>Cosa fare</th></tr>
+  <tr><td>Driver che non usano l'app</td><td><strong>Produttività</strong> e <strong>Riconciliazione</strong></td><td>Chi ha consegne Decò ma zero report app: primo sollecito via WhatsApp o email, se recidivo avvisa Guido.</td></tr>
+  <tr><td>Patenti e contratti</td><td><strong>Anagrafica Driver</strong></td><td>Badge gialli e rossi: sollecita il driver, raccogli i documenti.</td></tr>
+  <tr><td>Timbrature</td><td><strong>Timbrature</strong></td><td>Ingressi mancanti o segnalati come sospetti: chiedi spiegazioni al driver.</td></tr>
+  <tr><td>Segnalazioni dei driver</td><td><strong>Segnalazioni</strong></td><td>I driver segnalano problemi (mezzo, filiale, app) con foto. Leggi, risolvi o inoltra, poi segna come <strong>risolta</strong>.</td></tr>
+  <tr><td>Ritorni</td><td><strong>Ritorni</strong></td><td>Consegne tornate indietro registrate dai driver: controlla che siano coerenti con quanto dicono le filiali.</td></tr>
+</table>
+<div class="box-info">📧 <strong>Email automatiche che ricevi:</strong> ogni mattina alle 8:30 arriva il report "Controlli Last Mile" <strong>solo se ci sono anomalie</strong> (sync fermo, filiali mute, driver che non usano l'app, scontrini sospetti, driver non censiti). Il lunedì include anche patenti scadute, in scadenza e mancanti. Se non arriva nulla, è tutto ok.</div>
+
+<h3>D. Fine mese</h3>
+<ul>
+  <li><strong>Classifica:</strong> il menu Classifica mostra la graduatoria del mese con i nomi reali. I primi 3 vincono buoni pasto (€100 / €70 / €40): comunicali e consegna i buoni.</li>
+  <li><strong>Compensi:</strong> tabella per driver con consegne Decò, consegne app, differenza e rata danni del mese. Serve alla direzione per i controlli e alle buste paga.</li>
+</ul>
+
+<h2>3. Mappa del gestionale (cosa vedi con il tuo ruolo)</h2>
+<table>
+  <tr><th style="width:24%">Menu</th><th>Cosa mostra</th><th style="width:30%">Cosa puoi fare</th></tr>
+  <tr><td><strong>Dashboard</strong></td><td>Numeri del mese: consegne, fatturato stimato, driver attivi, andamento per provincia.</td><td>Solo consultazione.</td></tr>
+  <tr><td><strong>Consegne</strong></td><td>Tutte le consegne arrivate dai fogli Decò, per filiale, driver, giorno.</td><td>Filtrare, cercare, esportare.</td></tr>
+  <tr><td><strong>Riconciliazione</strong></td><td>Confronto tra ciò che i driver inseriscono nell'app e i fogli Decò.</td><td>Individuare chi non usa l'app o inserisce numeri diversi.</td></tr>
+  <tr><td><strong>Fatturazione</strong></td><td>Fatture mensili verso Fratelli Arena.</td><td>Consultazione. Le fatture le emette Guido.</td></tr>
+  <tr><td><strong>Report finanziario</strong></td><td>Ricavi, costi e margini per mese e provincia.</td><td>Solo consultazione.</td></tr>
+  <tr><td><strong>Anagrafica Driver</strong></td><td>Elenco driver con contratto, patente, stato.</td><td><strong>Tua responsabilità:</strong> nuovi driver, credenziali, disattivazioni, dati.</td></tr>
+  <tr><td><strong>Compensi</strong></td><td>Per driver e mese: consegne, lordo, rata danni, netto.</td><td>Consultazione e controllo.</td></tr>
+  <tr><td><strong>Produttività</strong></td><td>Consegne al giorno e tempo medio per consegna dai report app.</td><td>Individuare chi è lento o non registra.</td></tr>
+  <tr><td><strong>Danni / Multe</strong></td><td>Elenco multe e danni con rate e documenti.</td><td><strong>Tua responsabilità:</strong> registrare, allegare documenti, aggiornare.</td></tr>
+  <tr><td><strong>Ritorni</strong></td><td>Consegne rientrate registrate dai driver.</td><td>Consultazione e verifica.</td></tr>
+  <tr><td><strong>Classifica</strong></td><td>Graduatoria mensile con nomi reali e punti.</td><td>Decidere i premi a fine mese.</td></tr>
+  <tr><td><strong>Segnalazioni</strong></td><td>Segnalazioni dei driver con foto e stato (aperta / risolta).</td><td>Gestire e chiudere.</td></tr>
+  <tr><td><strong>Filiali</strong></td><td>Elenco supermercati serviti con codice, provincia e link al foglio Decò.</td><td>Consultazione. <strong>Non modificare i link ai fogli.</strong></td></tr>
+  <tr><td><strong>Utenti</strong></td><td>Chi accede al gestionale (amministratori, HR, responsabili di zona).</td><td>Creare o disattivare utenti ufficio, solo su indicazione di Guido.</td></tr>
+  <tr><td><strong>Timbrature</strong> e <strong>Punti timbratura</strong></td><td>Ingressi/uscite dei driver e i 5 punti provinciali con tag NFC.</td><td>Controllare le timbrature. I punti non si toccano.</td></tr>
+  <tr><td><strong>Import</strong></td><td>Caricamento manuale di file Excel dalle filiali.</td><td>Solo se te lo chiede Guido: di norma i dati arrivano da soli ogni sera.</td></tr>
+  <tr><td><strong>Log accessi</strong></td><td>Chi è entrato nel gestionale e nell'app e quando.</td><td>Consultazione.</td></tr>
+</table>
+
+<h2>4. Cosa non fare</h2>
+<ul>
+  <li>Non <strong>eliminare</strong> driver: si disattivano.</li>
+  <li>Non cambiare cognome o email a un driver "per sistemare" un report: prima chiedi, perché cognome ed email sono le chiavi con cui si agganciano consegne e compensi.</li>
+  <li>Non modificare Filiali, Punti timbratura, Utenti senza indicazione di Guido.</li>
+  <li>Non comunicare ai driver posizioni in classifica di altri driver né importi di fatturato: sono dati riservati.</li>
+</ul>
+
+<h2>5. Problemi frequenti</h2>
+<table>
+  <tr><th style="width:38%">Problema</th><th>Soluzione</th></tr>
+  <tr><td>Il driver dice "Account non abilitato"</td><td>Non è in anagrafica, è disattivato, oppure usa un'email diversa da quella in anagrafica. Correggi e fallo riprovare.</td></tr>
+  <tr><td>Il driver dice "Patente scaduta / Inserisci la patente" e non entra</td><td>È il blocco voluto. Deve inserire numero e nuova scadenza nell'app e mandarti la foto della patente. Se la data che aveva inserito era sbagliata, la corregge lui dalla stessa schermata.</td></tr>
+  <tr><td>Password dimenticata (driver o tua)</td><td>"Password dimenticata" nella schermata di login. Per i driver puoi anche reinviare le credenziali dall'anagrafica.</td></tr>
+  <tr><td>La rata del danno non compare in Compensi</td><td>Il cognome nel danno non coincide con l'anagrafica, oppure la data danno è in un altro mese. Apri il danno e correggi.</td></tr>
+  <tr><td>Un driver nuovo non compare nei report</td><td>Deve essere attivo in anagrafica e con il cognome scritto come sui fogli Decò (se diverso, aggiungi l'alias). I dati si allineano dal giorno dopo.</td></tr>
+  <tr><td>Non arriva il report delle 8:30</td><td>Se non ci sono anomalie non arriva: è normale.</td></tr>
+  <tr><td>Qualcosa non funziona o vedi dati strani</td><td>Scrivi a Guido con schermata e orario: non provare a "sistemare" i dati a mano.</td></tr>
+</table>
+
+<div class="footer">Last Mile S.r.l. — Documento interno · Guida al gestionale per Risorse Umane · Settembre 2026</div>
+
+</body>
+</html>
