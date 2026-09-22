@@ -1593,8 +1593,23 @@ exports.controlliAutomatici = onSchedule(
         const decoNoti = new Set(((cfgSnap.exists && cfgSnap.data().riderDecoNoti) || []).map((x) => String(x).toUpperCase().replace(/['\u2019` ]/g, '')));
 
         const cognomi = [];
+        // Patenti (dato autodichiarato nell'app): scadute e mancanti bloccano
+        // l'app driver; qui si avvisa l'ufficio. Solo il lunedì per non
+        // ripetere ogni giorno le stesse righe finché il driver non aggiorna.
+        const lunedi = new Date().getUTCDay() === 1;
+        const patScadute = [], patInScadenza = [], patMancanti = [];
+        const giorniA = (ymd) => Math.round((new Date(ymd + 'T12:00:00Z') - new Date(oggi + 'T12:00:00Z')) / 86400000);
         anagSnap.forEach((d) => {
             const x = d.data();
+            if (x.attivo !== false && x.cognome) {
+                const nome = x.cognome + ' ' + (x.nome || '');
+                if (!x.numeroPatente || !/^\d{4}-\d{2}-\d{2}$/.test(x.scadenzaPatente || '')) patMancanti.push(nome);
+                else {
+                    const g = giorniA(x.scadenzaPatente);
+                    if (g < 0) patScadute.push(nome + ' (' + x.scadenzaPatente + ')');
+                    else if (g <= 30) patInScadenza.push(nome + ' (' + x.scadenzaPatente + ', ' + g + ' gg)');
+                }
+            }
             if (!x.cognome) return;
             cognomi.push(norm(x.cognome));
             if (Array.isArray(x.alias)) x.alias.forEach((a) => { if (a) cognomi.push(norm(a)); });
@@ -1634,6 +1649,11 @@ exports.controlliAutomatici = onSchedule(
         });
 
         const anomalie = [];
+        if (lunedi) {
+            if (patScadute.length) anomalie.push('🔴 <b>Patente scaduta</b> (driver bloccato nell\'app finché non dichiara il rinnovo): ' + patScadute.join(', '));
+            if (patInScadenza.length) anomalie.push('🟡 <b>Patente in scadenza</b> (entro 30 gg): ' + patInScadenza.join(', '));
+            if (patMancanti.length) anomalie.push('⚪ <b>Patente non inserita</b> nell\'app (driver bloccato al prossimo accesso): ' + patMancanti.join(', '));
+        }
         importiSospetti.forEach((x) => anomalie.push('🟣 <b>Scontrino sospetto</b> (>€5.000, probabile refuso — col prezziario vale €300): ' + x));
         const oreDaSync = maxSync ? (Date.now() - new Date(maxSync).getTime()) / 3600000 : 999;
         if (oreDaSync > 36) anomalie.push('🔴 <b>Sync GAS fermo</b>: ultima scrittura ' + (maxSync || 'mai') + ' (' + Math.round(oreDaSync) + ' ore fa). Controllare i trigger su script.google.com.');

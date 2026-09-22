@@ -3,7 +3,7 @@
 function renderAnagraficaDriver() {
     const tbody = document.getElementById('tblAnagraficaDriver');
     if (state.driverList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px">Nessun driver. Clicca "Popola driver" per caricare la lista preconfigurata.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:40px">Nessun driver. Clicca "Popola driver" per caricare la lista preconfigurata.</td></tr>';
         return;
     }
 
@@ -19,7 +19,7 @@ function renderAnagraficaDriver() {
     }
 
     if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px">Nessun risultato per "' + searchTerm + '"</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:40px">Nessun risultato per "' + searchTerm + '"</td></tr>';
         return;
     }
 
@@ -31,6 +31,7 @@ function renderAnagraficaDriver() {
         <td><span class="badge badge-info">${escapeHtml(d.citta)}</span></td>
         <td>${escapeHtml(d.contratto) || '—'}</td>
         <td>${scadenzaBadge(d.scadenzaContratto)}</td>
+        <td>${patenteBadge(d)}</td>
         <td><span class="badge ${d.attivo !== false ? 'badge-ok' : 'badge-err'}">${d.attivo !== false ? 'Attivo' : 'Inattivo'}</span></td>
         <td>
             <button class="btn btn-sm" onclick="editDriver('${idSafe}')">✏️</button>
@@ -51,6 +52,18 @@ function scadenzaBadge(scad) {
     if (giorni < 0) return '<span class="badge badge-err" title="Contratto scaduto">⚠️ ' + label + '</span>';
     if (giorni <= 30) return '<span class="badge badge-warn" title="Scade tra ' + giorni + ' giorni">' + label + '</span>';
     return label;
+}
+
+// Badge patente (dato autodichiarato dal driver nell'app): mancante / scaduta / entro 30 gg
+function patenteBadge(d) {
+    if (!d.numeroPatente || !d.scadenzaPatente) return '<span class="badge badge-warn" title="Il driver non ha inserito la patente nell\'app">Mancante</span>';
+    var dt = new Date(d.scadenzaPatente + 'T12:00:00');
+    if (isNaN(dt)) return escapeHtml(d.scadenzaPatente);
+    var label = dt.toLocaleDateString('it-IT');
+    var giorni = Math.floor((dt - new Date()) / 86400000);
+    if (giorni < 0) return '<span class="badge badge-err" title="Patente scaduta — il driver è bloccato nell\'app">⚠️ ' + label + '</span>';
+    if (giorni <= 30) return '<span class="badge badge-warn" title="Scade tra ' + giorni + ' giorni">' + label + '</span>';
+    return '<span title="' + escapeHtml(d.numeroPatente) + '">' + label + '</span>';
 }
 
 var CONTRATTI_TIPI = ['Full time', 'Part time'];
