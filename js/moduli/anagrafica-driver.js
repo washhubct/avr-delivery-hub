@@ -35,6 +35,7 @@ function renderAnagraficaDriver() {
         <td><span class="badge ${d.attivo !== false ? 'badge-ok' : 'badge-err'}">${d.attivo !== false ? 'Attivo' : 'Inattivo'}</span></td>
         <td>
             <button class="btn btn-sm" onclick="editDriver('${idSafe}')">✏️</button>
+            <button class="btn btn-sm" title="Invia notifica push a questo driver" onclick="openPushDriver('${idSafe}')">🔔</button>
             <button class="btn btn-sm btn-danger" title="Disattiva/riattiva (blocca l'app; archiviazione automatica dopo 90gg)" onclick="toggleDriverAttivo('${idSafe}')">⏸️</button>
         </td>
     </tr>`;
@@ -302,4 +303,55 @@ async function popolaDriver() {
     toast(`${added} driver aggiunti`, 'success');
     await loadDriverAnagrafica();
     renderAnagraficaDriver();
+}
+
+// ── Notifiche push ai driver (CF pushInvia: direzione + Risorse Umane) ──
+var PUSH_PRESETS = {
+    patente: { titolo: 'Patente 🪪', testo: 'Verifica la tua patente nell\'app: fotografa fronte e retro dal Profilo.' },
+    consegne: { titolo: 'Consegne 📦', testo: 'Ricordati di inserire le consegne di oggi nell\'app.' },
+    libero: { titolo: 'Last Mile', testo: '' }
+};
+function openPushDriver(id) {
+    var d = id ? (state.driverList || []).find(function (x) { return x.id === id; }) : null;
+    var dest = d
+        ? '<div style="margin-bottom:10px">Destinatario: <strong>' + escapeHtml(d.cognome + ' ' + (d.nome || '')) + '</strong>' + (d.email ? '' : ' <span class="badge badge-err">senza email</span>') + '</div><input type="hidden" id="pushA" value="emails"><input type="hidden" id="pushEmail" value="' + escapeHtml(d.email || '') + '">'
+        : '<div class="form-group"><label>Destinatari</label><select id="pushA" class="input"><option value="tutti">Tutti i driver attivi</option><option value="patente">Solo chi ha la patente scaduta, mancante o non verificata</option><option value="noapp">Solo chi non inserisce consegne da più di 3 giorni</option></select></div>';
+    openModal('🔔 Notifica push', dest +
+        '<div class="form-group"><label>Modello</label><select id="pushPreset" class="input" onchange="pushApplyPreset()"><option value="libero">Testo libero</option><option value="patente">Patente</option><option value="consegne">Consegne giornaliere</option></select></div>' +
+        '<div class="form-group"><label>Titolo</label><input type="text" id="pushTitolo" class="input" maxlength="60" value="Last Mile"></div>' +
+        '<div class="form-group"><label>Testo (max 300 caratteri)</label><textarea id="pushTesto" class="input" rows="3" maxlength="300"></textarea></div>' +
+        '<div id="pushEsito" style="font-size:13px;margin:8px 0"></div>' +
+        '<div style="display:flex;gap:8px"><button class="btn btn-primary" id="btnPushInvia" onclick="inviaPushDriver()" style="flex:1">Invia notifica</button><button class="btn" onclick="closeModal()">Annulla</button></div>' +
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:8px">Arriva solo ai driver che hanno accettato le notifiche nell\'app. Chi non le ha attivate viene elencato dopo l\'invio: per loro resta l\'email.</div>');
+}
+function pushApplyPreset() {
+    var p = PUSH_PRESETS[document.getElementById('pushPreset').value] || PUSH_PRESETS.libero;
+    document.getElementById('pushTitolo').value = p.titolo;
+    document.getElementById('pushTesto').value = p.testo;
+}
+async function inviaPushDriver() {
+    var testo = document.getElementById('pushTesto').value.trim();
+    var titolo = document.getElementById('pushTitolo').value.trim() || 'Last Mile';
+    var a = document.getElementById('pushA').value;
+    var emailEl = document.getElementById('pushEmail');
+    if (!testo) { toast('Scrivi il testo della notifica', 'warning'); return; }
+    if (a === 'emails' && !(emailEl && emailEl.value)) { toast('Il driver non ha email in anagrafica', 'error'); return; }
+    var btn = document.getElementById('btnPushInvia'); btn.disabled = true; btn.textContent = 'Invio…';
+    var esito = document.getElementById('pushEsito');
+    try {
+        var user = firebase.auth().currentUser;
+        var idToken = await user.getIdToken();
+        var resp = await fetch('https://europe-west1-avr-logistic-dashboard.cloudfunctions.net/pushInvia', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+            body: JSON.stringify({ a: a, emails: emailEl ? [emailEl.value] : [], titolo: titolo, testo: testo })
+        });
+        var j = await resp.json();
+        if (!resp.ok) throw new Error(j.error || ('HTTP ' + resp.status));
+        esito.innerHTML = '<div style="color:var(--success)">✅ Inviata a <strong>' + j.inviati + '</strong> dispositivi (' + j.raggiunti.length + ' driver raggiunti).</div>' +
+            (j.nonRaggiunti.length ? '<div style="color:var(--warning);margin-top:4px">⚠️ Senza notifiche attive (' + j.nonRaggiunti.length + '): ' + escapeHtml(j.nonRaggiunti.join(', ')) + '</div>' : '');
+        btn.textContent = 'Inviata';
+    } catch (e) {
+        esito.innerHTML = '<div style="color:var(--danger)">Errore: ' + escapeHtml(e.message) + '</div>';
+        btn.disabled = false; btn.textContent = 'Riprova';
+    }
 }

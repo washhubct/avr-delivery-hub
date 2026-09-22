@@ -1978,3 +1978,95 @@ exports.verificaPatente = onRequest(
         res.json({ ok: true, stato: esito.stato, motivo: esito.motivo, numero: esito.stato === 'verificata' ? esito.numero : null, scadenza: esito.scadenza });
     }
 );
+
+// ═══════════════════════════════════════════════════════════════════
+// PUSH MANUALE dal gestionale (direzione + Risorse Umane)
+// body: { a: 'tutti' | 'emails' | 'patente' | 'noapp', emails?: [], titolo, testo, url? }
+// Ritorna chi è raggiungibile (ha almeno un device iscritto) e chi no.
+// Ogni invio viene registrato in pushLog/{auto}.
+// ═══════════════════════════════════════════════════════════════════
+exports.pushInvia = onRequest(
+    { secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 60 },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+        const authHeader = req.headers.authorization || '';
+        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+        let callerEmail = '';
+        try { callerEmail = ((await admin.auth().verifyIdToken(idToken)).email || '').toLowerCase(); } catch (e) { res.status(401).json({ error: 'Token non valido' }); return; }
+        if (!(await canManageDriverAccess(callerEmail))) { res.status(403).json({ error: 'Non autorizzato' }); return; }
+
+        const body = req.body || {};
+        const titolo = String(body.titolo || 'Last Mile').trim().slice(0, 60);
+        const testo = String(body.testo || '').trim().slice(0, 300);
+        const url = /^\.\/|^https:\/\/appdriver\.last-mile\.it/.test(String(body.url || '')) ? String(body.url) : './';
+        if (!testo) { res.status(400).json({ error: 'Testo mancante' }); return; }
+
+        // Destinatari: sempre driver attivi con email
+        const anagSnap = await db.collection('driverAnagrafica').where('attivo', '!=', false).get();
+        const oggi = giornoInRome(new Date());
+        const tutti = [];
+        anagSnap.forEach((d) => { const x = d.data(); if (x.email) tutti.push({ email: x.email.toLowerCase(), nome: (x.cognome + ' ' + (x.nome || '')).trim(), x }); });
+        let target = tutti;
+        const a = String(body.a || 'emails');
+        if (a === 'emails') {
+            const set = new Set((Array.isArray(body.emails) ? body.emails : []).map((e) => String(e).toLowerCase()));
+            target = tutti.filter((t) => set.has(t.email));
+        } else if (a === 'patente') {
+            target = tutti.filter((t) => { const x = t.x; const pv = x.patenteVerifica; return !x.numeroPatente || !x.scadenzaPatente || x.scadenzaPatente < oggi || !(pv && pv.stato === 'verificata'); });
+        } else if (a === 'noapp') {
+            const mese = oggi.slice(0, 7);
+            const rep = await db.collection('reportDriver').where('mese', '==', mese).get();
+            const ultimo = {};
+            rep.forEach((d) => { const r = d.data(); const dt = r.data && r.data.toDate ? giornoInRome(r.data.toDate()) : ''; const e = (r.driverEmail || '').toLowerCase(); if (dt > (ultimo[e] || '')) ultimo[e] = dt; });
+            const limite = giornoInRome(new Date(Date.now() - 3 * 86400000));
+            target = tutti.filter((t) => (ultimo[t.email] || '') < limite);
+        }
+        if (target.length === 0) { res.json({ ok: true, inviati: 0, raggiunti: [], nonRaggiunti: [] }); return; }
+
+        initWebpush();
+        const subs = await subsPerEmails(target.map((t) => t.email));
+        const r = await inviaPushASubs(subs, { title: titolo, body: testo, url });
+        const conDevice = new Set(subs.map((s) => (s.email || '').toLowerCase()));
+        const raggiunti = target.filter((t) => conDevice.has(t.email)).map((t) => t.nome);
+        const nonRaggiunti = target.filter((t) => !conDevice.has(t.email)).map((t) => t.nome);
+        await db.collection('pushLog').add({ ts: new Date().toISOString(), da: callerEmail, a, titolo, testo, destinatari: target.length, device: subs.length, inviati: r.sent, morti: r.dead, raggiunti, nonRaggiunti });
+        res.json({ ok: true, inviati: r.sent, device: subs.length, raggiunti, nonRaggiunti });
+    }
+);
+
+// Lunedì 9:00 — push patente a chi è bloccato o in scadenza (≤30 gg) o non verificato
+exports.pushPatenteSettimanale = onSchedule(
+    { schedule: '0 9 * * 1', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY] },
+    async () => {
+        const oggi = giornoInRome(new Date());
+        const tra30 = giornoInRome(new Date(Date.now() + 30 * 86400000));
+        const snap = await db.collection('driverAnagrafica').where('attivo', '!=', false).get();
+        const gruppi = { scaduta: [], mancante: [], scadenza: [], nonverificata: [] };
+        snap.forEach((d) => {
+            const x = d.data(); if (!x.email) return; const e = x.email.toLowerCase();
+            if (!x.numeroPatente || !x.scadenzaPatente) gruppi.mancante.push(e);
+            else if (x.scadenzaPatente < oggi) gruppi.scaduta.push(e);
+            else if (!(x.patenteVerifica && x.patenteVerifica.stato === 'verificata')) gruppi.nonverificata.push(e);
+            else if (x.scadenzaPatente <= tra30) gruppi.scadenza.push(e);
+        });
+        const msg = {
+            scaduta: 'La tua patente risulta scaduta: rinnovala e fotografala nell\'app per sbloccare il turno.',
+            mancante: 'Manca la tua patente nell\'app: fotografa fronte e retro dal Profilo.',
+            nonverificata: 'Verifica la patente con una foto dal Profilo: dal 6 ottobre l\'app resta bloccata finché non lo fai.',
+            scadenza: 'La tua patente scade entro 30 giorni: prenota il rinnovo e poi aggiornala nell\'app.',
+        };
+        initWebpush();
+        for (const k of Object.keys(gruppi)) {
+            if (!gruppi[k].length) continue;
+            const subs = await subsPerEmails(gruppi[k]);
+            const r = await inviaPushASubs(subs, { title: 'Patente 🪪', body: msg[k], url: './' });
+            console.log('[push] patente ' + k + ': ' + gruppi[k].length + ' driver, ' + subs.length + ' device, sent=' + r.sent);
+        }
+    }
+);
