@@ -56,14 +56,39 @@ function scadenzaBadge(scad) {
 
 // Badge patente (dato autodichiarato dal driver nell'app): mancante / scaduta / entro 30 gg
 function patenteBadge(d) {
-    if (!d.numeroPatente || !d.scadenzaPatente) return '<span class="badge badge-warn" title="Il driver non ha inserito la patente nell\'app">Mancante</span>';
+    var v = d.patenteVerifica || null;
+    var foto = v && v.foto ? ' <button class="btn btn-sm" title="Vedi foto patente" onclick="openFotoPatente(\'' + escapeHtml(d.id) + '\')">📷</button>' : '';
+    var ver = '';
+    if (v && v.stato === 'verificata') ver = ' <span title="Verificata dall\'AI il ' + escapeHtml((v.il || '').slice(0, 10)) + '">✅</span>';
+    else if (v && v.stato === 'respinta') ver = ' <span class="badge badge-err" title="' + escapeHtml(v.motivo || '') + '">Respinta</span>';
+    else ver = ' <span style="color:var(--text-light);font-size:11px" title="Nessuna foto verificata dall\'AI">(da verificare)</span>';
+    if (!d.numeroPatente || !d.scadenzaPatente) return '<span class="badge badge-warn" title="Patente non presente: il driver è bloccato nell\'app">Mancante</span>' + ver + foto;
     var dt = new Date(d.scadenzaPatente + 'T12:00:00');
-    if (isNaN(dt)) return escapeHtml(d.scadenzaPatente);
+    if (isNaN(dt)) return escapeHtml(d.scadenzaPatente) + ver + foto;
     var label = dt.toLocaleDateString('it-IT');
     var giorni = Math.floor((dt - new Date()) / 86400000);
-    if (giorni < 0) return '<span class="badge badge-err" title="Patente scaduta — il driver è bloccato nell\'app">⚠️ ' + label + '</span>';
-    if (giorni <= 30) return '<span class="badge badge-warn" title="Scade tra ' + giorni + ' giorni">' + label + '</span>';
-    return '<span title="' + escapeHtml(d.numeroPatente) + '">' + label + '</span>';
+    if (giorni < 0) return '<span class="badge badge-err" title="Patente scaduta — il driver è bloccato nell\'app">⚠️ ' + label + '</span>' + ver + foto;
+    if (giorni <= 30) return '<span class="badge badge-warn" title="Scade tra ' + giorni + ' giorni">' + label + '</span>' + ver + foto;
+    return '<span title="' + escapeHtml(d.numeroPatente) + '">' + label + '</span>' + ver + foto;
+}
+
+// Modal con le foto fronte/retro caricate dal driver + dati letti dall'AI
+async function openFotoPatente(id) {
+    var d = (state.driverList || []).find(function (x) { return x.id === id; });
+    if (!d || !d.patenteVerifica || !d.patenteVerifica.foto) { toast('Nessuna foto caricata', 'warning'); return; }
+    var v = d.patenteVerifica, e = v.estratto || {};
+    var info = '<div style="font-size:13px;margin-bottom:12px"><strong>' + escapeHtml(d.cognome + ' ' + (d.nome || '')) + '</strong> — esito AI: <span class="badge ' + (v.stato === 'verificata' ? 'badge-ok' : 'badge-err') + '">' + escapeHtml(v.stato) + '</span>'
+        + (v.motivo ? '<div style="color:var(--danger);margin-top:4px">' + escapeHtml(v.motivo) + '</div>' : '')
+        + '<div style="color:var(--text-muted);margin-top:6px">Letto dal documento: ' + escapeHtml([e.cognome, e.nome].filter(Boolean).join(' ')) + ' · n. ' + escapeHtml(e.numero || '—') + ' · scad. ' + escapeHtml(e.dataScadenza || '—') + ' · cat. ' + escapeHtml((e.categorie || []).join(', ') || '—') + (e.note ? '<br>Note AI: ' + escapeHtml(e.note) : '') + '<br>Verificata il ' + escapeHtml((v.il || '').replace('T', ' ').slice(0, 16)) + '</div></div>';
+    openModal('Patente — ' + escapeHtml(d.cognome), info + '<div id="fotoPatenteBox" style="display:grid;gap:10px">Caricamento foto…</div>');
+    try {
+        var urls = await Promise.all([v.foto.fronte, v.foto.retro].map(function (p) { return firebase.storage().ref(p).getDownloadURL(); }));
+        document.getElementById('fotoPatenteBox').innerHTML = urls.map(function (u, i) {
+            return '<div><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">' + (i === 0 ? 'FRONTE' : 'RETRO') + '</div><a href="' + u + '" target="_blank"><img src="' + u + '" style="max-width:100%;border-radius:8px;border:1px solid var(--border)"></a></div>';
+        }).join('');
+    } catch (err) {
+        document.getElementById('fotoPatenteBox').innerHTML = '<span style="color:var(--danger)">Foto non disponibili: ' + escapeHtml(err.message) + '</span>';
+    }
 }
 
 var CONTRATTI_TIPI = ['Full time', 'Part time'];

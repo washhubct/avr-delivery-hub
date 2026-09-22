@@ -84,9 +84,10 @@ service cloud.firestore {
                            && resource.data.email == userEmail()
                            && request.resource.data.email == resource.data.email
                            && request.resource.data.diff(resource.data).affectedKeys()
-                              .hasOnly(['codiceFiscale','numeroPatente','scadenzaPatente',
-                                        'telefono','dataNascita','indirizzo',
+                              .hasOnly(['codiceFiscale','telefono','dataNascita','indirizzo',
                                         'profiloCompletatoIl']));
+      // numeroPatente/scadenzaPatente/patenteVerifica: SOLO la Cloud Function
+      // verificaPatente (Admin SDK) dopo lettura AI delle foto — mai autodichiarati.
     }
 
     // ═══════════════════════════════════════════════════════════

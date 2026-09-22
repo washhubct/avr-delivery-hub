@@ -7,6 +7,7 @@ const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 const webpush = require('web-push');
+const PatenteCore = require('./patente-core.js');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -14,6 +15,7 @@ const db = admin.firestore();
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 const VAPID_PUBLIC_KEY = defineSecret('VAPID_PUBLIC_KEY');
 const VAPID_PRIVATE_KEY = defineSecret('VAPID_PRIVATE_KEY');
+const ANTHROPIC_API_KEY = defineSecret('ANTHROPIC_API_KEY');
 
 const ALLOWED_ORIGINS = [
     'https://dashboard.last-mile.it',
@@ -1597,12 +1599,15 @@ exports.controlliAutomatici = onSchedule(
         // l'app driver; qui si avvisa l'ufficio. Solo il lunedì per non
         // ripetere ogni giorno le stesse righe finché il driver non aggiorna.
         const lunedi = new Date().getUTCDay() === 1;
-        const patScadute = [], patInScadenza = [], patMancanti = [];
+        const patScadute = [], patInScadenza = [], patMancanti = [], patRespinte = [], patNonVerificate = [];
         const giorniA = (ymd) => Math.round((new Date(ymd + 'T12:00:00Z') - new Date(oggi + 'T12:00:00Z')) / 86400000);
         anagSnap.forEach((d) => {
             const x = d.data();
             if (x.attivo !== false && x.cognome) {
                 const nome = x.cognome + ' ' + (x.nome || '');
+                const pv = x.patenteVerifica || null;
+                if (pv && pv.stato === 'respinta') patRespinte.push(nome + ' (' + String(pv.motivo || '').slice(0, 70) + ')');
+                else if (!pv || pv.stato !== 'verificata') patNonVerificate.push(nome);
                 if (!x.numeroPatente || !/^\d{4}-\d{2}-\d{2}$/.test(x.scadenzaPatente || '')) patMancanti.push(nome);
                 else {
                     const g = giorniA(x.scadenzaPatente);
@@ -1653,6 +1658,8 @@ exports.controlliAutomatici = onSchedule(
             if (patScadute.length) anomalie.push('🔴 <b>Patente scaduta</b> (driver bloccato nell\'app finché non dichiara il rinnovo): ' + patScadute.join(', '));
             if (patInScadenza.length) anomalie.push('🟡 <b>Patente in scadenza</b> (entro 30 gg): ' + patInScadenza.join(', '));
             if (patMancanti.length) anomalie.push('⚪ <b>Patente non inserita</b> nell\'app (driver bloccato al prossimo accesso): ' + patMancanti.join(', '));
+            if (patRespinte.length) anomalie.push('🟠 <b>Patente respinta dalla verifica AI</b> (foto non valide o dati non coerenti — da controllare in Anagrafica): ' + patRespinte.join('; '));
+            if (patNonVerificate.length) anomalie.push('⚪ <b>Patente non ancora verificata con foto</b>: ' + patNonVerificate.join(', '));
         }
         importiSospetti.forEach((x) => anomalie.push('🟣 <b>Scontrino sospetto</b> (>€5.000, probabile refuso — col prezziario vale €300): ' + x));
         const oreDaSync = maxSync ? (Date.now() - new Date(maxSync).getTime()) / 3600000 : 999;
@@ -1841,3 +1848,133 @@ exports.ficCreaFattura = ficEndpoint('ficCreaFattura', 'creaFattura');
 exports.ficInviaSdi = ficEndpoint('ficInviaSdi', 'inviaSdi');
 exports.ficStato = ficEndpoint('ficStato', 'stato');
 exports.ficProssimoNumero = ficEndpoint('ficProssimoNumero', 'prossimoNumero');
+
+// ═══════════════════════════════════════════════════════════════════
+// VERIFICA PATENTE — AI (Claude, visione)
+// Il driver carica fronte/retro su Storage in patenti/{uid}/{fronte|retro}.jpg
+// e chiama questa function: Claude trascrive il documento, la logica pura
+// (patente-core.js) lo confronta con l'anagrafica e decide verificata/respinta.
+// SOLO questa function scrive numeroPatente/scadenzaPatente (rules: il driver
+// non può più autodichiararli). Log senza dati personali.
+// ═══════════════════════════════════════════════════════════════════
+const PATENTE_MAX_TENTATIVI_24H = 8;
+const PATENTE_MAX_BYTES = 6 * 1024 * 1024;
+
+exports.verificaPatente = onRequest(
+    {
+        secrets: [ANTHROPIC_API_KEY],
+        region: 'europe-west1',
+        cors: ALLOWED_ORIGINS,
+        timeoutSeconds: 120,
+        memory: '1GiB',
+    },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+
+        // 1. Autenticazione: il chiamante è il driver stesso
+        const authHeader = req.headers.authorization || '';
+        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+        let uid = '', email = '';
+        try {
+            const decoded = await admin.auth().verifyIdToken(idToken);
+            uid = decoded.uid; email = (decoded.email || '').toLowerCase();
+        } catch (e) { res.status(401).json({ error: 'Token non valido' }); return; }
+        if (!email) { res.status(401).json({ error: 'Account senza email' }); return; }
+
+        // 2. Anagrafica del driver
+        const snap = await db.collection('driverAnagrafica').where('email', '==', email).limit(1).get();
+        if (snap.empty) { res.status(403).json({ error: 'Driver non censito in anagrafica' }); return; }
+        const ref = snap.docs[0].ref;
+        const anag = snap.docs[0].data();
+        if (anag.attivo === false) { res.status(403).json({ error: 'Account disattivato' }); return; }
+
+        // 3. Anti-abuso: max tentativi nelle 24h (costo API)
+        const oraMs = Date.now();
+        const tentativi = (Array.isArray(anag.patenteTentativi) ? anag.patenteTentativi : [])
+            .filter((t) => oraMs - new Date(t).getTime() < 86400000);
+        if (tentativi.length >= PATENTE_MAX_TENTATIVI_24H) {
+            res.status(429).json({ error: 'Hai raggiunto il numero massimo di tentativi per oggi: riprova domani o scrivi a risorse.umane@last-mile.it' });
+            return;
+        }
+        tentativi.push(new Date(oraMs).toISOString());
+        await ref.update({ patenteTentativi: tentativi });
+
+        // 4. Foto da Storage (percorsi fissi per uid: il client non può puntare altrove)
+        const bucket = admin.storage().bucket();
+        const immagini = [];
+        for (const lato of ['fronte', 'retro']) {
+            const file = bucket.file('patenti/' + uid + '/' + lato + '.jpg');
+            const [exists] = await file.exists();
+            if (!exists) { res.status(400).json({ error: 'Manca la foto del ' + lato + ' della patente' }); return; }
+            const [meta] = await file.getMetadata();
+            const size = Number(meta.size || 0);
+            const ctype = String(meta.contentType || 'image/jpeg');
+            if (size > PATENTE_MAX_BYTES) { res.status(400).json({ error: 'Foto ' + lato + ' troppo grande (max 6 MB)' }); return; }
+            if (!/^image\/(jpeg|png|webp)$/.test(ctype)) { res.status(400).json({ error: 'Formato foto ' + lato + ' non supportato' }); return; }
+            const [buf] = await file.download();
+            immagini.push({ lato, ctype, b64: buf.toString('base64') });
+        }
+
+        // 5. Claude: trascrizione strutturata del documento
+        const Anthropic = require('@anthropic-ai/sdk');
+        const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
+        let estratto = null, modello = 'claude-opus-5';
+        try {
+            const msg = await client.messages.parse({
+                model: modello,
+                max_tokens: 2048,
+                system: PatenteCore.SYSTEM_PROMPT,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: 'Immagine 1: FRONTE della patente.' },
+                        { type: 'image', source: { type: 'base64', media_type: immagini[0].ctype, data: immagini[0].b64 } },
+                        { type: 'text', text: 'Immagine 2: RETRO della patente.' },
+                        { type: 'image', source: { type: 'base64', media_type: immagini[1].ctype, data: immagini[1].b64 } },
+                        { type: 'text', text: 'Trascrivi i campi della patente nel formato richiesto. Data di oggi: ' + giornoInRome(new Date()) + '.' },
+                    ],
+                }],
+                output_config: { effort: 'medium', format: { type: 'json_schema', schema: PatenteCore.PATENTE_SCHEMA } },
+            });
+            if (msg.stop_reason === 'refusal') throw new Error('Il sistema di verifica ha rifiutato le immagini');
+            estratto = msg.parsed_output;
+            if (!estratto) throw new Error('Risposta non interpretabile');
+        } catch (e) {
+            console.error('[verificaPatente] uid ' + uid + ': ' + (e.status ? 'HTTP ' + e.status + ' ' : '') + e.message);
+            await ref.update({ patenteVerifica: { stato: 'errore', motivo: 'Verifica automatica non disponibile: riprova tra qualche minuto', il: new Date(oraMs).toISOString() } });
+            res.status(502).json({ error: 'Verifica automatica non disponibile in questo momento: riprova tra qualche minuto.' });
+            return;
+        }
+
+        // 6. Decisione
+        const oggi = giornoInRome(new Date());
+        const esito = PatenteCore.valutaPatente(estratto, anag, oggi);
+        const verifica = {
+            stato: esito.stato, motivo: esito.motivo, il: new Date(oraMs).toISOString(), modello,
+            foto: { fronte: 'patenti/' + uid + '/fronte.jpg', retro: 'patenti/' + uid + '/retro.jpg' },
+            estratto: {
+                cognome: estratto.cognome || '', nome: estratto.nome || '', numero: esito.numero || PatenteCore.norm(estratto.numero),
+                dataNascita: estratto.data_nascita || '', dataRilascio: estratto.data_rilascio || '', dataScadenza: estratto.data_scadenza || '',
+                categorie: Array.isArray(estratto.categorie) ? estratto.categorie : [], paese: estratto.paese || '', note: estratto.note || '',
+            },
+        };
+        const upd = { patenteVerifica: verifica };
+        if (esito.stato === 'verificata') {
+            upd.numeroPatente = esito.numero;
+            upd.scadenzaPatente = esito.scadenza;
+        } else if (esito.numero && esito.scadenza) {
+            // Scaduta ma letta con certezza: il documento fa fede (blocco reale nell'app)
+            upd.numeroPatente = esito.numero;
+            upd.scadenzaPatente = esito.scadenza;
+        }
+        await ref.update(upd);
+        console.log('[verificaPatente] uid ' + uid + ': ' + esito.stato + (esito.motivo ? ' (' + esito.motivo.slice(0, 60) + ')' : ''));
+        res.json({ ok: true, stato: esito.stato, motivo: esito.motivo, numero: esito.stato === 'verificata' ? esito.numero : null, scadenza: esito.scadenza });
+    }
+);
