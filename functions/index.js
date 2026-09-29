@@ -1946,9 +1946,22 @@ exports.verificaPatente = onRequest(
             estratto = msg.parsed_output;
             if (!estratto) throw new Error('Risposta non interpretabile');
         } catch (e) {
-            console.error('[verificaPatente] uid ' + uid + ': ' + (e.status ? 'HTTP ' + e.status + ' ' : '') + e.message);
-            await ref.update({ patenteVerifica: { stato: 'errore', motivo: 'Verifica automatica non disponibile: riprova tra qualche minuto', il: new Date(oraMs).toISOString() } });
-            res.status(502).json({ error: 'Verifica automatica non disponibile in questo momento: riprova tra qualche minuto.' });
+            const status = Number(e.status || 0);
+            const msg = String(e.message || '');
+            console.error('[verificaPatente] uid ' + uid + ': ' + (status ? 'HTTP ' + status + ' ' : '') + msg);
+            // Errore lato nostro (credito API, chiave, configurazione): non dipende dal driver
+            // e non si risolve riprovando → messaggio onesto e NON contiamo il tentativo.
+            const nostro = status === 401 || status === 403 || status === 402 || /credit balance|billing|api key|authentication/i.test(msg);
+            const transitorio = !nostro && (status === 0 || status === 429 || status >= 500);
+            const motivo = nostro
+                ? 'Verifica sospesa per un problema tecnico dell\'azienda: non dipende da te né dalle foto. La direzione è già avvisata, riprova più tardi.'
+                : transitorio
+                    ? 'Verifica automatica non disponibile: riprova tra qualche minuto'
+                    : 'Il sistema non ha accettato le foto: scattale di nuovo, nitide e con la patente intera nell\'inquadratura';
+            const upd = { patenteVerifica: { stato: 'errore', motivo, il: new Date(oraMs).toISOString() } };
+            if (nostro || transitorio) upd.patenteTentativi = tentativi.slice(0, -1); // il tentativo non viene scalato
+            await ref.update(upd).catch((e2) => console.error('[verificaPatente] update errore fallito: ' + e2.message));
+            res.status(nostro || transitorio ? 502 : 400).json({ error: motivo, ritenta: !nostro });
             return;
         }
 
