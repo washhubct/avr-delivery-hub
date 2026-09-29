@@ -2,6 +2,8 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
+    <script>/* Host con punto finale (es. dashboard.last-mile.it.) = origine diversa: CORS delle Functions fallisce. Normalizza subito. */
+    if (location.hostname.endsWith('.')) location.replace(location.protocol + '//' + location.hostname.replace(/\.+$/, '') + (location.port ? ':' + location.port : '') + location.pathname + location.search + location.hash);</script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Last Mile Hub</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
