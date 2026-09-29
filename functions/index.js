@@ -26,12 +26,9 @@ const ALLOWED_ORIGINS = [
     'https://app.avrlogisticarl.com',
     'https://avr-logistic-dashboard.firebaseapp.com',
     'https://avr-logistic-dashboard.web.app',
-    // Varianti con punto finale nell'host (FQDN assoluto, es. bookmark "dashboard.last-mile.it."):
-    // per il browser sono origini diverse. Senza queste il preflight passa ma il POST non parte mai.
-    'https://dashboard.last-mile.it.',
-    'https://appdriver.last-mile.it.',
-    'https://app.last-mile.it.',
 ];
+// NB: host con punto finale (es. "dashboard.last-mile.it.") NON è in whitelist di proposito:
+// le pagine fanno redirect all'host canonico, da lì nessuna Function deve rispondere.
 
 // Rate limiting in-memory (resetta ad ogni cold start)
 const rateLimitMap = new Map();
