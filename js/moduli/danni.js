@@ -38,8 +38,10 @@ function renderDanni() {
             '<td><span class="badge ' + statoClass + '">' + (d.stato || 'aperto') + '</span></td>' +
             '<td>' +
                 '<button class="btn btn-sm" onclick="dettaglioDanno(\'' + d.id + '\')" title="Dettaglio">👁️</button> ' +
+                '<span class="solo-ufficio">' +
                 '<button class="btn btn-sm" onclick="editDanno(\'' + d.id + '\')" title="Modifica">✏️</button> ' +
                 '<button class="btn btn-sm" onclick="changeDannoStato(\'' + d.id + '\')" title="Cambia stato">🔄</button>' +
+                '</span>' +
             '</td>' +
         '</tr>';
     }).join('');

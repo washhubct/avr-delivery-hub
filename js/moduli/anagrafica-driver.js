@@ -33,11 +33,11 @@ function renderAnagraficaDriver() {
         <td>${scadenzaBadge(d.scadenzaContratto)}</td>
         <td>${patenteBadge(d)}</td>
         <td><span class="badge ${d.attivo !== false ? 'badge-ok' : 'badge-err'}">${d.attivo !== false ? 'Attivo' : 'Inattivo'}</span></td>
-        <td>
+        <td><span class="solo-ufficio">
             <button class="btn btn-sm" onclick="editDriver('${idSafe}')">✏️</button>
             <button class="btn btn-sm" title="Invia notifica push a questo driver" onclick="openPushDriver('${idSafe}')">🔔</button>
             <button class="btn btn-sm btn-danger" title="Disattiva/riattiva (blocca l'app; archiviazione automatica dopo 90gg)" onclick="toggleDriverAttivo('${idSafe}')">⏸️</button>
-        </td>
+        </span></td>
     </tr>`;
     }).join('');
 }

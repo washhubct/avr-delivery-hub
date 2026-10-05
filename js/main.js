@@ -49,10 +49,37 @@ async function loadAllData() {
             loadReportDriver(),
             loadRitorniMese()
         ]);
+        filtraPerProvince();
     } catch (e) {
         console.error('Load error:', e);
         toast('Errore nel caricamento dati', 'error');
     }
+}
+
+// Responsabile di zona: tiene in state solo i dati delle sue province, così
+// ogni modulo (produttività, ritorni, danni, anagrafica…) le eredita senza
+// filtri propri. Classifica e Segnalazioni leggono da sé e filtrano nel modulo.
+// È un filtro di presentazione: l'isolamento vero resta nelle rules.
+function filtraPerProvince() {
+    var prov = provinceVisibili();
+    if (!prov) return;
+    var inProv = function(p) { return prov.indexOf(String(p || '').toUpperCase()) >= 0; };
+    var cittaPerEmail = {};
+    (state.driverList || []).forEach(function(d) { if (d.email) cittaPerEmail[d.email.toLowerCase()] = d.citta; });
+    var areaReport = function(r) { return r.area || cittaPerEmail[(r.driverEmail || '').toLowerCase()]; };
+
+    state.driverList = (state.driverList || []).filter(function(d) { return inProv(d.citta); });
+    state.filiali = (state.filiali || []).filter(function(f) { return inProv(f.area); });
+    state.consegne = (state.consegne || []).filter(function(c) { return inProv(c.area); });
+    state.reportDriver = (state.reportDriver || []).filter(function(r) { return inProv(areaReport(r)); });
+    state.ritorniMese = (state.ritorniMese || []).filter(function(r) { return inProv(areaReport(r)); });
+    // I danni portano solo il cognome del driver: restano quelli dei driver rimasti in lista
+    var cognomi = {};
+    state.driverList.forEach(function(d) {
+        cognomi[normalizzaNome(d.cognome)] = true;
+        (Array.isArray(d.alias) ? d.alias : []).forEach(function(a) { if (a) cognomi[normalizzaNome(a)] = true; });
+    });
+    state.danniList = (state.danniList || []).filter(function(d) { return cognomi[normalizzaNome(d.driver)]; });
 }
 
 // Nota: la leaderboard è ora precalcolata dalla Cloud Function scheduled
@@ -232,6 +259,7 @@ async function onMeseChange() {
             loadReportDriver(),
             loadRitorniMese()
         ]);
+        filtraPerProvince();
     }
     refreshCurrentModule();
 }

@@ -27,9 +27,13 @@ function navigateTo(module) {
     if (module === 'fatturazione' && state.userRole === 'risorse_umane') {
         module = 'consegne';
     }
-    // Danni/Multe: solo superadmin, amministratore, risorse umane
-    if (module === 'danni' && !['superadmin', 'amministratore', 'risorse_umane'].includes(state.userRole)) {
+    // Danni/Multe: superadmin, amministratore, risorse umane, responsabili (sola lettura)
+    if (module === 'danni' && !['superadmin', 'amministratore', 'risorse_umane', 'responsabile'].includes(state.userRole)) {
         module = 'consegne';
+    }
+    // Responsabile di zona: solo i moduli della sezione Gestione (Timbrature per ora no)
+    if (isResponsabileZona() && MODULI_RESPONSABILE.indexOf(module) < 0) {
+        module = 'produttivita';
     }
     state.currentModule = module;
     document.querySelectorAll('.nav-item').forEach(n =>

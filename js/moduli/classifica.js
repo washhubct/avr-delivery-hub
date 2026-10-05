@@ -28,13 +28,19 @@ async function renderClassifica() {
             '<div style="font-size:36px;margin-bottom:8px">🏆</div>' +
             '<p style="font-weight:600;color:var(--text)">Classifica non ancora disponibile per ' + meseLabel(mese) + '</p>' +
             '<p class="card-desc" style="margin-top:8px">La Cloud Function gira ogni ora. Se serve rebuild immediato, usa il bottone qui sotto.</p>' +
-            '<button class="btn btn-primary" style="margin-top:12px" onclick="rebuildClassifica()">🔄 Forza rebuild ora</button>' +
+            '<button class="btn btn-primary solo-ufficio" style="margin-top:12px" onclick="rebuildClassifica()">🔄 Forza rebuild ora</button>' +
             '</div>';
         return;
     }
 
     var data = doc.data();
     var drivers = data.drivers || [];
+    // Responsabile di zona: solo i driver delle sue province (la posizione resta quella generale)
+    var prov = provinceVisibili();
+    if (prov) {
+        drivers = drivers.map(function(d, i) { return Object.assign({ posizioneGenerale: i + 1 }, d); })
+            .filter(function(d) { return prov.indexOf(String(d.citta || '').toUpperCase()) >= 0; });
+    }
     var lastUpdate = data.lastUpdate && data.lastUpdate.toDate ? data.lastUpdate.toDate() : null;
     var lastUpdateStr = lastUpdate ? lastUpdate.toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 
@@ -53,7 +59,7 @@ async function renderClassifica() {
     var driverPuliti = drivers.filter(function(d) { return d.bonusZeroDanni; }).length;
 
     var rowsHtml = drivers.map(function(d, i) {
-        var pos = i + 1;
+        var pos = d.posizioneGenerale || (i + 1); // posizione nella classifica generale
         var posBadge;
         if (pos === 1) posBadge = '<span style="font-size:18px">🥇</span>';
         else if (pos === 2) posBadge = '<span style="font-size:18px">🥈</span>';
@@ -99,13 +105,13 @@ async function renderClassifica() {
     // Podio premi — riferimento per inserire il bonus buoni pasto in busta paga
     var podioOrder = [2, 1, 3]; // visual: 2° a sinistra, 1° al centro, 3° a destra
     var podioHtml = podioOrder.map(function(pos) {
-        var d = drivers[pos - 1];
+        var d = prov ? drivers.find(function(x) { return x.posizioneGenerale === pos; }) : drivers[pos - 1];
         var premio = PREMI_CLASSIFICA[pos];
         var medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉';
         var isFirst = pos === 1;
         if (!d) {
             return '<div style="flex:1;text-align:center;padding:16px 12px;border:1.5px dashed var(--border);border-radius:12px;opacity:.5">' +
-                '<div style="font-size:26px">' + medal + '</div><div style="font-size:12px;color:var(--text-light);margin-top:6px">Nessun driver</div></div>';
+                '<div style="font-size:26px">' + medal + '</div><div style="font-size:12px;color:var(--text-light);margin-top:6px">' + (prov ? 'Driver di altra zona' : 'Nessun driver') + '</div></div>';
         }
         var nome = ((d.nome || '') + ' ' + (d.cognome || d.driver)).trim();
         return '<div style="flex:1;text-align:center;padding:' + (isFirst ? '22px 12px' : '16px 12px') + ';background:' + (isFirst ? '#fffbeb' : 'var(--white)') + ';border:1.5px solid ' + (isFirst ? '#fbbf24' : 'var(--border)') + ';border-radius:12px' + (isFirst ? ';box-shadow:0 4px 12px rgba(251,191,36,0.25)' : '') + '">' +
@@ -141,7 +147,7 @@ async function renderClassifica() {
           '<div class="card-title">🏆 Classifica ' + meseLabel(mese) + '</div>' +
           '<div class="card-desc">Aggiornata ' + lastUpdateStr + ' · Scoring: 1 consegna = 1 pt · ⚡ Velocità (tempo medio &lt;20 min = +30, &lt;25 min = +15, con almeno 10 consegne con orari) · Zero danni = +50 pt · Danno = -30 pt · Premi buoni pasto: 🥇 €100 · 🥈 €70 · 🥉 €40</div>' +
           '<div style="display:flex;gap:8px;margin-bottom:12px">' +
-            '<button class="btn btn-sm" onclick="rebuildClassifica()">🔄 Rebuild ora</button>' +
+            '<button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Rebuild ora</button>' +
             '<button class="btn btn-sm" onclick="esportaClassificaCsv()">📥 Esporta CSV</button>' +
           '</div>' +
           '<div class="table-wrap">' +

@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="apple-touch-icon.png">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="manifest" href="manifest.webmanifest">
 </head>
 <body>
     <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
@@ -36,14 +37,14 @@
         <nav class="sidebar-nav" id="sidebarNav">
             <!-- Admin nav -->
             <div id="navAdmin">
-                <div class="nav-section-label">Operatività</div>
+                <div class="nav-section-label nav-ufficio">Operatività</div>
                 <a class="nav-item active nav-superadmin" data-module="dashboard" onclick="navigateTo('dashboard')">
                     <span class="nav-icon">📊</span> Dashboard
                 </a>
-                <a class="nav-item" data-module="consegne" onclick="navigateTo('consegne')">
+                <a class="nav-item nav-ufficio" data-module="consegne" onclick="navigateTo('consegne')">
                     <span class="nav-icon">📦</span> Consegne
                 </a>
-                <a class="nav-item" data-module="riconciliazione" onclick="navigateTo('riconciliazione')">
+                <a class="nav-item nav-ufficio" data-module="riconciliazione" onclick="navigateTo('riconciliazione')">
                     <span class="nav-icon">⚖️</span> Riconciliazione
                 </a>
                 <a class="nav-item nav-fatturato" data-module="fatturazione" onclick="navigateTo('fatturazione')">
@@ -57,7 +58,7 @@
                 <a class="nav-item" data-module="anagrafica-driver" onclick="navigateTo('anagrafica-driver')">
                     <span class="nav-icon">👤</span> Anagrafica Driver
                 </a>
-                <a class="nav-item" data-module="compensi" onclick="navigateTo('compensi')">
+                <a class="nav-item nav-ufficio" data-module="compensi" onclick="navigateTo('compensi')">
                     <span class="nav-icon">💰</span> Compensi (storico)
                 </a>
                 <a class="nav-item" data-module="produttivita" onclick="navigateTo('produttivita')">
@@ -75,7 +76,7 @@
                 <a class="nav-item" data-module="segnalazioni" onclick="navigateTo('segnalazioni')">
                     <span class="nav-icon">⚠️</span> Segnalazioni
                 </a>
-                <a class="nav-item" data-module="filiali" onclick="navigateTo('filiali')">
+                <a class="nav-item nav-ufficio" data-module="filiali" onclick="navigateTo('filiali')">
                     <span class="nav-icon">🏪</span> Filiali
                 </a>
                 <a class="nav-item nav-can-manage-users" data-module="utenti" onclick="navigateTo('utenti')">
@@ -87,7 +88,7 @@
                 <a class="nav-item nav-timbrature-admin" data-module="punti-timbratura" onclick="navigateTo('punti-timbratura')">
                     <span class="nav-icon">📍</span> Punti Timbratura
                 </a>
-                <a class="nav-item" data-module="import" onclick="navigateTo('import')">
+                <a class="nav-item nav-ufficio" data-module="import" onclick="navigateTo('import')">
                     <span class="nav-icon">📥</span> Importa dati
                 </a>
                 <a class="nav-item nav-superadmin" data-module="log-accessi" onclick="navigateTo('log-accessi')">
@@ -317,8 +318,8 @@
                 <h3 class="card-title">Anagrafica driver</h3>
                 <div class="toolbar">
                     <input type="text" id="searchAnagrafica" class="input search-input" placeholder="Cerca driver per nome o cognome..." oninput="renderAnagraficaDriver()">
-                    <button class="btn" title="Notifica push ai driver" onclick="openPushDriver()">🔔 Notifica driver</button>
-                    <button class="btn btn-primary" onclick="openAddDriver()">+ Aggiungi driver</button>
+                    <button class="btn solo-ufficio" title="Notifica push ai driver" onclick="openPushDriver()">🔔 Notifica driver</button>
+                    <button class="btn btn-primary solo-ufficio" onclick="openAddDriver()">+ Aggiungi driver</button>
                 </div>
                 <div class="table-wrap">
                     <table class="data-table">
@@ -399,7 +400,7 @@
                 <h3 class="card-title">Registro danni</h3>
                 <p class="card-desc">Gestisci danni ai furgoni. Gli importi vengono detratti automaticamente dal compenso del driver responsabile.</p>
                 <div class="toolbar">
-                    <button class="btn btn-primary" onclick="openAddDanno()">+ Registra danno</button>
+                    <button class="btn btn-primary solo-ufficio" onclick="openAddDanno()">+ Registra danno</button>
                 </div>
                 <div class="table-wrap">
                     <table class="data-table">
@@ -417,15 +418,15 @@
                     <div class="kpi-label">Ritorni mese</div>
                     <div class="kpi-value" id="rtTotRitorni">—</div>
                 </div>
-                <div class="kpi-card accent">
+                <div class="kpi-card accent solo-ufficio">
                     <div class="kpi-label">Da fatturare (×€6,90)</div>
                     <div class="kpi-value" id="rtTotFattura">—</div>
                 </div>
-                <div class="kpi-card">
+                <div class="kpi-card solo-ufficio">
                     <div class="kpi-label">Costo driver</div>
                     <div class="kpi-value" id="rtTotCostoDriver">—</div>
                 </div>
-                <div class="kpi-card accent">
+                <div class="kpi-card accent solo-ufficio">
                     <div class="kpi-label">Margine ritorni</div>
                     <div class="kpi-value" id="rtTotMargine">—</div>
                 </div>
@@ -444,7 +445,7 @@
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Data</th><th>Driver</th><th>Filiale</th><th>Motivo</th><th>N°</th><th>Cliente</th><th>Fattura (€6,90)</th><th>Stato</th><th>Azioni</th>
+                            <th>Data</th><th>Driver</th><th>Filiale</th><th>Motivo</th><th>N°</th><th>Cliente</th><th class="solo-ufficio">Fattura (€6,90)</th><th>Stato</th><th>Azioni</th>
                         </tr></thead>
                         <tbody id="tblRitorni"></tbody>
                     </table>
@@ -874,6 +875,7 @@
     <script src="js/moduli/importa.js"></script>
     <script src="js/moduli/log-accessi.js"></script>
     <script src="js/moduli/driver-app.js"></script>
+    <script src="js/moduli/push-gestionale.js"></script>
     <script src="js/main.js"></script>
 
     <!-- ═══ FORGOT PASSWORD ═══ -->

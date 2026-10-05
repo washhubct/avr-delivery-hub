@@ -83,6 +83,23 @@ function canSeeDanni(role) {
     return role === 'superadmin' || role === 'amministratore' || role === 'risorse_umane';
 }
 
+// Responsabile di zona: vede la sola sezione Gestione, limitata alle
+// province di cui è referente (utenti/{email}.province), in sola lettura
+// tranne ritorni (conferma) e segnalazioni (risoluzione).
+function isResponsabileZona() {
+    return state.userRole === 'responsabile';
+}
+
+// Province visibili all'utente: null = tutte; array per i responsabili.
+function provinceVisibili() {
+    if (!isResponsabileZona()) return null;
+    var p = state.userProfile && Array.isArray(state.userProfile.province) ? state.userProfile.province : [];
+    return p.map(function(x) { return String(x).toUpperCase(); });
+}
+
+// Moduli raggiungibili da un responsabile (Timbrature è in menu ma non cliccabile).
+var MODULI_RESPONSABILE = ['anagrafica-driver', 'produttivita', 'danni', 'ritorni', 'classifica', 'segnalazioni'];
+
 // True se il ruolo ha accesso admin/staff completo alla dashboard (senza P&L).
 function isAdminOrStaffRole(role) {
     return role === 'superadmin'
@@ -159,6 +176,13 @@ function initAuth() {
                 document.getElementById('navAdmin').style.display = 'block';
                 document.getElementById('navDriver').style.display = 'none';
 
+                // Responsabile di zona: via tutto ciò che non è la sezione Gestione.
+                // Va per primo: le regole per classe qui sotto rifiniscono le proprie voci.
+                document.documentElement.classList.toggle('ruolo-responsabile', isResponsabileZona());
+                document.querySelectorAll('.nav-ufficio').forEach(function(el) {
+                    el.style.display = isResponsabileZona() ? 'none' : '';
+                });
+
                 // Voci "solo superadmin" (P&L, Log Accessi, Dashboard KPI top)
                 var adminOnlyItems = document.querySelectorAll('.nav-superadmin');
                 adminOnlyItems.forEach(function(el) {
@@ -180,13 +204,21 @@ function initAuth() {
                 // Fatturazione — nascosta alle Risorse Umane (tutto tranne il fatturato)
                 var fatturatoItems = document.querySelectorAll('.nav-fatturato');
                 fatturatoItems.forEach(function(el) {
-                    el.style.display = canSeeFatturato(role) ? 'block' : 'none';
+                    el.style.display = (canSeeFatturato(role) && !isResponsabileZona()) ? 'block' : 'none';
                 });
 
-                // Danni/Multe — solo direzione e Risorse Umane
+                // Danni/Multe — direzione, Risorse Umane e responsabili (solo lettura, proprie province)
                 document.querySelectorAll('.nav-danni').forEach(function(el) {
-                    el.style.display = canSeeDanni(role) ? 'block' : 'none';
+                    el.style.display = (canSeeDanni(role) || isResponsabileZona()) ? 'block' : 'none';
                 });
+
+                // Responsabile di zona: Timbrature visibile ma non cliccabile
+                var navTimb = document.querySelector('.nav-item[data-module="timbrature"]');
+                if (navTimb) {
+                    navTimb.classList.toggle('nav-disabled', isResponsabileZona());
+                    navTimb.title = isResponsabileZona() ? 'Timbrature: disponibile a breve' : '';
+                    if (isResponsabileZona()) navTimb.style.display = 'block';
+                }
 
                 // Label sidebar
                 var profile = state.userProfile || {};
@@ -213,6 +245,9 @@ function initAuth() {
 
             if (role === 'superadmin' || role === 'amministratore') {
                 navigateTo('dashboard');
+            } else if (isResponsabileZona()) {
+                navigateTo('produttivita');
+                initPushGestionale(); // notifiche "ritorni da confermare"
             } else {
                 navigateTo('consegne');
             }

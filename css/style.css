@@ -192,6 +192,16 @@ body {
     font-weight: 600;
 }
 
+/* Voce in menu ma non ancora disponibile per il ruolo (es. Timbrature ai responsabili) */
+.nav-item.nav-disabled {
+    opacity: .4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* Responsabile di zona: sola lettura, niente comandi d'ufficio */
+html.ruolo-responsabile .solo-ufficio { display: none !important; }
+
 .nav-item.active::before {
     content: '';
     position: absolute;

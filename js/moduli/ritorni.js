@@ -61,7 +61,7 @@ async function renderRitorni() {
                 '<td>' + escapeHtml(d.motivoLabel || d.motivo || '—') + '</td>' +
                 '<td><strong>' + num + '</strong></td>' +
                 '<td>' + escapeHtml(d.cliente || '—') + '</td>' +
-                '<td style="text-align:right">' + formatCurrency(fattura) + '</td>' +
+                '<td class="solo-ufficio" style="text-align:right">' + formatCurrency(fattura) + '</td>' +
                 '<td><span class="badge ' + statoBadge + '">' + statoLabel + '</span></td>' +
                 '<td>' + azioni + '</td>' +
             '</tr>';
@@ -81,6 +81,7 @@ async function gestisciRitorno(id, nuovoStato) {
         });
         toast('Ritorno ' + nuovoStato, 'success');
         await loadRitorniMese();
+        filtraPerProvince();
         renderRitorni();
     } catch (e) {
         toast('Errore: impossibile aggiornare il ritorno — riprova', 'error');

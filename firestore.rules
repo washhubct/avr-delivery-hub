@@ -122,7 +122,12 @@ service cloud.firestore {
       allow create: if isSignedIn()
                        && request.resource.data.driverEmail is string
                        && request.resource.data.driverEmail.lower() == userEmail();
-      allow update: if isAdminOrStaff();
+      // Conferma/rifiuto: ufficio, oppure il responsabile di zona (solo i
+      // campi di esito; il filtro per provincia è applicato dal gestionale).
+      allow update: if isAdminOrStaff() || isAmministratore() || isRisorseUmane()
+                       || (isResponsabile()
+                           && request.resource.data.diff(resource.data).affectedKeys()
+                              .hasOnly(['stato', 'gestito', 'gestitoDa', 'gestitoIl']));
       allow delete: if isAdminOrStaff() || (isDriver() && isOwnByEmail());
     }
 
@@ -134,7 +139,12 @@ service cloud.firestore {
       allow create: if isSignedIn()
                        && request.resource.data.driverEmail is string
                        && request.resource.data.driverEmail.lower() == userEmail();
-      allow update: if isAdminOrStaff();
+      // Risoluzione: ufficio (amministratore/HR inclusi — prima erano esclusi
+      // per errore) oppure responsabile di zona, solo i campi di esito.
+      allow update: if isAdminOrStaff() || isAmministratore() || isRisorseUmane()
+                       || (isResponsabile()
+                           && request.resource.data.diff(resource.data).affectedKeys()
+                              .hasOnly(['stato', 'risoltaDa', 'risoltaIl']));
       allow delete: if isAdminOrStaff();
     }
 
@@ -175,10 +185,11 @@ service cloud.firestore {
     // DANNI — admin/staff/amministratore/HR full; driver legge solo suoi
     // (HR registra multe/addebiti verbali e rateizzazioni)
     // ═══════════════════════════════════════════════════════════
-    // Danni/multe: SOLO superadmin, amministratore, risorse umane (+ driver i propri).
-    // Responsabili di zona e staff esclusi (decisione 22/09/2026).
+    // Danni/multe: superadmin, amministratore, risorse umane in lettura/scrittura;
+    // responsabili di zona in sola lettura (dal 05/10/2026, il gestionale mostra
+    // solo i driver delle loro province); staff esclusi; driver i propri.
     match /danni/{doc} {
-      allow read: if isSuperAdmin() || isAmministratore() || isRisorseUmane() || (isDriver() && isOwnByEmail());
+      allow read: if isSuperAdmin() || isAmministratore() || isRisorseUmane() || isResponsabile() || (isDriver() && isOwnByEmail());
       allow write: if isAdminOrStaff() || isAmministratore() || isRisorseUmane();
     }
 
@@ -214,10 +225,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Versione completa con nome reale del driver — solo admin/staff.
-    // Usata dalla dashboard per decidere premi/riconoscimenti.
+    // Versione completa con nome reale del driver — tutto il gestionale
+    // (i responsabili la vedono filtrata per provincia lato client).
     match /leaderboardFull/{doc} {
-      allow read: if isAdminOrStaff();
+      allow read: if isGestionale();
       allow write: if false;
     }
 

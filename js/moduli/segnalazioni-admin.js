@@ -11,10 +11,17 @@ async function renderSegnalazioniAdmin() {
         var snap = await db.collection('segnalazioni').orderBy('timestamp', 'desc').limit(200).get();
         var rows = [];
         var aperte = 0, risolte = 0;
+        var prov = provinceVisibili(); // responsabile di zona: solo le sue province
 
         snap.forEach(function(doc) {
             var d = doc.data();
             d.id = doc.id;
+
+            if (prov) {
+                var fil = state.filialiMap[String(d.filiale || '')];
+                var area = d.area || (fil && fil.area) || '';
+                if (prov.indexOf(String(area).toUpperCase()) < 0) return;
+            }
 
             if (d.stato === 'aperta') aperte++;
             if (d.stato === 'risolta') risolte++;
