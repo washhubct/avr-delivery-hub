@@ -2055,6 +2055,110 @@ exports.pushInvia = onRequest(
     }
 );
 
+// 18:30 — ai responsabili di zona: ritorni ancora da confermare nelle loro
+// province (push al device registrato dal gestionale; email se non ne hanno).
+exports.pushRitorniDaConfermare = onSchedule(
+    { schedule: '30 18 * * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, RESEND_API_KEY] },
+    async () => {
+        const oggi = giornoInRome(new Date());
+        const mese = oggi.slice(0, 7);
+        const utSnap = await db.collection('utenti').where('mansione', '==', 'responsabile').get();
+        const responsabili = [];
+        utSnap.forEach((d) => {
+            const u = d.data();
+            if (u.attivo === false || !Array.isArray(u.province) || !u.province.length) return;
+            responsabili.push({ email: d.id.toLowerCase(), nome: u.nome || d.id, province: u.province.map((p) => String(p).toUpperCase()) });
+        });
+        if (!responsabili.length) { console.log('[push] ritorni: nessun responsabile'); return; }
+
+        const ritSnap = await db.collection('ritorni').where('mese', '==', mese).get();
+        const pendenti = [];
+        ritSnap.forEach((d) => {
+            const r = d.data();
+            if (r.stato === 'accettato' || r.stato === 'rifiutato') return;
+            const dt = r.data && typeof r.data.toDate === 'function' ? giornoInRome(r.data.toDate()) : String(r.data || '').slice(0, 10);
+            pendenti.push({ area: String(r.area || '').toUpperCase(), giorno: dt, driver: r.driverNome || r.driver || '?', filiale: r.filialeNome || r.filiale || '?', n: r.numRitorni || 0 });
+        });
+
+        initWebpush();
+        for (const resp of responsabili) {
+            const miei = pendenti.filter((p) => resp.province.includes(p.area));
+            if (!miei.length) continue;
+            const diOggi = miei.filter((p) => p.giorno === oggi).length;
+            const testo = miei.length + (miei.length === 1 ? ' ritorno' : ' ritorni') + ' da confermare' + (diOggi ? ' (' + diOggi + ' di oggi)' : '') + ' — ' + resp.province.join(', ');
+            const subs = await subsPerEmails([resp.email]);
+            let r = { sent: 0 };
+            if (subs.length) r = await inviaPushASubs(subs, { title: 'Ritorni da confermare 🔄', body: testo, url: 'https://dashboard.last-mile.it/', tag: 'ritorni-' + oggi });
+            if (!r.sent) {
+                const righe = miei.sort((a, b) => a.giorno.localeCompare(b.giorno)).map((p) => '<li>' + p.giorno.split('-').reverse().join('/') + ' — ' + p.driver + ' · ' + p.filiale + ' · ' + p.n + ' ritorn' + (p.n === 1 ? 'o' : 'i') + '</li>').join('');
+                const html = '<div style="font-family:sans-serif;max-width:560px"><p>Ciao ' + resp.nome.split(' ')[0] + ',</p><p>' + testo + ':</p><ul style="line-height:1.8">' + righe + '</ul>' +
+                    '<p>Confermali dal gestionale: <a href="https://dashboard.last-mile.it">dashboard.last-mile.it</a> → Ritorni.</p>' +
+                    '<p style="color:#64748b;font-size:13px">Attiva le notifiche nel gestionale per ricevere questo avviso come push invece che via email.</p></div>';
+                const res = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY.value(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ from: 'Last Mile <noreply@last-mile.it>', to: [resp.email], subject: '🔄 ' + testo, html }),
+                });
+                if (!res.ok) console.warn('[push] ritorni email fallita', resp.email, res.status);
+            }
+            console.log('[push] ritorni ' + resp.email + ': ' + miei.length + ' pendenti, device=' + subs.length + ', push=' + r.sent);
+        }
+    }
+);
+
+// 1° del mese 8:00 — a Risorse Umane il riepilogo dei ritorni ACCETTATI del mese
+// appena chiuso (li aggiunge alla fattura Arena), con CSV allegato; in coda
+// gli eventuali ritorni ancora in attesa, che non vanno fatturati finché non confermati.
+exports.emailRitorniMensili = onSchedule(
+    { schedule: '0 8 1 * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [RESEND_API_KEY] },
+    async () => {
+        const mese = mesePrecedente(giornoInRome(new Date()).slice(0, 7));
+        const [anno, mm] = mese.split('-');
+        const meseLabel = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'][parseInt(mm, 10) - 1] + ' ' + anno;
+        const PREZZO = 6.90;
+        const snap = await db.collection('ritorni').where('mese', '==', mese).get();
+        const accettati = [], inAttesa = [];
+        snap.forEach((d) => {
+            const r = d.data();
+            const giorno = r.data && typeof r.data.toDate === 'function' ? giornoInRome(r.data.toDate()) : String(r.data || '').slice(0, 10);
+            const riga = { giorno, area: r.area || '', filiale: String(r.filiale || ''), filialeNome: r.filialeNome || '', driver: r.driverNome || r.driver || '', cliente: r.cliente || '', motivo: r.motivoLabel || r.motivo || '', n: r.numRitorni || 0, gestitoDa: r.gestitoDa || '' };
+            if (r.stato === 'accettato') accettati.push(riga);
+            else if (r.stato !== 'rifiutato') inAttesa.push(riga);
+        });
+        const perFiliale = {};
+        accettati.forEach((r) => {
+            const k = r.filiale + ' ' + r.filialeNome;
+            perFiliale[k] = perFiliale[k] || { area: r.area, n: 0 };
+            perFiliale[k].n += r.n;
+        });
+        const totale = accettati.reduce((s, r) => s + r.n, 0);
+        const eur = (v) => '€ ' + v.toFixed(2).replace('.', ',');
+        const righeFil = Object.keys(perFiliale).sort().map((k) => '<tr><td style="padding:4px 10px">' + k + '</td><td style="padding:4px 10px">' + perFiliale[k].area + '</td><td style="padding:4px 10px;text-align:right">' + perFiliale[k].n + '</td><td style="padding:4px 10px;text-align:right">' + eur(perFiliale[k].n * PREZZO) + '</td></tr>').join('');
+        const csv = ['data;area;filiale;filialeNome;driver;cliente;motivo;ritorni;importo;confermatoDa']
+            .concat(accettati.sort((a, b) => a.giorno.localeCompare(b.giorno)).map((r) => [r.giorno.split('-').reverse().join('/'), r.area, r.filiale, r.filialeNome, r.driver, r.cliente, r.motivo, r.n, (r.n * PREZZO).toFixed(2).replace('.', ','), r.gestitoDa].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(';')))
+            .join('\r\n');
+        const html = '<div style="font-family:sans-serif;max-width:640px"><h2 style="color:#0f1d3d">Ritorni ' + meseLabel + ' — da aggiungere in fattura</h2>' +
+            '<p><strong>' + totale + ' ritorni accettati</strong> × ' + eur(PREZZO) + ' = <strong>' + eur(totale * PREZZO) + '</strong> + IVA</p>' +
+            (righeFil ? '<table style="border-collapse:collapse;font-size:14px"><tr style="background:#eef1f6"><th style="padding:4px 10px;text-align:left">Filiale</th><th style="padding:4px 10px">Prov.</th><th style="padding:4px 10px">Ritorni</th><th style="padding:4px 10px">Importo</th></tr>' + righeFil + '</table>' : '<p>Nessun ritorno accettato nel mese.</p>') +
+            (inAttesa.length ? '<p style="color:#b45309;margin-top:18px"><strong>⚠️ ' + inAttesa.length + ' ritorni ancora in attesa di conferma</strong> (non inclusi): ' + inAttesa.map((r) => r.giorno.split('-').reverse().join('/') + ' ' + r.driver + ' · ' + r.filialeNome).join('; ') + '. Da far confermare ai responsabili di zona prima di fatturare.</p>' : '') +
+            '<p style="color:#64748b;font-size:13px">Il dettaglio riga per riga è nel CSV allegato. Generato automaticamente il 1° del mese da <a href="https://dashboard.last-mile.it">dashboard.last-mile.it</a> → Ritorni.</p></div>';
+        const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + RESEND_API_KEY.value(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                from: 'Last Mile <noreply@last-mile.it>',
+                to: ['risorse.umane@last-mile.it'],
+                cc: ['guido@last-mile.it'],
+                subject: '🔄 Ritorni ' + meseLabel + ': ' + totale + ' da fatturare (' + eur(totale * PREZZO) + ')' + (inAttesa.length ? ' — ' + inAttesa.length + ' in attesa' : ''),
+                html,
+                attachments: [{ filename: 'ritorni_' + mese + '.csv', content: Buffer.from('﻿' + csv, 'utf8').toString('base64') }],
+            }),
+        });
+        if (!res.ok) throw new Error('Resend: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+        console.log('[ritorni] riepilogo ' + mese + ': ' + totale + ' accettati, ' + inAttesa.length + ' in attesa, email inviata');
+    }
+);
+
 // Lunedì 9:00 — push patente a chi è bloccato o in scadenza (≤30 gg) o non verificato
 exports.pushPatenteSettimanale = onSchedule(
     { schedule: '0 9 * * 1', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY] },
