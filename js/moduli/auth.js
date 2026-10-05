@@ -202,17 +202,10 @@ function initAuth() {
                 document.getElementById('userName').textContent = displayName;
                 document.getElementById('userRole').textContent = role === 'superadmin' ? user.email : roleLabel;
             } else {
-                document.getElementById('navAdmin').style.display = 'none';
-                document.getElementById('navDriver').style.display = 'block';
-                var driverDoc = await db.collection('driverAnagrafica').where('email', '==', user.email).get();
-                if (!driverDoc.empty) {
-                    state.driverProfile = { id: driverDoc.docs[0].id, ...driverDoc.docs[0].data() };
-                    document.getElementById('userName').textContent = state.driverProfile.cognome + ' ' + state.driverProfile.nome;
-                    document.getElementById('userRole').textContent = 'Driver — ' + (state.aree[state.driverProfile.citta] ? state.aree[state.driverProfile.citta].nome : state.driverProfile.citta);
-                } else {
-                    document.getElementById('userName').textContent = user.email;
-                    document.getElementById('userRole').textContent = 'Driver';
-                }
+                // Driver nel gestionale: qui non c'è turno, patente, segnalazioni. L'app è un'altra:
+                // lo mandiamo lì (la sessione non passa tra i due domini, rifà il login con le stesse credenziali).
+                redirectDriverAllApp();
+                return;
             }
 
             initMeseSelector();
@@ -220,10 +213,8 @@ function initAuth() {
 
             if (role === 'superadmin' || role === 'amministratore') {
                 navigateTo('dashboard');
-            } else if (isAdminOrStaffRole(role)) {
-                navigateTo('consegne');
             } else {
-                navigateTo('driver-consegne');
+                navigateTo('consegne');
             }
 
             // Auto-logout a mezzanotte
@@ -241,6 +232,24 @@ function initAuth() {
             });
         }
     });
+
+    var APP_DRIVER_URL = 'https://appdriver.last-mile.it/';
+    function redirectDriverAllApp() {
+        document.getElementById('sidebar').style.display = 'none';
+        document.querySelectorAll('.screen').forEach(function(s) { s.style.display = 'none'; });
+        var ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:var(--bg,#0b1220);color:var(--text,#e5e7eb);display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:inherit';
+        ov.innerHTML = '<div style="max-width:420px">'
+            + '<div style="font-size:48px;margin-bottom:12px">📱</div>'
+            + '<h2 style="margin:0 0 10px;font-size:22px">Questa è la pagina dell\'ufficio</h2>'
+            + '<p style="margin:0 0 20px;line-height:1.5;opacity:.85">Ciao, l\'app dei driver (turno, consegne, patente) è su <strong>appdriver.last-mile.it</strong>. Ti porto lì: entra con la stessa email e password.</p>'
+            + '<a href="' + APP_DRIVER_URL + '" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;padding:14px 22px;border-radius:12px;font-size:16px">Apri l\'app driver →</a>'
+            + '<p style="margin-top:18px;font-size:12px;opacity:.6">Salvala in Home per la prossima volta.</p>'
+            + '</div>';
+        document.body.appendChild(ov);
+        auth.signOut().catch(function() {});
+        setTimeout(function() { location.href = APP_DRIVER_URL; }, 3000);
+    }
 
     document.getElementById('loginPassword').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') doLogin();
