@@ -1852,6 +1852,131 @@ exports.ficStato = ficEndpoint('ficStato', 'stato');
 exports.ficProssimoNumero = ficEndpoint('ficProssimoNumero', 'prossimoNumero');
 
 // ═══════════════════════════════════════════════════════════════════
+// SYNC FATTURE FIC → fattureMese/{YYYY-MM} (Report Finanziario)
+// Ricavi = fatture emesse ai clienti AVR (config/fic.cliente.ficClientId +
+// config/fic.clientiAvr), costi = fatture ricevute. Il mese è quello di
+// COMPETENZA (fic-sync-core.js), non la data. Override manuali in
+// fattureOverride/{emessa_<id>|ricevuta_<id>}, default fornitore in
+// fornitori/{entityId}. Si ricostruisce tutto da FIC_SYNC_DA a ogni giro:
+// poche centinaia di documenti, così gli override valgono anche a ritroso.
+// ═══════════════════════════════════════════════════════════════════
+const FicSync = require('./fic-sync-core.js');
+const FIC_SYNC_DA = '2026-07'; // primo mese fatturato tramite Fatture in Cloud
+
+async function ficListaTutta(fic, path, q) {
+    const out = [];
+    for (let page = 1; page <= 50; page++) {
+        const r = await fic.request('GET', path + '&fieldset=detailed&per_page=100&page=' + page + '&q=' + encodeURIComponent(q));
+        (r && r.data || []).forEach((d) => out.push(d));
+        if (!r || !r.last_page || page >= r.last_page) break;
+    }
+    return out;
+}
+
+async function eseguiFicSync() {
+    const fic = createFicClient({ token: FIC_TOKEN.value(), companyId: FIC_COMPANY_ID.value() });
+    const cfg = (await db.collection('config').doc('fic').get()).data() || {};
+    const clientiAvr = new Set([cfg.cliente && cfg.cliente.ficClientId].concat(cfg.clientiAvr || []).filter(Boolean).map(Number));
+    const overrides = {};
+    (await db.collection('fattureOverride').get()).forEach((d) => { overrides[d.id] = d.data(); });
+    const fornitori = {};
+    (await db.collection('fornitori').get()).forEach((d) => { fornitori[d.id] = d.data(); });
+    const c = '/c/' + encodeURIComponent(fic.companyId);
+    const daData = FIC_SYNC_DA + '-01';
+
+    const emesseRaw = await ficListaTutta(fic, c + '/issued_documents?type=invoice', "date >= '" + daData + "'");
+    const emesse = emesseRaw
+        .filter((d) => d.entity && clientiAvr.has(Number(d.entity.id)))
+        .map((d) => FicSync.normalizzaEmessa(d, overrides['emessa_' + d.id]));
+    const avvisi = [];
+    try {
+        // Permesso FIC separato ("Note di credito"): se manca si va avanti senza
+        const noteCredito = await ficListaTutta(fic, c + '/issued_documents?type=credit_note', "date >= '" + daData + "'");
+        noteCredito.filter((d) => d.entity && clientiAvr.has(Number(d.entity.id))).forEach((d) => {
+            const n = FicSync.normalizzaEmessa(d, overrides['emessa_' + d.id]);
+            n.imponibile = -n.imponibile; n.iva = -n.iva; n.lordo = -n.lordo; n.descrizione = 'NOTA DI CREDITO — ' + n.descrizione;
+            emesse.push(n);
+        });
+    } catch (e) {
+        avvisi.push('Note di credito emesse non lette (permesso token): ' + (e.message || e));
+        console.warn('[ficSync] note di credito:', e.message || e);
+    }
+
+    let ricevute = [], ricevuteDisponibili = true, ricevuteErrore = null;
+    try {
+        const spese = await ficListaTutta(fic, c + '/received_documents?type=expense', "date >= '" + daData + "'");
+        ricevute = spese.map((d) => FicSync.normalizzaRicevuta(d, fornitori[String(d.entity && d.entity.id)], overrides['ricevuta_' + d.id]));
+        try {
+            const ncPassive = await ficListaTutta(fic, c + '/received_documents?type=passive_credit_note', "date >= '" + daData + "'");
+            ncPassive.forEach((d) => {
+                const n = FicSync.normalizzaRicevuta(d, fornitori[String(d.entity && d.entity.id)], overrides['ricevuta_' + d.id]);
+                n.imponibile = -n.imponibile; n.iva = -n.iva; n.lordo = -n.lordo; n.descrizione = 'NOTA DI CREDITO — ' + n.descrizione;
+                ricevute.push(n);
+            });
+        } catch (e) { avvisi.push('Note di credito ricevute non lette (permesso token): ' + (e.message || e)); }
+    } catch (e) {
+        // Token senza permesso "documenti ricevuti": i ricavi si aggiornano lo stesso
+        ricevuteDisponibili = false;
+        ricevuteErrore = e.message || String(e);
+        console.warn('[ficSync] ricevute non disponibili:', ricevuteErrore);
+    }
+
+    const gruppi = FicSync.raggruppaPerMese(emesse, ricevute);
+    const adesso = new Date().toISOString();
+    const mesiScritti = [];
+    // Tutti i mesi da FIC_SYNC_DA al corrente (+1 per competenze future), anche vuoti: così
+    // un mese svuotato da un override non resta con dati vecchi.
+    const corrente = giornoInRome(new Date()).slice(0, 7);
+    for (let m = FIC_SYNC_DA; m <= FicSync.meseShift(corrente, 1); m = FicSync.meseShift(m, 1)) {
+        const g = gruppi[m] || { mese: m, emesse: [], ricevute: [], totali: { ricaviImponibile: 0, ricaviIva: 0, ricaviLordo: 0, costiImponibile: 0, costiIva: 0, costiLordo: 0, costiPerVoce: {}, nEmesse: 0, nRicevute: 0, nDaClassificare: 0 } };
+        await db.collection('fattureMese').doc(m).set({ ...g, mese: m, aggiornatoIl: adesso, ricevuteDisponibili, ricevuteErrore, avvisi });
+        mesiScritti.push(m);
+    }
+    // Mesi con competenza fuori finestra (override strani): scritti comunque
+    for (const m of Object.keys(gruppi)) {
+        if (mesiScritti.includes(m)) continue;
+        await db.collection('fattureMese').doc(m).set({ ...gruppi[m], aggiornatoIl: adesso, ricevuteDisponibili, ricevuteErrore, avvisi });
+        mesiScritti.push(m);
+    }
+    const riep = { emesse: emesse.length, ricevute: ricevute.length, ricevuteDisponibili, ricevuteErrore, avvisi, mesi: mesiScritti.length, aggiornatoIl: adesso };
+    await db.collection('config').doc('ficSync').set(riep);
+    return riep;
+}
+
+exports.ficSyncFatture = onRequest(
+    { secrets: [FIC_TOKEN, FIC_COMPANY_ID], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 300 },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+        const authHeader = req.headers.authorization || '';
+        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+        let email = '';
+        try { email = ((await admin.auth().verifyIdToken(idToken)).email || '').toLowerCase(); } catch (e) { res.status(401).json({ error: 'Sessione non valida, rifai il login' }); return; }
+        if (!(await canFatturare(email))) { res.status(403).json({ error: 'Solo superadmin e amministratori' }); return; }
+        if (!checkRateLimit('ficsync:' + email)) { res.status(429).json({ error: 'Troppe richieste, attendi un minuto' }); return; }
+        try {
+            const out = await eseguiFicSync();
+            console.log('[ficSyncFatture]', email, JSON.stringify(out));
+            res.json({ ok: true, ...out });
+        } catch (e) {
+            console.error('[ficSyncFatture]', e.message || e);
+            res.status(500).json({ error: e.message || 'Errore sync Fatture in Cloud' });
+        }
+    }
+);
+
+// 03:30 — allineamento notturno (nuove fatture ricevute arrivano dallo SDI a qualsiasi ora)
+exports.ficSyncNotturno = onSchedule(
+    { schedule: '30 3 * * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [FIC_TOKEN, FIC_COMPANY_ID], timeoutSeconds: 300 },
+    async () => { const out = await eseguiFicSync(); console.log('[ficSyncNotturno]', JSON.stringify(out)); }
+);
+
+// ═══════════════════════════════════════════════════════════════════
 // VERIFICA PATENTE — AI (Claude, visione)
 // Il driver carica fronte/retro su Storage in patenti/{uid}/{fronte|retro}.jpg
 // e chiama questa function: Claude trascrive il documento, la logica pura

@@ -1,219 +1,195 @@
-// DELIVERY HUB v2 — Report Finanziario (P&L mensile — allineato con logica alias dashboard)
+// DELIVERY HUB v2 — Report Finanziario (P&L mensile)
+// Dal 05/10/2026 i numeri vengono da Fatture in Cloud (fattureMese/{mese},
+// scritta dalla CF ficSyncFatture per mese di COMPETENZA): ricavi = fatture
+// emesse ai clienti AVR, costi = fatture ricevute classificate per voce.
+// I fogli Decò non sono più la fonte: le consegne per città arrivano dai
+// rapporti dell'app driver (reportDriver) e servono solo a ripartire.
+// Le voci senza fattura (buste paga, F24…) restano manuali in costiMensili.
 
 var COSTI_VOCI = [
-    { key: 'compensiDriver', label: 'Stipendi/compensi driver', auto: true },
+    { key: 'compensiDriver', label: 'Stipendi/compensi driver' },
     { key: 'nettoRizzuto', label: 'Netto busta paga — Rizzuto', default: 1500 },
     { key: 'nettoFaro', label: 'Netto busta paga — Faro', default: 2000 },
-    { key: 'hr', label: 'HR', default: 1000 },
-    { key: 'finance', label: 'Finance', default: 2500 },
-    { key: 'consulenteLavoro', label: 'Consulente del lavoro', default: 600 },
-    { key: 'carburante', label: 'Carburante (netto)', default: 2000 },
+    { key: 'hr', label: 'HR', default: 1000, daFattura: true },
+    { key: 'finance', label: 'Finance', default: 2500, daFattura: true },
+    { key: 'consulenteLavoro', label: 'Consulente del lavoro', default: 600, daFattura: true },
+    { key: 'carburante', label: 'Carburante (netto)', default: 2000, daFattura: true },
     { key: 'f24', label: 'F24 / Tasse', default: 7000 },
-    { key: 'costoMezzi', label: 'Costo mezzi / Noleggio', default: 854 },
-    { key: 'altro', label: 'Altro', default: 0 }
+    { key: 'costoMezzi', label: 'Costo mezzi / Noleggio', default: 854, daFattura: true },
+    { key: 'altro', label: 'Altro', default: 0, daFattura: true }
 ];
+var VOCI_FATTURA = COSTI_VOCI.filter(function(v) { return v.daFattura; });
+var AZIENDE_FATTURA = { avr: 'AVR / Last Mile', washhub: 'Wash Hub', da_classificare: 'Da classificare' };
+var AREA_LABELS_RF = { CT: 'Catania', ME: 'Messina', EN: 'Enna', SR: 'Siracusa', PA: 'Palermo' };
+
+var rfState = { fm: null, costi: null };
+
+async function loadFattureMese(mese) {
+    try {
+        var doc = await db.collection('fattureMese').doc(mese).get();
+        return doc.exists ? doc.data() : null;
+    } catch (e) { console.warn('fattureMese load:', e); return null; }
+}
 
 async function renderReportFinanziario() {
     var mese = state.meseCorrente;
     if (!mese) return;
 
-    var cm = state.consegne.filter(function(c) { return meseFromDate(c.data) === mese; });
+    var fm = await loadFattureMese(mese);
+    rfState.fm = fm;
+    var emesse = (fm && fm.emesse) || [];
+    var ricevute = (fm && fm.ricevute) || [];
+    var tot = (fm && fm.totali) || { ricaviImponibile: 0, ricaviIva: 0, ricaviLordo: 0, costiImponibile: 0, costiPerVoce: {}, nDaClassificare: 0 };
 
-    // Filtra solo AVR usando la stessa logica del dashboard
-    var avrSet = buildDriverAvrSet();
-    var cmAvr = cm.filter(function(c) { return isConsegnaAvr(c, avrSet); });
-    var totConsegne = cmAvr.length;
-    var schemaFlat = mese >= MESE_SCHEMA_FLAT;
-
-    // Calcola fatturato con lo schema prezzi del mese.
-    // Da luglio 2026: €9,70 flat, >€499 a prezzo manuale (escluse) e
-    // FATTURA UNICA a F.lli Arena (niente più split Palermo Retail).
-    // Mesi precedenti: split Arena/Palermo con schema storico.
-    var arenaImponibile = 0, palermoImponibile = 0, specialiImponibile = 0, specialiManuali = 0;
-    var perCitta = {}; // area → { consegne, fatturato }
-    var AREA_LABELS = { CT: 'Catania', ME: 'Messina', EN: 'Enna', SR: 'Siracusa', PA: 'Palermo' };
-
-    cmAvr.forEach(function(c) {
-        var area = c.area || c.provincia || '?';
-        var importo = parseFloat(c.importo) || 0;
-        if (!perCitta[area]) perCitta[area] = { consegne: 0, fatturato: 0 };
-        perCitta[area].consegne++;
-
-        if (schemaFlat) {
-            var p = prezzoConsegnaMese(importo, mese, c.tipo, c.data);
-            if (p === null) { specialiManuali++; return; }
-            arenaImponibile += p; // fattura unica F.lli Arena
-            perCitta[area].fatturato += p;
+    // Avviso stato sync
+    var avviso = document.getElementById('rfAvvisoFic');
+    if (avviso) {
+        if (!fm) {
+            avviso.style.display = 'block';
+            avviso.innerHTML = '⚠️ Nessun dato da Fatture in Cloud per ' + meseLabel(mese) + '. Premi <strong>Aggiorna da FIC</strong>.';
+        } else if (fm.ricevuteDisponibili === false) {
+            avviso.style.display = 'block';
+            avviso.innerHTML = '⚠️ Fatture <strong>ricevute</strong> non disponibili: il token Fatture in Cloud non ha il permesso "Documenti ricevuti". I ricavi sono aggiornati, i costi restano manuali.' + (fm.ricevuteErrore ? ' <span style="color:var(--text-muted)">(' + escapeHtml(fm.ricevuteErrore) + ')</span>' : '');
+        } else if (tot.nDaClassificare > 0) {
+            avviso.style.display = 'block';
+            avviso.innerHTML = '🏷️ <strong>' + tot.nDaClassificare + ' fatture ricevute da classificare</strong> (AVR o Wash Hub?): finché non le assegni contano tra i costi AVR.';
         } else {
-            var base = importo >= 250.01 ? 10.00 : 6.90;
-            if (area === 'PA') palermoImponibile += base; else arenaImponibile += base;
-            perCitta[area].fatturato += base;
-            if (importo >= 400) {
-                var extra = calcolaPrezzoSpeciale(importo);
-                specialiImponibile += extra;
-                perCitta[area].fatturato += extra;
-            }
+            avviso.style.display = 'none';
         }
-    });
-
-    var totImponibile = arenaImponibile + palermoImponibile + specialiImponibile;
-    var totIva = totImponibile * 0.22;
-    var totLordo = totImponibile + totIva;
-
-    // Render ricavi — da luglio 2026: dettaglio per città (fattura unica
-    // a F.lli Arena, ma il monitoraggio si fa città per città)
-    var ricaviHtml = '';
-    if (schemaFlat) {
-        Object.keys(perCitta).sort().forEach(function(area) {
-            ricaviHtml += rigaRicavo(area + ' — ' + (AREA_LABELS[area] || area), perCitta[area].fatturato);
-        });
-        ricaviHtml += '<tr><td colspan="4" style="font-size:11px;color:var(--text-muted);padding:6px 12px">Fattura unica a F.lli Arena (×€9,70) — dettaglio città a scopo di monitoraggio</td></tr>';
-    } else {
-        ricaviHtml += rigaRicavo('F.lli Arena', arenaImponibile);
-        ricaviHtml += rigaRicavo('Palermo Retail', palermoImponibile);
-        if (specialiImponibile > 0) ricaviHtml += rigaRicavo('Consegne speciali', specialiImponibile);
     }
-    if (specialiManuali > 0) ricaviHtml += '<tr><td style="color:var(--warning)">Speciali >€499 (prezzo manuale)</td><td colspan="3" style="text-align:right;color:var(--warning)">' + specialiManuali + ' consegne — non incluse nel totale</td></tr>';
-    document.getElementById('rfTblRicavi').innerHTML = ricaviHtml;
-    document.getElementById('rfTotImponibile').innerHTML = '<strong>' + formatCurrency(totImponibile) + '</strong>';
-    document.getElementById('rfTotIva').innerHTML = formatCurrency(totIva);
-    document.getElementById('rfTotLordo').innerHTML = '<strong>' + formatCurrency(totLordo) + '</strong>';
+    var agg = document.getElementById('rfAggiornatoIl');
+    if (agg) agg.textContent = fm && fm.aggiornatoIl ? 'Aggiornato ' + new Date(fm.aggiornatoIl).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
 
-    // === COSTI ===
-    var costiDoc = await loadCostiMese(mese);
-    var costiData = costiDoc || {};
-    if (!costiDoc) {
-        var costiWarn = document.getElementById('rfCostiWarning');
-        if (!costiWarn) {
-            costiWarn = document.createElement('div');
-            costiWarn.id = 'rfCostiWarning';
-            costiWarn.style.cssText = 'background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e';
-            costiWarn.innerHTML = '⚠️ <strong>Costi manuali non caricati</strong> — i costi fissi (stipendi, F24, affitti) mostrano i valori di default. Verifica la connessione o salva i costi per questo mese.';
-            var rfSection = document.getElementById('rfTblCosti');
-            if (rfSection && rfSection.parentNode) rfSection.parentNode.insertBefore(costiWarn, rfSection);
-        }
-    } else {
-        var existingWarn = document.getElementById('rfCostiWarning');
-        if (existingWarn) existingWarn.remove();
-    }
+    // === RICAVI: fatture emesse del mese di competenza ===
+    var ricaviHtml = emesse.map(function(e) {
+        var fonte = e.competenzaFonte === 'manuale' ? '✎' : e.competenzaFonte === 'testo' ? '' : '<span title="Competenza stimata: mese precedente alla data" style="color:var(--warning)">≈</span>';
+        var stile = e.escludi ? 'opacity:.45;text-decoration:line-through' : '';
+        return '<tr style="' + stile + '">' +
+            '<td><strong>' + escapeHtml(e.numero) + '</strong><div style="font-size:11px;color:var(--text-light)">' + formatDateIt(e.data) + ' · ' + escapeHtml(e.statoSdi || '—') + '</div></td>' +
+            '<td style="font-size:12px">' + escapeHtml(e.descrizione) + ' ' + fonte + '</td>' +
+            '<td style="text-align:right">' + formatCurrency(e.imponibile) + '</td>' +
+            '<td style="text-align:right">' + formatCurrency(e.iva) + '</td>' +
+            '<td style="text-align:right"><strong>' + formatCurrency(e.lordo) + '</strong></td>' +
+            '<td><button class="btn btn-sm" title="Cambia mese di competenza / escludi" onclick="rfEditEmessa(\'' + e.ficId + '\')">✏️</button></td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('rfTblRicavi').innerHTML = ricaviHtml || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Nessuna fattura emessa con competenza ' + meseLabel(mese) + '</td></tr>';
+    document.getElementById('rfTotImponibile').innerHTML = '<strong>' + formatCurrency(tot.ricaviImponibile) + '</strong>';
+    document.getElementById('rfTotIva').innerHTML = formatCurrency(tot.ricaviIva);
+    document.getElementById('rfTotLordo').innerHTML = '<strong>' + formatCurrency(tot.ricaviLordo) + '</strong>';
 
-    // Stipendi/compensi driver:
-    // - mesi storici: auto = consegne × €3,50 (pagamento a consegna)
-    // - da luglio 2026 (stipendio fisso): valore manuale da costiMensili
-    //   (totale netti buste paga driver del mese)
-    var compensiDriver;
-    if (!schemaFlat) {
-        compensiDriver = 0;
-        var driverData = {};
-        cmAvr.forEach(function(c) {
-            var drv = normalizeDriverName(c.driver || c.rider);
-            if (!drv) return;
-            if (!driverData[drv]) driverData[drv] = 0;
-            driverData[drv]++;
-        });
-        Object.keys(driverData).forEach(function(drv) {
-            var ana = typeof findDriverAnagrafica === 'function' ? findDriverAnagrafica(drv) : null;
-            var costo = ana ? (ana.costoConsegna || state.costoPerConsegna) : state.costoPerConsegna;
-            compensiDriver += driverData[drv] * costo;
-        });
-        costiData.compensiDriver = compensiDriver;
-    } else {
-        compensiDriver = parseFloat(costiData.compensiDriver) || 0;
-        costiData.compensiDriver = compensiDriver;
-    }
-
-    var totCosti = 0;
-    var costiHtml = '';
+    // === COSTI: voci da fattura (FIC) + voci manuali (costiMensili) ===
+    var costiData = (await loadCostiMese(mese)) || {};
+    rfState.costi = costiData;
+    var perVoce = tot.costiPerVoce || {};
+    var haRicevute = !!(fm && fm.ricevuteDisponibili !== false && ricevute.length);
+    var compensiDriver = parseFloat(costiData.compensiDriver) || 0;
+    var valori = {};
+    var totCosti = 0, costiHtml = '';
     COSTI_VOCI.forEach(function(v) {
-        var val = costiData[v.key] !== undefined ? costiData[v.key] : (v.default || 0);
+        var val, origine = '';
+        if (v.daFattura && haRicevute && perVoce[v.key] !== undefined) { val = perVoce[v.key]; origine = ' <span style="font-size:10px;color:var(--accent)">(da fatture)</span>'; }
+        else if (v.key === 'compensiDriver') val = compensiDriver;
+        else val = costiData[v.key] !== undefined ? parseFloat(costiData[v.key]) || 0 : (v.default || 0);
+        valori[v.key] = val;
         totCosti += val;
-        var isAuto = v.auto ? ' <span style="font-size:10px;color:var(--accent)">(auto)</span>' : '';
-        costiHtml += '<tr><td>' + v.label + isAuto + '</td><td style="text-align:right">' + formatCurrency(val) + '</td></tr>';
+        costiHtml += '<tr><td>' + v.label + origine + '</td><td style="text-align:right">' + formatCurrency(val) + '</td></tr>';
     });
     document.getElementById('rfTblCosti').innerHTML = costiHtml;
     document.getElementById('rfTotCosti').innerHTML = '<strong>' + formatCurrency(totCosti) + '</strong>';
 
-    // === FATTURATO E MARGINE PER CITTÀ ===
-    // Ripartizione costi:
-    // - stipendi driver → quota FISSA per città, in base ai driver attivi
-    //   assegnati a ciascuna città in anagrafica
-    // - ufficio/responsabili e altri costi (Rizzuto, Faro, HR, finance,
-    //   consulente, carburante, F24, mezzi, altro) → pro-quota consegne
+    // === FATTURE RICEVUTE (dettaglio con classificazione) ===
+    var ricEl = document.getElementById('rfTblRicevute');
+    if (ricEl) {
+        var selA = function(r) {
+            return '<select class="input" style="padding:4px 6px;font-size:12px;margin:0" onchange="rfClassifica(\'' + r.ficId + '\',\'' + (r.fornitoreId || '') + '\',\'azienda\',this.value)">' +
+                Object.keys(AZIENDE_FATTURA).map(function(k) { return '<option value="' + k + '"' + (r.azienda === k ? ' selected' : '') + '>' + AZIENDE_FATTURA[k] + '</option>'; }).join('') + '</select>';
+        };
+        var selV = function(r) {
+            return '<select class="input" style="padding:4px 6px;font-size:12px;margin:0" onchange="rfClassifica(\'' + r.ficId + '\',\'' + (r.fornitoreId || '') + '\',\'voce\',this.value)">' +
+                VOCI_FATTURA.map(function(v) { return '<option value="' + v.key + '"' + (r.voce === v.key ? ' selected' : '') + '>' + v.label + '</option>'; }).join('') + '</select>';
+        };
+        ricEl.innerHTML = ricevute.map(function(r) {
+            var stile = (r.escludi || r.azienda === 'washhub') ? 'opacity:.5' : '';
+            var fonte = r.competenzaFonte === 'manuale' ? ' ✎' : '';
+            return '<tr style="' + stile + '">' +
+                '<td>' + formatDateIt(r.data) + fonte + '<div style="font-size:11px;color:var(--text-light)">' + escapeHtml(r.numero || '') + '</div></td>' +
+                '<td><strong>' + escapeHtml(r.fornitore) + '</strong><div style="font-size:11px;color:var(--text-muted)">' + escapeHtml(r.descrizione) + '</div></td>' +
+                '<td style="text-align:right">' + formatCurrency(r.imponibile) + '<div style="font-size:11px;color:var(--text-light)">lordo ' + formatCurrency(r.lordo) + '</div></td>' +
+                '<td>' + selA(r) + '</td>' +
+                '<td>' + selV(r) + '</td>' +
+                '<td><button class="btn btn-sm" title="Cambia mese di competenza / escludi" onclick="rfEditRicevuta(\'' + r.ficId + '\')">✏️</button></td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">' + (fm && fm.ricevuteDisponibili === false ? 'Fatture ricevute non disponibili (permesso token FIC)' : 'Nessuna fattura ricevuta con competenza ' + meseLabel(mese)) + '</td></tr>';
+    }
+
+    // === CONSEGNE E MARGINE PER CITTÀ (rapporti app driver) ===
+    var perCitta = {};
+    var totConsegne = 0;
+    (state.reportDriver || []).forEach(function(r) {
+        var area = r.area || '?';
+        perCitta[area] = perCitta[area] || { consegne: 0 };
+        perCitta[area].consegne += r.numConsegne || 0;
+        totConsegne += r.numConsegne || 0;
+    });
     var cittaEl = document.getElementById('rfTblCitta');
     if (cittaEl) {
-        var totConsegneCitta = 0;
-        Object.values(perCitta).forEach(function(x) { totConsegneCitta += x.consegne; });
-
-        // Driver attivi per città (anagrafica)
-        var driverPerCitta = {};
-        var totDriverAttivi = 0;
+        var driverPerCitta = {}, totDriverAttivi = 0;
         (state.driverList || []).forEach(function(dr) {
             if (dr.attivo === false) return;
-            var ct = dr.citta || '?';
-            driverPerCitta[ct] = (driverPerCitta[ct] || 0) + 1;
+            driverPerCitta[dr.citta || '?'] = (driverPerCitta[dr.citta || '?'] || 0) + 1;
             totDriverAttivi++;
         });
-
         var costiUfficio = totCosti - compensiDriver;
-
-        var cittaHtml = '';
-        var tcCons = 0, tcFatt = 0, tcCosti = 0, tcMarg = 0;
-        Object.keys(perCitta).sort(function(a, b) { return perCitta[b].fatturato - perCitta[a].fatturato; }).forEach(function(area) {
+        var cittaHtml = '', tcCons = 0, tcFatt = 0, tcCosti = 0, tcMarg = 0;
+        Object.keys(perCitta).sort(function(a, b) { return perCitta[b].consegne - perCitta[a].consegne; }).forEach(function(area) {
             var x = perCitta[area];
+            var quotaCons = totConsegne > 0 ? x.consegne / totConsegne : 0;
+            var fatt = tot.ricaviImponibile * quotaCons; // pro-quota consegne app
             var quotaDriver = totDriverAttivi > 0 ? compensiDriver * ((driverPerCitta[area] || 0) / totDriverAttivi) : 0;
-            var quotaUfficio = totConsegneCitta > 0 ? costiUfficio * (x.consegne / totConsegneCitta) : 0;
-            var quota = quotaDriver + quotaUfficio;
-            var marg = x.fatturato - quota;
-            var margPct = x.fatturato > 0 ? Math.round(marg / x.fatturato * 100) : 0;
+            var quota = quotaDriver + costiUfficio * quotaCons;
+            var marg = fatt - quota;
+            var margPct = fatt > 0 ? Math.round(marg / fatt * 100) : 0;
             var col = marg >= 0 ? 'var(--success)' : 'var(--danger)';
-            tcCons += x.consegne; tcFatt += x.fatturato; tcCosti += quota; tcMarg += marg;
+            tcCons += x.consegne; tcFatt += fatt; tcCosti += quota; tcMarg += marg;
             cittaHtml += '<tr>' +
-                '<td><strong>' + area + '</strong> — ' + (AREA_LABELS[area] || area) +
-                    '<div style="font-size:10px;color:var(--text-light)">' + (driverPerCitta[area] || 0) + ' driver</div></td>' +
+                '<td><strong>' + area + '</strong> — ' + (AREA_LABELS_RF[area] || area) + '<div style="font-size:10px;color:var(--text-light)">' + (driverPerCitta[area] || 0) + ' driver</div></td>' +
                 '<td style="text-align:right">' + x.consegne + '</td>' +
-                '<td style="text-align:right">' + formatCurrency(x.fatturato) + '</td>' +
-                '<td style="text-align:right;color:var(--text-muted)" title="Driver (quota fissa): ' + formatCurrency(quotaDriver) + ' · Ufficio (pro-quota): ' + formatCurrency(quotaUfficio) + '">' + formatCurrency(quota) + '</td>' +
+                '<td style="text-align:right">' + formatCurrency(fatt) + '</td>' +
+                '<td style="text-align:right;color:var(--text-muted)" title="Driver (quota fissa): ' + formatCurrency(quotaDriver) + ' · Ufficio (pro-quota): ' + formatCurrency(costiUfficio * quotaCons) + '">' + formatCurrency(quota) + '</td>' +
                 '<td style="text-align:right;font-weight:700;color:' + col + '">' + formatCurrency(marg) + '</td>' +
                 '<td style="text-align:right;font-weight:700;color:' + col + '">' + margPct + '%</td>' +
             '</tr>';
         });
-        cittaHtml += '<tr class="totals-row">' +
-            '<td><strong>TOTALE</strong></td>' +
-            '<td style="text-align:right"><strong>' + tcCons + '</strong></td>' +
-            '<td style="text-align:right"><strong>' + formatCurrency(tcFatt) + '</strong></td>' +
-            '<td style="text-align:right"><strong>' + formatCurrency(tcCosti) + '</strong></td>' +
-            '<td style="text-align:right"><strong style="color:' + (tcMarg >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + formatCurrency(tcMarg) + '</strong></td>' +
-            '<td style="text-align:right"><strong>' + (tcFatt > 0 ? Math.round(tcMarg / tcFatt * 100) : 0) + '%</strong></td>' +
-        '</tr>';
-        cittaEl.innerHTML = cittaHtml || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Nessuna consegna nel mese</td></tr>';
+        if (cittaHtml) {
+            cittaHtml += '<tr class="totals-row"><td><strong>TOTALE</strong></td>' +
+                '<td style="text-align:right"><strong>' + tcCons + '</strong></td>' +
+                '<td style="text-align:right"><strong>' + formatCurrency(tcFatt) + '</strong></td>' +
+                '<td style="text-align:right"><strong>' + formatCurrency(tcCosti) + '</strong></td>' +
+                '<td style="text-align:right"><strong style="color:' + (tcMarg >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + formatCurrency(tcMarg) + '</strong></td>' +
+                '<td style="text-align:right"><strong>' + (tcFatt > 0 ? Math.round(tcMarg / tcFatt * 100) : 0) + '%</strong></td></tr>';
+        }
+        cittaEl.innerHTML = cittaHtml || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Nessun rapporto driver nel mese</td></tr>';
     }
 
     // === KPI ===
-    var revenue = totImponibile - totCosti;
-    document.getElementById('rfFatturato').textContent = formatCurrency(totImponibile);
+    var revenue = tot.ricaviImponibile - totCosti;
+    document.getElementById('rfFatturato').textContent = formatCurrency(tot.ricaviImponibile);
     document.getElementById('rfCosti').textContent = formatCurrency(totCosti);
     document.getElementById('rfRevenue').textContent = formatCurrency(revenue);
     document.getElementById('rfRevenue').style.color = revenue >= 0 ? 'var(--success)' : 'var(--danger)';
     document.getElementById('rfConsegne').textContent = formatNumber(totConsegne);
 
     // === RIEPILOGO P&L ===
-    var pct = totImponibile > 0 ? Math.round((revenue / totImponibile) * 100) : 0;
+    var pct = tot.ricaviImponibile > 0 ? Math.round((revenue / tot.ricaviImponibile) * 100) : 0;
+    var righe = COSTI_VOCI.map(function(v) { return valori[v.key] ? plRow(v.label, -valori[v.key], true) : ''; }).join('');
     document.getElementById('rfRiepilogo').innerHTML =
         '<div style="display:flex;flex-direction:column;gap:8px;padding:8px 0">' +
-            plRow('Fatturato imponibile', totImponibile, false) +
-            plRow('IVA 22%', totIva, false) +
-            plRow('Fatturato lordo', totLordo, false) +
+            plRow('Fatturato imponibile (' + emesse.filter(function(e) { return !e.escludi; }).length + ' fatture)', tot.ricaviImponibile, false) +
+            plRow('IVA', tot.ricaviIva, false) +
+            plRow('Fatturato lordo', tot.ricaviLordo, false) +
             '<div style="border-top:2px solid var(--border);margin:4px 0"></div>' +
-            plRow('Stipendi/compensi driver', -compensiDriver, true) +
-            plRow('Netto b.p. Rizzuto', -(costiData.nettoRizzuto !== undefined ? costiData.nettoRizzuto : 1500), true) +
-            plRow('Netto b.p. Faro', -(costiData.nettoFaro !== undefined ? costiData.nettoFaro : 2000), true) +
-            plRow('HR', -(costiData.hr || 1000), true) +
-            plRow('Finance', -(costiData.finance || 2500), true) +
-            plRow('Cons. lavoro', -(costiData.consulenteLavoro || 600), true) +
-            plRow('Carburante', -(costiData.carburante || 2000), true) +
-            plRow('F24 / Tasse', -(costiData.f24 || 7000), true) +
-            plRow('Costo mezzi', -(costiData.costoMezzi || 854), true) +
-            (costiData.altro ? plRow('Altro', -(costiData.altro), true) : '') +
+            righe +
             '<div style="border-top:2px solid var(--accent);margin:4px 0"></div>' +
             '<div style="display:flex;justify-content:space-between;padding:12px 0;font-size:18px">' +
                 '<span style="font-weight:800;color:' + (revenue >= 0 ? 'var(--success)' : 'var(--danger)') + '">REVENUE (Utile netto)</span>' +
@@ -224,11 +200,10 @@ async function renderReportFinanziario() {
     await renderStoricoFinanziario();
 }
 
-function rigaRicavo(label, imponibile) {
-    var iva = imponibile * 0.22;
-    return '<tr><td>' + label + '</td><td style="text-align:right">' + formatCurrency(imponibile) +
-        '</td><td style="text-align:right">' + formatCurrency(iva) +
-        '</td><td style="text-align:right"><strong>' + formatCurrency(imponibile + iva) + '</strong></td></tr>';
+function formatDateIt(ymd) {
+    if (!ymd) return '—';
+    var p = String(ymd).slice(0, 10).split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : ymd;
 }
 
 function plRow(label, value, isCosto) {
@@ -238,19 +213,63 @@ function plRow(label, value, isCosto) {
         '<span style="color:' + color + ';font-weight:600">' + (isCosto ? formatCurrency(Math.abs(value)) : formatCurrency(value)) + '</span></div>';
 }
 
-function calcolaPrezzoSpeciale(importo) {
-    var fasce = state.prezziSpeciali || [];
-    for (var i = 0; i < fasce.length; i++) {
-        if (importo >= fasce[i].min && importo <= fasce[i].max) return fasce[i].prezzo;
+// ── Sync e classificazione (scrivono override/fornitori, poi risincronizzano) ──
+async function rfSyncFic() {
+    var btn = document.getElementById('btnRfSync');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizzo…'; }
+    try {
+        var out = await ficCall('ficSyncFatture', {});
+        toast('Fatture aggiornate: ' + out.emesse + ' emesse, ' + out.ricevute + ' ricevute', 'success');
+        await renderReportFinanziario();
+    } catch (e) {
+        toast('Sync FIC fallita: ' + e.message, 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 Aggiorna da FIC'; }
     }
-    // Importo fuori da tutte le fasce: usa l'ultima fascia disponibile come fallback
-    if (fasce.length > 0 && importo > fasce[fasce.length - 1].max) {
-        console.warn('calcolaPrezzoSpeciale: importo ' + importo + ' supera la fascia massima, uso ultima fascia');
-        return fasce[fasce.length - 1].prezzo;
-    }
-    return 0;
 }
 
+// azienda/voce: si salvano sul FORNITORE (valgono per tutte le sue fatture).
+async function rfClassifica(ficId, fornitoreId, campo, valore) {
+    try {
+        var r = (rfState.fm && rfState.fm.ricevute || []).find(function(x) { return String(x.ficId) === String(ficId); });
+        if (fornitoreId) {
+            var upd = { nome: r ? r.fornitore : '', aggiornatoIl: new Date().toISOString(), aggiornatoDa: state.user.email };
+            upd[campo] = valore;
+            await db.collection('fornitori').doc(String(fornitoreId)).set(upd, { merge: true });
+        } else {
+            var ov = {}; ov[campo] = valore;
+            await db.collection('fattureOverride').doc('ricevuta_' + ficId).set(ov, { merge: true });
+        }
+        await rfSyncFic();
+    } catch (e) { toast('Errore: ' + e.message, 'error'); }
+}
+
+function rfEditEmessa(ficId) { rfEditCompetenza('emessa', ficId); }
+function rfEditRicevuta(ficId) { rfEditCompetenza('ricevuta', ficId); }
+
+function rfEditCompetenza(tipo, ficId) {
+    var lista = (rfState.fm && rfState.fm[tipo === 'emessa' ? 'emesse' : 'ricevute']) || [];
+    var r = lista.find(function(x) { return String(x.ficId) === String(ficId); });
+    if (!r) return;
+    var html = '<p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">' + escapeHtml(r.descrizione || r.fornitore || r.cliente || '') + '<br>' + formatDateIt(r.data) + ' · ' + formatCurrency(r.imponibile) + '</p>' +
+        '<div class="form-group"><label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Mese di competenza</label>' +
+        '<input type="month" id="rfOvMese" class="input" value="' + escapeHtml(r.meseCompetenza) + '"></div>' +
+        '<label style="display:flex;align-items:center;gap:8px;margin:12px 0;font-size:13px"><input type="checkbox" id="rfOvEscludi"' + (r.escludi ? ' checked' : '') + '> Escludi dal report</label>' +
+        '<button class="btn btn-primary" style="width:100%" onclick="rfSalvaCompetenza(\'' + tipo + '\',\'' + ficId + '\')">Salva</button>';
+    openModal('Competenza fattura ' + escapeHtml(r.numero || ''), html);
+}
+
+async function rfSalvaCompetenza(tipo, ficId) {
+    var mese = document.getElementById('rfOvMese').value;
+    if (!/^\d{4}-\d{2}$/.test(mese)) { toast('Mese non valido', 'error'); return; }
+    try {
+        await db.collection('fattureOverride').doc(tipo + '_' + ficId).set({ meseCompetenza: mese, escludi: document.getElementById('rfOvEscludi').checked, aggiornatoIl: new Date().toISOString(), aggiornatoDa: state.user.email }, { merge: true });
+        closeModal();
+        await rfSyncFic();
+    } catch (e) { toast('Errore: ' + e.message, 'error'); }
+}
+
+// ── Costi manuali (voci senza fattura) ──
 async function loadCostiMese(mese) {
     try {
         var doc = await db.collection('costiMensili').doc(mese).get();
@@ -268,24 +287,22 @@ async function saveCostiMese(mese, data) {
 
 function openEditCosti() {
     var mese = state.meseCorrente;
-    var html = '<p style="margin-bottom:16px;color:var(--text-muted);font-size:13px">Inserisci i costi per <strong>' + meseLabel(mese) + '</strong>. I compensi driver sono calcolati automaticamente.</p>';
-
+    var fm = rfState.fm;
+    var perVoce = (fm && fm.totali && fm.totali.costiPerVoce) || {};
+    var haRicevute = !!(fm && fm.ricevuteDisponibili !== false && (fm.ricevute || []).length);
+    var html = '<p style="margin-bottom:16px;color:var(--text-muted);font-size:13px">Costi manuali per <strong>' + meseLabel(mese) + '</strong>. Le voci coperte dalle fatture ricevute sono già compilate da Fatture in Cloud.</p>';
     COSTI_VOCI.forEach(function(v) {
-        if (v.auto) return;
+        var daFic = v.daFattura && haRicevute && perVoce[v.key] !== undefined;
         html += '<div class="form-group" style="margin-bottom:10px">' +
-            '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">' + v.label + '</label>' +
-            '<input type="number" id="costo_' + v.key + '" class="input" value="' + (v.default || 0) + '" step="0.01" style="margin-bottom:0">' +
+            '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">' + v.label + (daFic ? ' <span style="color:var(--accent)">(da fatture: ' + formatCurrency(perVoce[v.key]) + ')</span>' : '') + '</label>' +
+            '<input type="number" id="costo_' + v.key + '" class="input" value="' + (v.default || 0) + '" step="0.01" style="margin-bottom:0"' + (daFic ? ' disabled' : '') + '>' +
             '</div>';
     });
-
     html += '<button class="btn btn-primary" onclick="doSaveCosti()" style="width:100%;margin-top:12px">Salva costi</button>';
-
     openModal('Costi mensili — ' + meseLabel(mese), html);
-
     loadCostiMese(mese).then(function(data) {
         if (!data) return;
         COSTI_VOCI.forEach(function(v) {
-            if (v.auto) return;
             var el = document.getElementById('costo_' + v.key);
             if (el && data[v.key] !== undefined) el.value = data[v.key];
         });
@@ -298,13 +315,10 @@ async function doSaveCosti() {
     if (btn) btn.disabled = true;
     var mese = state.meseCorrente;
     var data = { mese: mese, updatedAt: new Date().toISOString() };
-
     COSTI_VOCI.forEach(function(v) {
-        if (v.auto) return;
         var el = document.getElementById('costo_' + v.key);
-        if (el) data[v.key] = parseFloat(el.value) || 0;
+        if (el && !el.disabled) data[v.key] = parseFloat(el.value) || 0;
     });
-
     try {
         await saveCostiMese(mese, data);
         closeModal();
@@ -317,62 +331,51 @@ async function doSaveCosti() {
     }
 }
 
+// ── Storico: ricavi da fattureMese, costi da fattureMese (voci da fattura) + costiMensili ──
 async function renderStoricoFinanziario() {
+    var el = document.getElementById('rfTblStorico');
     try {
-        var snap = await db.collection('costiMensili').orderBy('mese', 'desc').limit(12).get();
-        var mesiConCosti = {};
-        snap.docs.forEach(function(d) { mesiConCosti[d.id] = d.data(); });
-
         var mesi = [];
         var now = new Date();
         for (var i = 0; i < 12; i++) {
             var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
             mesi.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
         }
+        var r = await Promise.all([
+            db.collection('fattureMese').where('mese', '>=', mesi[mesi.length - 1]).get(),
+            db.collection('costiMensili').where('mese', '>=', mesi[mesi.length - 1]).get()
+        ]);
+        var fmMap = {}, costiMap = {};
+        r[0].forEach(function(doc) { fmMap[doc.id] = doc.data(); });
+        r[1].forEach(function(doc) { costiMap[doc.id] = doc.data(); });
 
         var html = '';
-        var mn = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-
-        for (var i = 0; i < mesi.length; i++) {
-            var m = mesi[i];
-            var parts = m.split('-');
-            var label = mn[parseInt(parts[1]) - 1] + ' ' + parts[0];
-
-            var costi = mesiConCosti[m] || {};
-            var hasCosti = Object.keys(costi).length > 0;
-
-            if (!hasCosti && m !== state.meseCorrente) {
-                html += '<tr style="opacity:0.4"><td>' + label + '</td><td colspan="4" style="text-align:center;color:var(--text-muted);font-size:12px">Nessun dato inserito</td></tr>';
-                continue;
+        mesi.forEach(function(m) {
+            var fm = fmMap[m], costi = costiMap[m] || {};
+            var tot = fm && fm.totali;
+            if (!tot && !Object.keys(costi).length) {
+                html += '<tr style="opacity:0.4"><td>' + meseLabel(m) + '</td><td colspan="4" style="text-align:center;color:var(--text-muted);font-size:12px">Nessun dato</td></tr>';
+                return;
             }
-
-            if (m === state.meseCorrente) {
-                var fatturato = document.getElementById('rfFatturato').textContent;
-                var costiTot = document.getElementById('rfCosti').textContent;
-                var rev = document.getElementById('rfRevenue').textContent;
-                var cons = document.getElementById('rfConsegne').textContent;
-                var revColor = document.getElementById('rfRevenue').style.color;
-                html += '<tr style="background:rgba(34,197,94,0.05)"><td><strong>' + label + '</strong></td>' +
-                    '<td style="text-align:right">' + fatturato + '</td>' +
-                    '<td style="text-align:right">' + costiTot + '</td>' +
-                    '<td style="text-align:right;color:' + revColor + ';font-weight:700">' + rev + '</td>' +
-                    '<td style="text-align:right">' + cons + '</td></tr>';
-            } else if (hasCosti) {
-                var totC = 0;
-                COSTI_VOCI.forEach(function(v) {
-                    if (!v.auto) totC += (costi[v.key] || v.default || 0);
-                });
-                totC += (costi.compensiDriver || 0);
-                html += '<tr><td>' + label + '</td>' +
-                    '<td style="text-align:right">—</td>' +
-                    '<td style="text-align:right">' + formatCurrency(totC) + '</td>' +
-                    '<td style="text-align:right">—</td>' +
-                    '<td style="text-align:right">—</td></tr>';
-            }
-        }
-
-        document.getElementById('rfTblStorico').innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Inserisci i costi mensili per vedere lo storico</td></tr>';
+            var perVoce = (tot && tot.costiPerVoce) || {};
+            var haRicevute = !!(fm && fm.ricevuteDisponibili !== false && (fm.ricevute || []).length);
+            var totC = 0;
+            COSTI_VOCI.forEach(function(v) {
+                if (v.daFattura && haRicevute && perVoce[v.key] !== undefined) totC += perVoce[v.key];
+                else if (v.key === 'compensiDriver') totC += parseFloat(costi.compensiDriver) || 0;
+                else totC += costi[v.key] !== undefined ? parseFloat(costi[v.key]) || 0 : (v.default || 0);
+            });
+            var ricavi = tot ? tot.ricaviImponibile : 0;
+            var rev = ricavi - totC;
+            html += '<tr' + (m === state.meseCorrente ? ' style="background:rgba(34,197,94,0.05)"' : '') + '><td>' + (m === state.meseCorrente ? '<strong>' + meseLabel(m) + '</strong>' : meseLabel(m)) + '</td>' +
+                '<td style="text-align:right">' + (tot ? formatCurrency(ricavi) : '—') + '</td>' +
+                '<td style="text-align:right">' + formatCurrency(totC) + '</td>' +
+                '<td style="text-align:right;font-weight:700;color:' + (rev >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + (tot ? formatCurrency(rev) : '—') + '</td>' +
+                '<td style="text-align:right">' + (tot ? (tot.nEmesse || 0) + ' / ' + (tot.nRicevute || 0) : '—') + '</td></tr>';
+        });
+        el.innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Nessun dato</td></tr>';
     } catch(e) {
-        document.getElementById('rfTblStorico').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Errore caricamento storico</td></tr>';
+        console.warn('storico:', e);
+        el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Errore caricamento storico</td></tr>';
     }
 }

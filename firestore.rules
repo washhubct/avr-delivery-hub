@@ -318,6 +318,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── FATTURE FIC PER MESE DI COMPETENZA (Report Finanziario) — scritte
+    // solo dalla CF ficSyncFatture/ficSyncNotturno. Override manuali
+    // (competenza, azienda, voce, escludi) e default per fornitore: direzione.
+    match /fattureMese/{mese} {
+      allow read: if isSuperAdmin() || isAmministratore();
+      allow write: if false;
+    }
+    match /fattureOverride/{doc} {
+      allow read, write: if isSuperAdmin() || isAmministratore();
+    }
+    match /fornitori/{doc} {
+      allow read, write: if isSuperAdmin() || isAmministratore();
+    }
+
     // ── ARCHIVIO DRIVER CESSATI — scritto solo dalla CF pulisciAnagrafica
     // (admin SDK). L'ufficio lo legge per l'attribuzione storica delle
     // consegne (cognomi/alias dei cessati restano riconosciuti).

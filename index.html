@@ -633,6 +633,12 @@
 
         <!-- ═══ REPORT FINANZIARIO ═══ -->
         <section id="screen-report-finanziario" class="screen" style="display:none">
+            <div class="toolbar" style="margin-bottom:12px;align-items:center">
+                <button class="btn btn-primary" id="btnRfSync" onclick="rfSyncFic()">🔄 Aggiorna da FIC</button>
+                <span id="rfAggiornatoIl" style="font-size:12px;color:var(--text-muted)"></span>
+                <span style="font-size:12px;color:var(--text-light);margin-left:auto">Fonte: Fatture in Cloud, per mese di competenza · sync automatica ogni notte</span>
+            </div>
+            <div id="rfAvvisoFic" style="display:none;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e"></div>
             <div class="kpi-grid">
                 <div class="kpi-card accent">
                     <div class="kpi-label">Fatturato netto (imponibile)</div>
@@ -647,7 +653,7 @@
                     <div class="kpi-value" id="rfRevenue">—</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-label">Tot. consegne</div>
+                    <div class="kpi-label">Consegne (app driver)</div>
                     <div class="kpi-value" id="rfConsegne">—</div>
                 </div>
             </div>
@@ -655,12 +661,13 @@
             <div class="grid-2">
                 <!-- RICAVI -->
                 <div class="card">
-                    <h3 class="card-title">Ricavi</h3>
+                    <h3 class="card-title">Ricavi — fatture emesse</h3>
+                    <p class="card-desc">Fatture a F.lli Arena con competenza nel mese (≈ = competenza stimata dal mese precedente alla data, ✎ = impostata a mano).</p>
                     <div class="table-wrap">
                         <table class="data-table">
-                            <thead><tr><th>Voce</th><th style="text-align:right">Imponibile</th><th style="text-align:right">IVA 22%</th><th style="text-align:right">Totale</th></tr></thead>
+                            <thead><tr><th>N.</th><th>Descrizione</th><th style="text-align:right">Imponibile</th><th style="text-align:right">IVA</th><th style="text-align:right">Totale</th><th></th></tr></thead>
                             <tbody id="rfTblRicavi"></tbody>
-                            <tfoot><tr class="totals-row"><td><strong>TOTALE</strong></td><td id="rfTotImponibile" style="text-align:right"></td><td id="rfTotIva" style="text-align:right"></td><td id="rfTotLordo" style="text-align:right"></td></tr></tfoot>
+                            <tfoot><tr class="totals-row"><td colspan="2"><strong>TOTALE</strong></td><td id="rfTotImponibile" style="text-align:right"></td><td id="rfTotIva" style="text-align:right"></td><td id="rfTotLordo" style="text-align:right"></td><td></td></tr></tfoot>
                         </table>
                     </div>
                 </div>
@@ -668,7 +675,7 @@
                 <!-- FATTURATO E MARGINE PER CITTÀ -->
                 <div class="card">
                     <h3 class="card-title">📍 Fatturato e margine per città</h3>
-                    <p class="card-desc">Stipendi driver a quota <strong>fissa per città</strong> (driver attivi in anagrafica); ufficio e responsabili ripartiti <strong>pro-quota sulle consegne</strong>. Passa il mouse sui costi per il dettaglio delle due quote.</p>
+                    <p class="card-desc">Consegne dai rapporti dell'app driver. Fatturato ripartito <strong>pro-quota consegne</strong>; stipendi driver a quota <strong>fissa per città</strong> (driver attivi in anagrafica), ufficio pro-quota. Passa il mouse sui costi per il dettaglio.</p>
                     <div class="table-wrap">
                         <table class="data-table">
                             <thead><tr><th>Città</th><th style="text-align:right">Consegne</th><th style="text-align:right">Fatturato</th><th style="text-align:right">Costi (quota)</th><th style="text-align:right">Margine</th><th style="text-align:right">Margine %</th></tr></thead>
@@ -680,7 +687,8 @@
                 <!-- COSTI -->
                 <div class="card">
                     <h3 class="card-title">Costi</h3>
-                    <div class="toolbar"><button class="btn btn-primary" onclick="openEditCosti()">✏️ Modifica costi</button></div>
+                    <p class="card-desc">Le voci <span style="color:var(--accent)">(da fatture)</span> si compilano da sole dalle fatture ricevute; le altre (buste paga, F24) a mano.</p>
+                    <div class="toolbar"><button class="btn btn-primary" onclick="openEditCosti()">✏️ Costi manuali</button></div>
                     <div class="table-wrap">
                         <table class="data-table">
                             <thead><tr><th>Voce</th><th style="text-align:right">Importo</th></tr></thead>
@@ -688,6 +696,18 @@
                             <tfoot><tr class="totals-row"><td><strong>TOTALE COSTI</strong></td><td id="rfTotCosti" style="text-align:right"></td></tr></tfoot>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- FATTURE RICEVUTE -->
+            <div class="card" style="margin-top:20px">
+                <h3 class="card-title">Costi — fatture ricevute</h3>
+                <p class="card-desc">Assegna ogni fornitore ad <strong>AVR</strong> o <strong>Wash Hub</strong> e alla voce di costo: la scelta vale per tutte le sue fatture, anche future. Le fatture Wash Hub non contano nel P&L.</p>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Data</th><th>Fornitore / descrizione</th><th style="text-align:right">Imponibile</th><th>Azienda</th><th>Voce</th><th></th></tr></thead>
+                        <tbody id="rfTblRicevute"></tbody>
+                    </table>
                 </div>
             </div>
 
@@ -702,7 +722,7 @@
                 <h3 class="card-title">Storico mensile</h3>
                 <div class="table-wrap">
                     <table class="data-table">
-                        <thead><tr><th>Mese</th><th style="text-align:right">Fatturato</th><th style="text-align:right">Costi</th><th style="text-align:right">Revenue</th><th style="text-align:right">Consegne</th></tr></thead>
+                        <thead><tr><th>Mese</th><th style="text-align:right">Fatturato</th><th style="text-align:right">Costi</th><th style="text-align:right">Revenue</th><th style="text-align:right">Fatture em. / ric.</th></tr></thead>
                         <tbody id="rfTblStorico"></tbody>
                     </table>
                 </div>
