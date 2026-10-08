@@ -1970,6 +1970,115 @@ exports.ficSyncFatture = onRequest(
     }
 );
 
+// ═══════════════════════════════════════════════════════════════════
+// BUSTE PAGA — PDF caricati dal gestionale in Storage bustePaga/{mese}/…,
+// letti da Claude (bustepaga-core.js), un doc bustePaga/{mese}_{dipendente}
+// per cedolino, poi ricalcolo di costiMensili/{mese} (netti per categoria).
+// body: { mese: 'YYYY-MM', files: ['bustePaga/2026-09/x.pdf', …] }
+// files vuoto = solo ricalcolo (dopo una cancellazione dal gestionale).
+// ═══════════════════════════════════════════════════════════════════
+const BustePaga = require('./bustepaga-core.js');
+const BUSTA_MAX_BYTES = 10 * 1024 * 1024;
+
+async function ricalcolaCostiMese(mese) {
+    const snap = await db.collection('bustePaga').where('mese', '==', mese).get();
+    const buste = []; snap.forEach((d) => buste.push(d.data()));
+    const t = BustePaga.ricalcolaCosti(buste);
+    const upd = { mese, compensiDriver: t.compensiDriver, nettoRizzuto: t.nettoRizzuto, nettoFaro: t.nettoFaro, hr: t.hr,
+        bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, aggiornatoIl: new Date().toISOString() } };
+    if (t.nBuste === 0) { upd.compensiDriver = admin.firestore.FieldValue.delete(); upd.nettoRizzuto = admin.firestore.FieldValue.delete(); upd.nettoFaro = admin.firestore.FieldValue.delete(); upd.hr = admin.firestore.FieldValue.delete(); }
+    await db.collection('costiMensili').doc(mese).set(upd, { merge: true });
+    return t;
+}
+
+exports.elaboraBustePaga = onRequest(
+    { secrets: [ANTHROPIC_API_KEY], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 540, memory: '1GiB' },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+        const authHeader = req.headers.authorization || '';
+        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+        let email = '';
+        try { email = ((await admin.auth().verifyIdToken(idToken)).email || '').toLowerCase(); } catch (e) { res.status(401).json({ error: 'Sessione non valida, rifai il login' }); return; }
+        if (!(await canFatturare(email))) { res.status(403).json({ error: 'Solo superadmin e amministratori' }); return; }
+
+        const body = req.body || {};
+        const mese = String(body.mese || '');
+        if (!/^\d{4}-\d{2}$/.test(mese)) { res.status(400).json({ error: 'Mese non valido' }); return; }
+        const files = (Array.isArray(body.files) ? body.files : []).map(String).filter((p) => p.startsWith('bustePaga/' + mese + '/') && p.toLowerCase().endsWith('.pdf')).slice(0, 60);
+
+        const anagSnap = await db.collection('driverAnagrafica').get();
+        const anagrafica = []; anagSnap.forEach((d) => anagrafica.push({ id: d.id, ...d.data() }));
+        const bucket = admin.storage().bucket();
+        const Anthropic = require('@anthropic-ai/sdk');
+        const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
+        const modello = 'claude-opus-5-5';
+        const esiti = [];
+
+        for (const path of files) {
+            const esito = { file: path, stato: 'errore', messaggio: '' };
+            esiti.push(esito);
+            try {
+                const file = bucket.file(path);
+                const [exists] = await file.exists();
+                if (!exists) { esito.messaggio = 'File non trovato'; continue; }
+                const [meta] = await file.getMetadata();
+                if (Number(meta.size || 0) > BUSTA_MAX_BYTES) { esito.messaggio = 'PDF troppo grande (max 10 MB)'; continue; }
+                const [buf] = await file.download();
+
+                const msg = await client.messages.parse({
+                    model: modello,
+                    max_tokens: 4096,
+                    system: BustePaga.SYSTEM_PROMPT,
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } },
+                            { type: 'text', text: 'Trascrivi i dati del cedolino nel formato richiesto. Il mese atteso dall\'ufficio è ' + mese + ': se il cedolino riporta un periodo diverso, indicalo comunque fedelmente.' },
+                        ],
+                    }],
+                    output_config: { effort: 'medium', format: { type: 'json_schema', schema: BustePaga.BUSTA_SCHEMA } },
+                });
+                if (msg.stop_reason === 'refusal') { esito.messaggio = 'Lettura rifiutata dal modello'; continue; }
+                const e = msg.parsed_output;
+                if (!e) { esito.messaggio = 'Risposta non interpretabile'; continue; }
+                if (!e.is_busta_paga) { esito.messaggio = 'Il PDF non sembra un cedolino' + (e.note ? ': ' + e.note : ''); continue; }
+                if (!e.leggibile || (!e.cognome && !e.codice_fiscale)) { esito.messaggio = 'Cedolino non leggibile' + (e.note ? ': ' + e.note : ''); continue; }
+
+                const cat = BustePaga.categoriaDipendente(e, anagrafica);
+                const id = BustePaga.idBusta(mese, e);
+                const avvisi = [];
+                if (e.periodo && e.periodo !== mese) avvisi.push('Il cedolino è di ' + e.periodo + ', caricato su ' + mese);
+                if (!(e.netto_a_pagare > 0)) avvisi.push('Netto a pagare non trovato');
+                if (cat.categoria === 'ufficio' && !/RIZZUTO|FARO/.test(BustePaga.norm(e.cognome))) avvisi.push('Non è in anagrafica driver: contato come ufficio (HR)');
+                if (e.note) avvisi.push(e.note);
+                const doc = {
+                    mese, periodoCedolino: e.periodo || null,
+                    cognome: e.cognome || '', nome: e.nome || '', codiceFiscale: (e.codice_fiscale || '').toUpperCase(),
+                    netto: Number(e.netto_a_pagare) || 0, lordo: Number(e.totale_competenze) || 0, costoAzienda: Number(e.costo_azienda) || 0,
+                    categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail,
+                    file: path, stato: 'ok', avvisi, modello,
+                    elaboratoIl: new Date().toISOString(), elaboratoDa: email,
+                };
+                await db.collection('bustePaga').doc(id).set(doc);
+                esito.stato = 'ok'; esito.id = id; esito.dipendente = (e.cognome + ' ' + e.nome).trim(); esito.netto = doc.netto; esito.categoria = cat.categoria; esito.avvisi = avvisi;
+            } catch (err) {
+                esito.messaggio = 'Errore lettura: ' + (err.message || err);
+                console.error('[elaboraBustePaga] ' + path + ': ' + (err.message || err));
+            }
+        }
+
+        const totali = await ricalcolaCostiMese(mese);
+        console.log('[elaboraBustePaga]', email, mese, files.length + ' file, ok=' + esiti.filter((x) => x.stato === 'ok').length, JSON.stringify(totali));
+        res.json({ ok: true, mese, esiti, totali });
+    }
+);
+
 // 03:30 — allineamento notturno (nuove fatture ricevute arrivano dallo SDI a qualsiasi ora)
 exports.ficSyncNotturno = onSchedule(
     { schedule: '30 3 * * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [FIC_TOKEN, FIC_COMPANY_ID], timeoutSeconds: 300 },

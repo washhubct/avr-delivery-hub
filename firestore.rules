@@ -331,6 +331,12 @@ service cloud.firestore {
     match /fornitori/{doc} {
       allow read, write: if isSuperAdmin() || isAmministratore();
     }
+    // Buste paga lette da Claude (CF elaboraBustePaga scrive); la direzione
+    // le vede e può cancellare un cedolino caricato per errore.
+    match /bustePaga/{doc} {
+      allow read, delete: if isSuperAdmin() || isAmministratore();
+      allow create, update: if false;
+    }
 
     // ── ARCHIVIO DRIVER CESSATI — scritto solo dalla CF pulisciAnagrafica
     // (admin SDK). L'ufficio lo legge per l'attribuzione storica delle

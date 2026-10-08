@@ -711,6 +711,24 @@
                 </div>
             </div>
 
+            <!-- BUSTE PAGA -->
+            <div class="card" style="margin-top:20px">
+                <h3 class="card-title">Costi — buste paga</h3>
+                <p class="card-desc">Carica i cedolini PDF del mese (anche tutti insieme): vengono letti automaticamente e i <strong>netti a pagare</strong> compilano stipendi driver, Rizzuto, Faro e ufficio. F24 (contributi e ritenute) resta a mano: netti + F24 = costo pieno del personale.</p>
+                <div class="toolbar" style="align-items:center;gap:12px">
+                    <label class="btn btn-primary" for="rfBusteFile">📎 Carica buste paga (PDF)</label>
+                    <input type="file" id="rfBusteFile" accept="application/pdf,.pdf" multiple style="display:none" onchange="rfCaricaBuste(this.files)">
+                    <span id="rfBusteStato" style="font-size:12px;color:var(--text-muted)"></span>
+                    <span id="rfBusteRiepilogo" style="font-size:12px;color:var(--text-muted);margin-left:auto"></span>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Dipendente</th><th>Categoria</th><th style="text-align:right">Netto</th><th style="text-align:right">Lordo</th><th style="text-align:right">Costo azienda</th><th></th></tr></thead>
+                        <tbody id="rfTblBuste"></tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- RIEPILOGO -->
             <div class="card" style="margin-top:20px">
                 <h3 class="card-title">Riepilogo P&L</h3>

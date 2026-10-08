@@ -19,10 +19,11 @@ var COSTI_VOCI = [
     { key: 'altro', label: 'Altro', default: 0, daFattura: true }
 ];
 var VOCI_FATTURA = COSTI_VOCI.filter(function(v) { return v.daFattura; });
+var VOCI_BUSTE = ['compensiDriver', 'nettoRizzuto', 'nettoFaro', 'hr']; // compilate dalla CF elaboraBustePaga
 var AZIENDE_FATTURA = { avr: 'AVR / Last Mile', washhub: 'Wash Hub', da_classificare: 'Da classificare' };
 var AREA_LABELS_RF = { CT: 'Catania', ME: 'Messina', EN: 'Enna', SR: 'Siracusa', PA: 'Palermo' };
 
-var rfState = { fm: null, costi: null };
+var rfState = { fm: null, costi: null, mostraWashHub: false };
 
 async function loadFattureMese(mese) {
     try {
@@ -86,9 +87,11 @@ async function renderReportFinanziario() {
     var compensiDriver = parseFloat(costiData.compensiDriver) || 0;
     var valori = {};
     var totCosti = 0, costiHtml = '';
+    var haBuste = !!(costiData.bustePaga && costiData.bustePaga.n > 0);
     COSTI_VOCI.forEach(function(v) {
         var val, origine = '';
         if (v.daFattura && haRicevute && perVoce[v.key] !== undefined) { val = perVoce[v.key]; origine = ' <span style="font-size:10px;color:var(--accent)">(da fatture)</span>'; }
+        else if (haBuste && VOCI_BUSTE.indexOf(v.key) >= 0) { val = parseFloat(costiData[v.key]) || 0; origine = ' <span style="font-size:10px;color:var(--accent)">(da buste paga)</span>'; }
         else if (v.key === 'compensiDriver') val = compensiDriver;
         else val = costiData[v.key] !== undefined ? parseFloat(costiData[v.key]) || 0 : (v.default || 0);
         valori[v.key] = val;
@@ -109,7 +112,11 @@ async function renderReportFinanziario() {
             return '<select class="input" style="padding:4px 6px;font-size:12px;margin:0" onchange="rfClassifica(\'' + r.ficId + '\',\'' + (r.fornitoreId || '') + '\',\'voce\',this.value)">' +
                 VOCI_FATTURA.map(function(v) { return '<option value="' + v.key + '"' + (r.voce === v.key ? ' selected' : '') + '>' + v.label + '</option>'; }).join('') + '</select>';
         };
-        ricEl.innerHTML = ricevute.map(function(r) {
+        // Le fatture dei fornitori Wash Hub non riguardano AVR: nascoste di default
+        var nWashHub = ricevute.filter(function(r) { return r.azienda === 'washhub'; }).length;
+        var visibili = rfState.mostraWashHub ? ricevute : ricevute.filter(function(r) { return r.azienda !== 'washhub'; });
+        var rigaWH = nWashHub ? '<tr><td colspan="6" style="font-size:12px;color:var(--text-muted);text-align:center">' + nWashHub + ' fatture di fornitori Wash Hub ' + (rfState.mostraWashHub ? 'mostrate' : 'nascoste') + ' — <a href="#" onclick="rfState.mostraWashHub=!rfState.mostraWashHub;renderReportFinanziario();return false">' + (rfState.mostraWashHub ? 'nascondi' : 'mostra') + '</a></td></tr>' : '';
+        ricEl.innerHTML = rigaWH + visibili.map(function(r) {
             var stile = (r.escludi || r.azienda === 'washhub') ? 'opacity:.5' : '';
             var fonte = r.competenzaFonte === 'manuale' ? ' ✎' : '';
             return '<tr style="' + stile + '">' +
@@ -120,8 +127,11 @@ async function renderReportFinanziario() {
                 '<td>' + selV(r) + '</td>' +
                 '<td><button class="btn btn-sm" title="Cambia mese di competenza / escludi" onclick="rfEditRicevuta(\'' + r.ficId + '\')">✏️</button></td>' +
             '</tr>';
-        }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">' + (fm && fm.ricevuteDisponibili === false ? 'Fatture ricevute non disponibili (permesso token FIC)' : 'Nessuna fattura ricevuta con competenza ' + meseLabel(mese)) + '</td></tr>';
+        }).join('');
+        if (!ricEl.innerHTML) ricEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">' + (fm && fm.ricevuteDisponibili === false ? 'Fatture ricevute non disponibili (permesso token FIC)' : 'Nessuna fattura ricevuta con competenza ' + meseLabel(mese)) + '</td></tr>';
     }
+
+    await renderBustePaga(mese, costiData);
 
     // === CONSEGNE E MARGINE PER CITTÀ (rapporti app driver) ===
     var perCitta = {};
@@ -290,12 +300,16 @@ function openEditCosti() {
     var fm = rfState.fm;
     var perVoce = (fm && fm.totali && fm.totali.costiPerVoce) || {};
     var haRicevute = !!(fm && fm.ricevuteDisponibili !== false && (fm.ricevute || []).length);
-    var html = '<p style="margin-bottom:16px;color:var(--text-muted);font-size:13px">Costi manuali per <strong>' + meseLabel(mese) + '</strong>. Le voci coperte dalle fatture ricevute sono già compilate da Fatture in Cloud.</p>';
+    var costi = rfState.costi || {};
+    var haBuste = !!(costi.bustePaga && costi.bustePaga.n > 0);
+    var html = '<p style="margin-bottom:16px;color:var(--text-muted);font-size:13px">Costi manuali per <strong>' + meseLabel(mese) + '</strong>. Le voci coperte da fatture ricevute o buste paga sono già compilate e non si modificano qui.</p>';
     COSTI_VOCI.forEach(function(v) {
         var daFic = v.daFattura && haRicevute && perVoce[v.key] !== undefined;
+        var daBuste = haBuste && VOCI_BUSTE.indexOf(v.key) >= 0;
+        var nota = daFic ? ' <span style="color:var(--accent)">(da fatture: ' + formatCurrency(perVoce[v.key]) + ')</span>' : daBuste ? ' <span style="color:var(--accent)">(da buste paga: ' + formatCurrency(parseFloat(costi[v.key]) || 0) + ')</span>' : '';
         html += '<div class="form-group" style="margin-bottom:10px">' +
-            '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">' + v.label + (daFic ? ' <span style="color:var(--accent)">(da fatture: ' + formatCurrency(perVoce[v.key]) + ')</span>' : '') + '</label>' +
-            '<input type="number" id="costo_' + v.key + '" class="input" value="' + (v.default || 0) + '" step="0.01" style="margin-bottom:0"' + (daFic ? ' disabled' : '') + '>' +
+            '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">' + v.label + nota + '</label>' +
+            '<input type="number" id="costo_' + v.key + '" class="input" value="' + (v.default || 0) + '" step="0.01" style="margin-bottom:0"' + ((daFic || daBuste) ? ' disabled' : '') + '>' +
             '</div>';
     });
     html += '<button class="btn btn-primary" onclick="doSaveCosti()" style="width:100%;margin-top:12px">Salva costi</button>';
@@ -378,4 +392,81 @@ async function renderStoricoFinanziario() {
         console.warn('storico:', e);
         el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Errore caricamento storico</td></tr>';
     }
+}
+
+// ── Buste paga: upload PDF in blocco → CF elaboraBustePaga (Claude legge il cedolino) ──
+var CATEGORIA_BUSTA = { driver: 'Driver', rizzuto: 'Rizzuto', faro: 'Faro', ufficio: 'Ufficio / HR' };
+
+async function renderBustePaga(mese, costiData) {
+    var el = document.getElementById('rfTblBuste');
+    if (!el) return;
+    var riep = document.getElementById('rfBusteRiepilogo');
+    try {
+        var snap = await db.collection('bustePaga').where('mese', '==', mese).get();
+        var buste = [];
+        snap.forEach(function(d) { buste.push(Object.assign({ id: d.id }, d.data())); });
+        buste.sort(function(a, b) { return (a.categoria + a.cognome).localeCompare(b.categoria + b.cognome); });
+        var bp = costiData && costiData.bustePaga;
+        if (riep) riep.textContent = bp && bp.n ? bp.n + ' cedolini · netti driver ' + formatCurrency(costiData.compensiDriver || 0) + ' · lordo totale ' + formatCurrency(bp.lordoTotale || 0) + (bp.costoAziendaTotale ? ' · costo azienda stampato ' + formatCurrency(bp.costoAziendaTotale) : '') : '';
+        el.innerHTML = buste.map(function(b) {
+            var avvisi = (b.avvisi || []).length ? '<div style="font-size:11px;color:var(--warning)">⚠️ ' + escapeHtml(b.avvisi.join(' · ')) + '</div>' : '';
+            return '<tr>' +
+                '<td><strong>' + escapeHtml((b.cognome + ' ' + b.nome).trim()) + '</strong><div style="font-size:11px;color:var(--text-light)">' + escapeHtml(b.codiceFiscale || '') + '</div>' + avvisi + '</td>' +
+                '<td><span class="badge badge-info">' + (CATEGORIA_BUSTA[b.categoria] || b.categoria) + '</span></td>' +
+                '<td style="text-align:right"><strong>' + formatCurrency(b.netto) + '</strong></td>' +
+                '<td style="text-align:right;color:var(--text-muted)">' + formatCurrency(b.lordo) + '</td>' +
+                '<td style="text-align:right;color:var(--text-muted)">' + (b.costoAzienda ? formatCurrency(b.costoAzienda) : '—') + '</td>' +
+                '<td><a href="#" onclick="rfApriBusta(\'' + escapeHtml(b.file) + '\');return false" title="Apri PDF">📄</a> ' +
+                    '<button class="btn btn-sm btn-danger" title="Elimina cedolino" onclick="rfEliminaBusta(\'' + escapeHtml(b.id) + '\')">🗑️</button></td>' +
+            '</tr>';
+        }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Nessuna busta paga caricata per ' + meseLabel(mese) + '</td></tr>';
+    } catch (e) {
+        console.warn('buste paga:', e);
+        el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Errore caricamento buste paga</td></tr>';
+    }
+}
+
+async function rfCaricaBuste(files) {
+    var mese = state.meseCorrente;
+    var lista = Array.prototype.slice.call(files || []).filter(function(f) { return /\.pdf$/i.test(f.name); });
+    if (!lista.length) { toast('Seleziona uno o più PDF', 'error'); return; }
+    var stato = document.getElementById('rfBusteStato');
+    var input = document.getElementById('rfBusteFile');
+    if (input) input.disabled = true;
+    try {
+        var paths = [];
+        for (var i = 0; i < lista.length; i++) {
+            if (stato) stato.textContent = 'Carico ' + (i + 1) + '/' + lista.length + ': ' + lista[i].name;
+            var safe = lista[i].name.replace(/[^A-Za-z0-9._-]+/g, '_');
+            var path = 'bustePaga/' + mese + '/' + Date.now() + '_' + safe;
+            await firebase.storage().ref(path).put(lista[i], { contentType: 'application/pdf' });
+            paths.push(path);
+        }
+        if (stato) stato.textContent = 'Lettura di ' + paths.length + ' cedolini in corso (circa ' + Math.ceil(paths.length * 12 / 60) + ' min)…';
+        var out = await ficCall('elaboraBustePaga', { mese: mese, files: paths });
+        var ok = out.esiti.filter(function(x) { return x.stato === 'ok'; }).length;
+        var ko = out.esiti.filter(function(x) { return x.stato !== 'ok'; });
+        if (stato) stato.innerHTML = ok + ' cedolini letti' + (ko.length ? ', <span style="color:var(--danger)">' + ko.length + ' non letti</span>: ' + ko.map(function(x) { return escapeHtml(x.file.split('/').pop() + ' (' + x.messaggio + ')'); }).join('; ') : '');
+        toast(ok + ' buste paga elaborate', ko.length ? 'error' : 'success');
+        await renderReportFinanziario();
+    } catch (e) {
+        if (stato) stato.textContent = 'Errore: ' + e.message;
+        toast('Errore buste paga: ' + e.message, 'error');
+    } finally {
+        if (input) { input.disabled = false; input.value = ''; }
+    }
+}
+
+async function rfApriBusta(path) {
+    try { window.open(await firebase.storage().ref(path).getDownloadURL(), '_blank'); }
+    catch (e) { toast('PDF non disponibile: ' + e.message, 'error'); }
+}
+
+async function rfEliminaBusta(id) {
+    if (!confirm('Eliminare questo cedolino dal mese? Il PDF resta in archivio, i costi vengono ricalcolati.')) return;
+    try {
+        await db.collection('bustePaga').doc(id).delete();
+        await ficCall('elaboraBustePaga', { mese: state.meseCorrente, files: [] });
+        await renderReportFinanziario();
+    } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
