@@ -1985,7 +1985,7 @@ async function ricalcolaCostiMese(mese) {
     const buste = []; snap.forEach((d) => buste.push(d.data()));
     const t = BustePaga.ricalcolaCosti(buste);
     const upd = { mese, compensiDriver: t.compensiDriver, nettoRizzuto: t.nettoRizzuto, nettoFaro: t.nettoFaro, hr: t.hr,
-        bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, aggiornatoIl: new Date().toISOString() } };
+        bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, perCitta: t.perCitta, aggiornatoIl: new Date().toISOString() } };
     if (t.nBuste === 0) { upd.compensiDriver = admin.firestore.FieldValue.delete(); upd.nettoRizzuto = admin.firestore.FieldValue.delete(); upd.nettoFaro = admin.firestore.FieldValue.delete(); upd.hr = admin.firestore.FieldValue.delete(); }
     await db.collection('costiMensili').doc(mese).set(upd, { merge: true });
     return t;
@@ -2061,7 +2061,7 @@ exports.elaboraBustePaga = onRequest(
                     mese, periodoCedolino: e.periodo || null,
                     cognome: e.cognome || '', nome: e.nome || '', codiceFiscale: (e.codice_fiscale || '').toUpperCase(),
                     netto: Number(e.netto_a_pagare) || 0, lordo: Number(e.totale_competenze) || 0, costoAzienda: Number(e.costo_azienda) || 0,
-                    categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail,
+                    categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail, citta: cat.citta,
                     file: path, stato: 'ok', avvisi, modello,
                     elaboratoIl: new Date().toISOString(), elaboratoDa: email,
                 };

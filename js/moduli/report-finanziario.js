@@ -150,13 +150,17 @@ async function renderReportFinanziario() {
             driverPerCitta[dr.citta || '?'] = (driverPerCitta[dr.citta || '?'] || 0) + 1;
             totDriverAttivi++;
         });
-        var costiUfficio = totCosti - compensiDriver;
+        var costiUfficio = totCosti - valori.compensiDriver;
+        // Stipendi driver per città: dalle buste paga (netti reali per città del
+        // driver in anagrafica) quando ci sono, altrimenti quota fissa sui driver attivi
+        var nettiCitta = (costiData.bustePaga && costiData.bustePaga.perCitta) || null;
+        if (nettiCitta) Object.keys(nettiCitta).forEach(function(a) { if (!perCitta[a]) perCitta[a] = { consegne: 0 }; });
         var cittaHtml = '', tcCons = 0, tcFatt = 0, tcCosti = 0, tcMarg = 0;
         Object.keys(perCitta).sort(function(a, b) { return perCitta[b].consegne - perCitta[a].consegne; }).forEach(function(area) {
             var x = perCitta[area];
             var quotaCons = totConsegne > 0 ? x.consegne / totConsegne : 0;
             var fatt = tot.ricaviImponibile * quotaCons; // pro-quota consegne app
-            var quotaDriver = totDriverAttivi > 0 ? compensiDriver * ((driverPerCitta[area] || 0) / totDriverAttivi) : 0;
+            var quotaDriver = nettiCitta ? (nettiCitta[area] || 0) : (totDriverAttivi > 0 ? valori.compensiDriver * ((driverPerCitta[area] || 0) / totDriverAttivi) : 0);
             var quota = quotaDriver + costiUfficio * quotaCons;
             var marg = fatt - quota;
             var margPct = fatt > 0 ? Math.round(marg / fatt * 100) : 0;
@@ -166,7 +170,7 @@ async function renderReportFinanziario() {
                 '<td><strong>' + area + '</strong> — ' + (AREA_LABELS_RF[area] || area) + '<div style="font-size:10px;color:var(--text-light)">' + (driverPerCitta[area] || 0) + ' driver</div></td>' +
                 '<td style="text-align:right">' + x.consegne + '</td>' +
                 '<td style="text-align:right">' + formatCurrency(fatt) + '</td>' +
-                '<td style="text-align:right;color:var(--text-muted)" title="Driver (quota fissa): ' + formatCurrency(quotaDriver) + ' · Ufficio (pro-quota): ' + formatCurrency(costiUfficio * quotaCons) + '">' + formatCurrency(quota) + '</td>' +
+                '<td style="text-align:right;color:var(--text-muted)" title="Driver (' + (nettiCitta ? 'netti buste paga' : 'quota fissa') + '): ' + formatCurrency(quotaDriver) + ' · Ufficio (pro-quota): ' + formatCurrency(costiUfficio * quotaCons) + '">' + formatCurrency(quota) + '</td>' +
                 '<td style="text-align:right;font-weight:700;color:' + col + '">' + formatCurrency(marg) + '</td>' +
                 '<td style="text-align:right;font-weight:700;color:' + col + '">' + margPct + '%</td>' +
             '</tr>';
@@ -412,7 +416,7 @@ async function renderBustePaga(mese, costiData) {
             var avvisi = (b.avvisi || []).length ? '<div style="font-size:11px;color:var(--warning)">⚠️ ' + escapeHtml(b.avvisi.join(' · ')) + '</div>' : '';
             return '<tr>' +
                 '<td><strong>' + escapeHtml((b.cognome + ' ' + b.nome).trim()) + '</strong><div style="font-size:11px;color:var(--text-light)">' + escapeHtml(b.codiceFiscale || '') + '</div>' + avvisi + '</td>' +
-                '<td><span class="badge badge-info">' + (CATEGORIA_BUSTA[b.categoria] || b.categoria) + '</span></td>' +
+                '<td><span class="badge badge-info">' + (CATEGORIA_BUSTA[b.categoria] || b.categoria) + (b.citta ? ' · ' + escapeHtml(b.citta) : '') + '</span></td>' +
                 '<td style="text-align:right"><strong>' + formatCurrency(b.netto) + '</strong></td>' +
                 '<td style="text-align:right;color:var(--text-muted)">' + formatCurrency(b.lordo) + '</td>' +
                 '<td style="text-align:right;color:var(--text-muted)">' + (b.costoAzienda ? formatCurrency(b.costoAzienda) : '—') + '</td>' +

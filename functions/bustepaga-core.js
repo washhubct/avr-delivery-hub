@@ -47,10 +47,10 @@ function categoriaDipendente(estratto, anagrafica) {
         const cand = anagrafica.filter((d) => norm(d.cognome) === cognome);
         driver = cand.length === 1 ? cand[0] : (cand.find((d) => norm(d.nome) === nome || (nome && norm(d.nome).startsWith(nome.split(' ')[0]))) || null);
     }
-    if (driver) return { categoria: 'driver', driverId: driver.id || null, driverEmail: (driver.email || '').toLowerCase() || null };
-    if (cognome === 'RIZZUTO') return { categoria: 'rizzuto', driverId: null, driverEmail: null };
-    if (cognome === 'FARO') return { categoria: 'faro', driverId: null, driverEmail: null };
-    return { categoria: 'ufficio', driverId: null, driverEmail: null };
+    if (driver) return { categoria: 'driver', driverId: driver.id || null, driverEmail: (driver.email || '').toLowerCase() || null, citta: String(driver.citta || '').toUpperCase() || null };
+    if (cognome === 'RIZZUTO') return { categoria: 'rizzuto', driverId: null, driverEmail: null, citta: null };
+    if (cognome === 'FARO') return { categoria: 'faro', driverId: null, driverEmail: null, citta: null };
+    return { categoria: 'ufficio', driverId: null, driverEmail: null, citta: null };
 }
 
 // Id documento stabile: mese + cognome/nome (o CF) → ricaricare lo stesso cedolino lo sovrascrive
@@ -64,19 +64,23 @@ function idBusta(mese, estratto) {
 // netto a pagare per categoria. Il costo pieno = netti + F24 (contributi e
 // ritenute, inserito a mano) → per questo si usa il netto, non il lordo.
 function ricalcolaCosti(buste) {
-    const t = { compensiDriver: 0, nettoRizzuto: 0, nettoFaro: 0, hr: 0, nBuste: 0, nDriver: 0, nUfficio: 0, lordoTotale: 0, costoAziendaTotale: 0 };
+    const t = { compensiDriver: 0, nettoRizzuto: 0, nettoFaro: 0, hr: 0, nBuste: 0, nDriver: 0, nUfficio: 0, lordoTotale: 0, costoAziendaTotale: 0, perCitta: {} };
     buste.forEach((b) => {
         if (b.stato !== 'ok') return;
         const netto = Number(b.netto) || 0;
         t.nBuste++;
         t.lordoTotale += Number(b.lordo) || 0;
         t.costoAziendaTotale += Number(b.costoAzienda) || 0;
-        if (b.categoria === 'driver') { t.compensiDriver += netto; t.nDriver++; }
+        if (b.categoria === 'driver') {
+            t.compensiDriver += netto; t.nDriver++;
+            const c = b.citta || '?'; // netti driver per città: margine per città con stipendi reali
+            t.perCitta[c] = Math.round(((t.perCitta[c] || 0) + netto) * 100) / 100;
+        }
         else if (b.categoria === 'rizzuto') t.nettoRizzuto += netto;
         else if (b.categoria === 'faro') t.nettoFaro += netto;
         else { t.hr += netto; t.nUfficio++; }
     });
-    Object.keys(t).forEach((k) => { t[k] = Math.round(t[k] * 100) / 100; });
+    Object.keys(t).forEach((k) => { if (typeof t[k] === 'number') t[k] = Math.round(t[k] * 100) / 100; });
     return t;
 }
 
