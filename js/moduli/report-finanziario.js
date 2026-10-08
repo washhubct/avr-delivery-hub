@@ -359,13 +359,12 @@ async function renderStoricoFinanziario() {
             var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
             mesi.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
         }
-        var r = await Promise.all([
-            db.collection('fattureMese').where('mese', '>=', mesi[mesi.length - 1]).get(),
-            db.collection('costiMensili').where('mese', '>=', mesi[mesi.length - 1]).get()
-        ]);
         var fmMap = {}, costiMap = {};
-        r[0].forEach(function(doc) { fmMap[doc.id] = doc.data(); });
-        r[1].forEach(function(doc) { costiMap[doc.id] = doc.data(); });
+        (await db.collection('fattureMese').where('mese', '>=', mesi[mesi.length - 1]).get()).forEach(function(doc) { fmMap[doc.id] = doc.data(); });
+        // costiMensili è riservata al superadmin: per gli altri lo storico mostra solo i ricavi
+        try {
+            (await db.collection('costiMensili').where('mese', '>=', mesi[mesi.length - 1]).get()).forEach(function(doc) { costiMap[doc.id] = doc.data(); });
+        } catch (e) { console.warn('storico costi non leggibili:', e.message); }
 
         var html = '';
         mesi.forEach(function(m) {
