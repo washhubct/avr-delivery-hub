@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Filiali with Sheet link management
+// DELIVERY HUB v2 — Filiali (anagrafica punti vendita Arena)
 
 function renderFiliali() {
     const tbody = document.getElementById('tblFilialiBody');
@@ -12,7 +12,6 @@ function renderFiliali() {
         <td>${f.nome || '—'}</td>
         <td><span class="badge badge-info">${f.area || '—'}</span></td>
         <td>${f.gruppo || '—'}</td>
-        <td>${f.sheetLink ? '<span class="badge badge-ok">Collegato</span>' : '<span class="badge badge-warn">Mancante</span>'}</td>
         <td>
             <button class="btn btn-sm" onclick="editFiliale('${f.id || f.codice}')">✏️</button>
         </td>
@@ -34,7 +33,6 @@ function openAddFiliale() {
                 <option value="Fratelli Arena">Fratelli Arena</option><option value="Palermo Retail">Palermo Retail</option>
             </select>
         </div>
-        <div class="form-group"><label>Link Google Sheet</label><input type="url" id="fSheetLink" class="input" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
         <button class="btn btn-primary" onclick="saveFiliale()" style="width:100%;margin-top:8px">Salva</button>
     `);
 }
@@ -47,7 +45,6 @@ async function saveFiliale(editId) {
         area: document.getElementById('fArea').value,
         provincia: document.getElementById('fArea').value,
         gruppo: document.getElementById('fGruppo').value,
-        sheetLink: document.getElementById('fSheetLink')?.value.trim() || null,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     if (!codice) { toast('Inserisci il codice', 'error'); return; }
@@ -82,7 +79,6 @@ async function editFiliale(id) {
                 ${['Fratelli Arena','Palermo Retail'].map(g => `<option ${f.gruppo===g?'selected':''}>${g}</option>`).join('')}
             </select>
         </div>
-        <div class="form-group"><label>Link Google Sheet</label><input type="url" id="fSheetLink" class="input" value="${f.sheetLink || ''}" placeholder="https://docs.google.com/..."></div>
         <button class="btn btn-primary" onclick="saveFiliale('${id}')" style="width:100%;margin-top:8px">Aggiorna</button>
     `);
 }

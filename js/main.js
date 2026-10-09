@@ -41,8 +41,9 @@ async function loadAllData() {
             await loadFiliali();
             return;
         }
+        // Le consegne dei fogli Decò (archivio fino ad agosto 2026) si caricano
+        // solo quando si apre Archivio consegne / Compensi storico: vedi ensureConsegne().
         await Promise.all([
-            loadConsegnePerMese(),
             loadFiliali(),
             loadDriverAnagrafica(),
             loadDanni(),
@@ -85,6 +86,14 @@ function filtraPerProvince() {
 // Nota: la leaderboard è ora precalcolata dalla Cloud Function scheduled
 // `precalcolaLeaderboard` (region europe-west1, every 1 hours, TZ Europe/Rome).
 // Il modulo dashboard/classifica.js legge `leaderboardFull/{mese}` direttamente.
+
+// Carica l'archivio consegne del mese selezionato solo se serve (una volta per mese)
+async function ensureConsegne() {
+    if (state.consegneMeseCaricato === state.meseCorrente) return;
+    await loadConsegnePerMese();
+    filtraPerProvince();
+    state.consegneMeseCaricato = state.meseCorrente;
+}
 
 async function loadConsegnePerMese() {
     var mese = state.meseCorrente;
@@ -255,7 +264,6 @@ async function onMeseChange() {
     state.meseCorrente = document.getElementById('meseSelector').value;
     if (state.userRole !== 'driver') {
         await Promise.all([
-            loadConsegnePerMese(),
             loadReportDriver(),
             loadRitorniMese()
         ]);

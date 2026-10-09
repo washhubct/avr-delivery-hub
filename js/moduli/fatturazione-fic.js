@@ -26,7 +26,7 @@ async function ficLoadConfig() {
 async function renderFatturazioneFic() {
     var card = document.getElementById('cardFic');
     if (!card) return;
-    if (!ficPuoFatturare() || !isSchemaFlat(state.meseCorrente || '')) { card.style.display = 'none'; return; }
+    if (!ficPuoFatturare() || (state.meseCorrente || '') < MESE_SCHEMA_FLAT) { card.style.display = 'none'; return; }
     card.style.display = 'block';
     await ficLoadConfig();
     ficAggiornaStato(false);

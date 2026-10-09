@@ -1,7 +1,7 @@
 // DELIVERY HUB v2 — Navigation
 const MODULE_TITLES = {
     dashboard: 'Dashboard',
-    consegne: 'Consegne',
+    consegne: 'Archivio consegne (fogli Decò, fino ad agosto 2026)',
     'anagrafica-driver': 'Anagrafica Driver',
     compensi: 'Compensi Driver (storico)',
     produttivita: 'Produttività Driver',
@@ -13,10 +13,8 @@ const MODULE_TITLES = {
     utenti: 'Utenti',
     'punti-timbratura': 'Punti Timbratura',
     timbrature: 'Timbrature',
-    riconciliazione: 'Riconciliazione',
     fatturazione: 'Fatturazione',
     'report-finanziario': 'Report Finanziario',
-    import: 'Importa dati',
     'log-accessi': 'Log Accessi',
     'driver-consegne': 'Le mie consegne',
     'driver-compensi': 'Storico mensile',
@@ -50,9 +48,9 @@ function navigateTo(module) {
 function refreshCurrentModule() {
     switch (state.currentModule) {
         case 'dashboard': renderDashboard(); break;
-        case 'consegne': renderConsegne(); break;
+        case 'consegne': ensureConsegne().then(renderConsegne); break;
         case 'anagrafica-driver': renderAnagraficaDriver(); break;
-        case 'compensi': renderCompensi(); break;
+        case 'compensi': ensureConsegne().then(renderCompensi); break;
         case 'produttivita': renderProduttivita(); break;
         case 'danni': renderDanni(); break;
         case 'ritorni': renderRitorni(); break;

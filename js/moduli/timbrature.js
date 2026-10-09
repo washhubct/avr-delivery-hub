@@ -168,10 +168,10 @@ function setText(id, val) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// RICONCILIAZIONE — timbrature vs consegne dai file Decò.
-// Un driver che risulta presente (almeno una 'in') ma con ZERO
-// consegne a suo nome quel giorno è un'anomalia da verificare.
-// Usa state.consegne (mese selezionato in dash): se il giorno
+// RICONCILIAZIONE — timbrature vs rapporti dell'app driver.
+// Un driver che risulta presente (almeno una 'in') ma senza alcun
+// rapporto di consegne quel giorno è un'anomalia da verificare.
+// Usa state.reportDriver (mese selezionato in dash): se il giorno
 // scelto è fuori dal mese caricato, avvisa invece di sbagliare.
 // ══════════════════════════════════════════════════════════════
 function renderAlertRiconciliazione(timbrature, giorno) {
@@ -180,21 +180,15 @@ function renderAlertRiconciliazione(timbrature, giorno) {
 
     if (giorno.substring(0, 7) !== state.meseCorrente) {
         box.style.display = 'block';
-        box.innerHTML = '<div style="padding:10px 14px;background:var(--info-bg);border-radius:8px;font-size:12px;color:var(--text-muted)">ℹ️ Riconciliazione non disponibile: seleziona il mese ' + giorno.substring(0, 7) + ' dal selettore in alto per incrociare con le consegne.</div>';
+        box.innerHTML = '<div style="padding:10px 14px;background:var(--info-bg);border-radius:8px;font-size:12px;color:var(--text-muted)">ℹ️ Riconciliazione non disponibile: seleziona il mese ' + giorno.substring(0, 7) + ' dal selettore in alto per incrociare con i rapporti dei driver.</div>';
         return;
     }
 
-    // Consegne per driver canonico nel giorno (esclude ritorni)
+    // Consegne per email driver nel giorno (dai rapporti app)
     var consegnePerDriver = {};
-    (state.consegne || []).forEach(function(c) {
-        if (c.tipo === 'ritorno') return;
-        var d = c.data instanceof Date ? c.data : new Date(c.data);
-        if (isNaN(d)) return;
-        var day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-        if (day !== giorno) return;
-        var drv = normalizeDriverName(c.driver || c.rider || '');
-        if (!drv) return;
-        consegnePerDriver[drv] = (consegnePerDriver[drv] || 0) + 1;
+    rapportiMese(state.meseCorrente).forEach(function(r) {
+        if (r.ymd !== giorno || !r.driverEmail) return;
+        consegnePerDriver[r.driverEmail] = (consegnePerDriver[r.driverEmail] || 0) + r.n;
     });
 
     // Presenze per driver (almeno una entrata)
@@ -208,10 +202,7 @@ function renderAlertRiconciliazione(timbrature, giorno) {
     var alerts = [];
     Object.keys(presenze).forEach(function(email) {
         var p = presenze[email];
-        // Cognome canonico dal profilo anagrafica (match per email)
-        var ana = (state.driverList || []).find(function(d) { return (d.email || '').toLowerCase() === email.toLowerCase(); });
-        var cognome = ana ? (ana.cognome || '').toUpperCase().trim() : normalizeDriverName(p.nome || '');
-        var nConsegne = consegnePerDriver[cognome] || 0;
+        var nConsegne = consegnePerDriver[String(email).toLowerCase()] || 0;
         if (nConsegne === 0) {
             alerts.push({ email: email, nome: p.nome, citta: p.citta, fonte: p.fonte });
         }
@@ -232,7 +223,7 @@ function renderAlertRiconciliazione(timbrature, giorno) {
                     '<span><strong>' + escapeHtml(a.nome) + '</strong> <span style="color:var(--text-muted)">(' + escapeHtml(a.email) + ')</span></span>' +
                     '<span><span class="badge badge-info">' + escapeHtml(a.citta || '—') + '</span> ' +
                     (a.fonte === 'terminale' ? '🏢' : '📱') +
-                    ' <span style="color:var(--text-muted)">presente, 0 consegne nei file Decò</span></span>' +
+                    ' <span style="color:var(--text-muted)">presente, nessun rapporto nell\'app</span></span>' +
                 '</div>';
             }).join('') +
         '</div>';

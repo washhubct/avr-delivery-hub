@@ -278,3 +278,45 @@ function openModal(title, bodyHTML) {
 function closeModal() {
     document.getElementById('modal').style.display = 'none';
 }
+
+// ── Rapporti dell'app driver (reportDriver) = fonte operativa unica ──────────
+// Dal 09/10/2026 i fogli Google Decò non vengono più usati: consegne, fatturato
+// atteso, dashboard e produttività si calcolano dai rapporti giornalieri dei
+// driver. Ogni rapporto = { data, filiale, filialeNome, area, driverEmail,
+// driver, numConsegne, oraInizio, oraFine, durataMin, tempoMedioMin }.
+// Restituisce i rapporti del mese selezionato con giorno (Date) e festivo.
+function rapportiMese(mese) {
+    mese = mese || state.meseCorrente;
+    var out = [];
+    (state.reportDriver || []).forEach(function(r) {
+        if (r.mese && r.mese !== mese) return;
+        var d = toDateObj(r.data);
+        if (!d) return;
+        var fil = state.filialiMap[String(r.filiale || '')];
+        out.push({
+            id: r.id,
+            giorno: d,
+            ymd: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'),
+            filiale: String(r.filiale || '?').replace(/\.0$/, ''),
+            filialeNome: r.filialeNome || (fil && fil.nome) || '',
+            area: (r.area || (fil && fil.area) || '?').toUpperCase(),
+            driverEmail: (r.driverEmail || '').toLowerCase(),
+            driver: (r.driver || '').toUpperCase(),
+            n: r.numConsegne || 0,
+            festivo: isGiornoFestivo(d),
+            durataMin: r.durataMin || null,
+            tempoMedioMin: r.tempoMedioMin || null,
+            targa: r.targa || ''
+        });
+    });
+    return out;
+}
+
+// Fatturato atteso Arena per un insieme di rapporti (schema flat da luglio 2026):
+// feriali × €9,70, domeniche/festivi × €12,61. Le speciali >€499 non sono
+// note all'app: arrivano dal file Decò al momento della fattura.
+function fatturatoAttesoRapporti(rapporti) {
+    var feriali = 0, festivi = 0;
+    rapporti.forEach(function(r) { if (r.festivo) festivi += r.n; else feriali += r.n; });
+    return { feriali: feriali, festivi: festivi, consegne: feriali + festivi, imponibile: feriali * PREZZO_FLAT + festivi * PREZZO_FLAT_FESTIVO };
+}

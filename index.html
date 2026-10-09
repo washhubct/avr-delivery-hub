@@ -42,10 +42,7 @@
                     <span class="nav-icon">📊</span> Dashboard
                 </a>
                 <a class="nav-item nav-ufficio" data-module="consegne" onclick="navigateTo('consegne')">
-                    <span class="nav-icon">📦</span> Consegne
-                </a>
-                <a class="nav-item nav-ufficio" data-module="riconciliazione" onclick="navigateTo('riconciliazione')">
-                    <span class="nav-icon">⚖️</span> Riconciliazione
+                    <span class="nav-icon">🗄️</span> Archivio consegne
                 </a>
                 <a class="nav-item nav-fatturato" data-module="fatturazione" onclick="navigateTo('fatturazione')">
                     <span class="nav-icon">💶</span> Fatturazione
@@ -87,9 +84,6 @@
                 </a>
                 <a class="nav-item nav-timbrature-admin" data-module="punti-timbratura" onclick="navigateTo('punti-timbratura')">
                     <span class="nav-icon">📍</span> Punti Timbratura
-                </a>
-                <a class="nav-item nav-ufficio" data-module="import" onclick="navigateTo('import')">
-                    <span class="nav-icon">📥</span> Importa dati
                 </a>
                 <a class="nav-item nav-superadmin" data-module="log-accessi" onclick="navigateTo('log-accessi')">
                     <span class="nav-icon">📋</span> Log Accessi
@@ -200,7 +194,7 @@
                     <div class="kpi-detail" id="kpiConsegneDetail"></div>
                 </div>
                 <div class="kpi-card accent">
-                    <div class="kpi-label">Fatturato stimato</div>
+                    <div class="kpi-label">Fatturato atteso</div>
                     <div class="kpi-value" id="kpiFatturato">—</div>
                     <div class="kpi-detail" id="kpiFatturatoDetail"></div>
                 </div>
@@ -218,10 +212,11 @@
 
             <div class="card">
                 <h3 class="card-title">Consegne per area</h3>
+                <p class="card-desc">Dai rapporti giornalieri dell'app driver. Fatturato atteso col listino flat (€9,70 feriali / €12,61 festivi), speciali &gt;€499 escluse.</p>
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Area</th><th>Filiali</th><th>&gt;€499</th><th>Ordinarie</th><th>Totale</th><th>Fatturato</th>
+                            <th>Area</th><th>Filiali</th><th>Feriali</th><th>Festivi</th><th>Totale</th><th>Fatturato atteso</th>
                         </tr></thead>
                         <tbody id="tblAree"></tbody>
                         <tfoot><tr class="totals-row">
@@ -252,27 +247,6 @@
                 </div>
             </div>
 
-            <div class="card" id="cardInterne" style="display:none">
-                <h3 class="card-title" style="color:var(--warning)">📦 Consegne Interne (non Last Mile)</h3>
-                <p class="card-desc">Consegne effettuate da personale interno della filiale — non fatturabili e non compensabili driver Last Mile.</p>
-                <div class="kpi-grid" style="margin-bottom:16px">
-                    <div class="kpi-card" style="border-color:rgba(217,119,6,0.3)">
-                        <div class="kpi-label" style="color:var(--warning)">Consegne interne</div>
-                        <div class="kpi-value" id="kpiInterneTot">0</div>
-                    </div>
-                    <div class="kpi-card" style="border-color:rgba(217,119,6,0.3)">
-                        <div class="kpi-label" style="color:var(--warning)">Filiali coinvolte</div>
-                        <div class="kpi-value" id="kpiInterneFiliali">0</div>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead><tr><th>Filiale</th><th>Area</th><th>Driver interno</th><th>Consegne</th></tr></thead>
-                        <tbody id="tblInterne"></tbody>
-                    </table>
-                </div>
-                <div style="margin-top:16px"><button class="btn" style="background:var(--warning);color:#fff;border-color:var(--warning)" onclick="exportConsegneInterne()">📄 Esporta consegne interne (.xlsx)</button></div>
-            </div>
         </section>
 
         <!-- ═══ CONSEGNE ═══ -->
@@ -368,10 +342,10 @@
         <section id="screen-produttivita" class="screen" style="display:none">
             <div class="card">
                 <h3 class="card-title">Produttività driver — monitoraggio giornaliero</h3>
-                <p class="card-desc">Confronto tra le consegne <strong>segnate dai driver nell'app</strong> e quelle <strong>presenti nei file Decò</strong> (sync automatico dai fogli Google), con tempo medio per consegna dagli orari del giro. Diff. = app − Decò: ✓ allineati, giallo scostamento piccolo, rosso scostamento importante.</p>
+                <p class="card-desc">Consegne registrate dai driver nell'app, giorno per giorno, con il tempo medio per consegna calcolato dagli orari del giro. Clicca un driver per il dettaglio giornaliero.</p>
                 <div class="kpi-grid" style="margin:16px 0">
                     <div class="kpi-card"><div class="kpi-label">Consegne app driver</div><div class="kpi-value" id="prodTotConsegne">—</div></div>
-                    <div class="kpi-card"><div class="kpi-label">Consegne file Decò</div><div class="kpi-value" id="prodTotDeco">—</div><div class="kpi-detail" id="prodTotDiff"></div></div>
+                    
                     <div class="kpi-card accent"><div class="kpi-label">Tempo medio/consegna</div><div class="kpi-value" id="prodTempoMedio">—</div></div>
                     <div class="kpi-card"><div class="kpi-label">Driver attivi oggi</div><div class="kpi-value" id="prodAttiviOggi">—</div></div>
                     <div class="kpi-card"><div class="kpi-label">Copertura orari</div><div class="kpi-value" id="prodCopertura">—</div></div>
@@ -382,7 +356,7 @@
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr>
-                            <th>Driver</th><th>Città</th><th>Oggi</th><th>Giorni attivi</th><th>App driver</th><th>File Decò</th><th>Diff.</th><th>Media/giorno</th><th>Tempo medio/consegna</th><th>Copertura orari</th>
+                            <th>Driver</th><th>Città</th><th>Oggi</th><th>Giorni attivi</th><th>Consegne</th><th>Media/giorno</th><th>Tempo medio/consegna</th><th>Copertura orari</th>
                         </tr></thead>
                         <tbody id="tblProduttivita"></tbody>
                     </table>
@@ -498,7 +472,7 @@
                 <div class="toolbar"><button class="btn btn-primary" onclick="openAddFiliale()">+ Aggiungi filiale</button></div>
                 <div class="table-wrap">
                     <table class="data-table">
-                        <thead><tr><th>Codice</th><th>Nome</th><th>Area</th><th>Gruppo</th><th>Link Sheet</th><th>Azioni</th></tr></thead>
+                        <thead><tr><th>Codice</th><th>Nome</th><th>Area</th><th>Gruppo</th><th>Azioni</th></tr></thead>
                         <tbody id="tblFilialiBody"></tbody>
                     </table>
                 </div>
@@ -510,7 +484,7 @@
         <section id="screen-timbrature" class="screen" style="display:none">
             <div class="card">
                 <h3 class="card-title">🕐 Timbrature driver</h3>
-                <p class="card-desc">Entrate/uscite dai <strong>terminali ZKTeco</strong> nei 5 hub (badge/QR + PIN — niente biometria) e dall'<strong>app QR + geofence</strong> per chi non passa dall'hub. La riconciliazione incrocia le presenze con le consegne dei file Decò.</p>
+                <p class="card-desc">Entrate/uscite dai <strong>terminali ZKTeco</strong> nei 5 hub (badge/QR + PIN — niente biometria) e dall'<strong>app QR + geofence</strong> per chi non passa dall'hub. La riconciliazione incrocia le presenze con i rapporti di consegna dell'app driver.</p>
                 <div class="kpi-grid" style="margin:16px 0">
                     <div class="kpi-card"><div class="kpi-label">Timbrature del giorno</div><div class="kpi-value" id="timbKpiTot">—</div></div>
                     <div class="kpi-card"><div class="kpi-label">Driver presenti</div><div class="kpi-value" id="timbKpiDriver">—</div></div>
@@ -577,18 +551,7 @@
             </div>
         </section>
 
-        <!-- ═══ RICONCILIAZIONE ═══ -->
-        <section id="screen-riconciliazione" class="screen" style="display:none">
-            <div class="card">
-                <h3 class="card-title">Riconciliazione mensile</h3>
-                <p class="card-desc">Confronta i dati delle consegne con i dati Decò.</p>
-                <div class="toolbar">
-                    <button class="btn btn-primary" onclick="runRiconciliazione()">▶ Avvia riconciliazione</button>
-                    <button class="btn" onclick="exportRiconciliazione()">📄 Esporta</button>
-                </div>
-                <div id="riconResults"></div>
-            </div>
-        </section>
+        
 
         <!-- ═══ FATTURAZIONE ═══ -->
         <section id="screen-fatturazione" class="screen" style="display:none">
@@ -749,37 +712,7 @@
             </div>
         </section>
 
-        <!-- ═══ IMPORT ═══ -->
-        <section id="screen-import" class="screen" style="display:none">
-            <div class="card">
-                <h3 class="card-title">🔄 Sincronizzazione automatica da Google Sheets</h3>
-                <p class="card-desc">Le consegne arrivano automaticamente dagli script Apps Script attivi sull'account Google aziendale: <strong>Sync Giornalieri v1</strong> (filiali 940 e 524, ogni sera alle 21:00) e <strong>Sync Mensili v4.2</strong> (tutte le altre filiali). Gli script riconoscono PRESTAZIONE (nostra/interna), i ritorni e i nostri driver anche con errori di battitura. I sorgenti di backup sono in <code>scripts/gas/</code> nel repository. L'import manuale qui sotto resta disponibile per recuperi straordinari.</p>
-            </div>
-            <div class="card">
-                <h3 class="card-title">Importa dati da file Excel</h3>
-                <p class="card-desc">Carica i file .xlsx delle filiali. Il sistema riconosce automaticamente la struttura.</p>
-                <div class="import-zone" id="importZone">
-                    <div class="import-icon">📂</div>
-                    <p>Trascina qui i file .xlsx<br>oppure <label class="import-link" for="importFile">sfoglia</label></p>
-                    <input type="file" id="importFile" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="handleImportFiles(this.files)">
-                </div>
-                <div id="importProgress" style="display:none">
-                    <div class="progress-bar"><div class="progress-fill" id="importProgressFill"></div></div>
-                    <p id="importStatus" class="import-status"></p>
-                </div>
-                <div id="importLog" class="import-log" style="display:none"></div>
-            </div>
-            <div class="card" style="margin-top:20px">
-                <h3 class="card-title">Importa file riepilogo Decò</h3>
-                <p class="card-desc">Carica il file Excel di riepilogo Decò per la riconciliazione automatica.</p>
-                <div class="import-zone" id="importDecoZone">
-                    <div class="import-icon">📊</div>
-                    <p>Trascina qui il file Decò<br>oppure <label class="import-link" for="importDecFile">sfoglia</label></p>
-                    <input type="file" id="importDecFile" accept=".xlsx,.xls" style="display:none" onchange="handleImportDeco(this.files)">
-                </div>
-                <div id="importDecoLog" class="import-log" style="display:none"></div>
-            </div>
-        </section>
+        
 
         <!-- ═══ LOG ACCESSI ═══ -->
         <section id="screen-log-accessi" class="screen" style="display:none">
@@ -907,12 +840,10 @@
     <script src="js/moduli/utenti.js"></script>
     <script src="js/moduli/punti-timbratura.js"></script>
     <script src="js/moduli/timbrature.js"></script>
-    <script src="js/moduli/riconciliazione.js"></script>
     <script src="js/fic/fic-core.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
     <script src="js/moduli/fatturazione-fic.js"></script>
     <script src="js/moduli/report-finanziario.js"></script>
-    <script src="js/moduli/importa.js"></script>
     <script src="js/moduli/log-accessi.js"></script>
     <script src="js/moduli/driver-app.js"></script>
     <script src="js/moduli/push-gestionale.js"></script>
