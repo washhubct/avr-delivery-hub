@@ -1248,3 +1248,21 @@ html.theme-light .main-content::before {
 .fic-input { background: var(--bg-card); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; text-transform: none; letter-spacing: 0; }
 .fic-input:focus { outline: none; border-color: var(--accent); }
 .fic-input:disabled { opacity: .6; }
+
+/* ── Report Finanziario: grafico storico (SVG inline) ── */
+.rf-chart { position: relative; margin: 8px 0 18px; }
+.rf-chart svg { width: 100%; height: 220px; display: block; overflow: visible; }
+.rf-chart .rf-grid { stroke: var(--border); stroke-width: 1; }
+.rf-chart .rf-axis { fill: var(--text-light); font-size: 11px; font-family: var(--font-mono, 'JetBrains Mono', monospace); }
+.rf-chart .rf-bar { rx: 3; }
+.rf-chart .rf-bar.ricavi { fill: #0284c7; }
+.rf-chart .rf-bar.costi { fill: #7c3aed; }
+html:not(.theme-light) .rf-chart .rf-bar.costi { fill: #a855f7; }
+.rf-chart .rf-hit { fill: transparent; cursor: default; }
+.rf-chart .rf-hit:hover + .rf-hover, .rf-chart .rf-hover.on { opacity: 1; }
+.rf-chart .rf-hover { fill: var(--text); opacity: 0; pointer-events: none; }
+.rf-chart .rf-legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.rf-chart .rf-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.rf-chart .rf-tip { position: absolute; pointer-events: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,.25); white-space: nowrap; display: none; z-index: 5; }
+.rf-chart .rf-tip b { display: block; margin-bottom: 4px; }
+.rf-chart .rf-tip span { display: block; color: var(--text-muted); }

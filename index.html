@@ -702,7 +702,7 @@
             <!-- FATTURE RICEVUTE -->
             <div class="card" style="margin-top:20px">
                 <h3 class="card-title">Costi — fatture ricevute</h3>
-                <p class="card-desc">Assegna ogni fornitore ad <strong>AVR</strong> o <strong>Wash Hub</strong> e alla voce di costo: la scelta vale per tutte le sue fatture, anche future. Le fatture Wash Hub non contano nel P&L.</p>
+                <p class="card-desc">Assegna ogni fornitore a <strong>Last Mile</strong> o <strong>Wash Hub</strong> e alla voce di costo: la scelta vale per tutte le sue fatture, anche future. Le fatture Wash Hub non contano nel P&L.</p>
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr><th>Data</th><th>Fornitore / descrizione</th><th style="text-align:right">Imponibile</th><th>Azienda</th><th>Voce</th><th></th></tr></thead>
@@ -738,6 +738,8 @@
             <!-- STORICO -->
             <div class="card" style="margin-top:20px">
                 <h3 class="card-title">Storico mensile</h3>
+                <p class="card-desc">Fatturato e costi per mese di competenza. Passa il mouse su un mese per il dettaglio.</p>
+                <div id="rfChart" class="rf-chart"></div>
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr><th>Mese</th><th style="text-align:right">Fatturato</th><th style="text-align:right">Costi</th><th style="text-align:right">Revenue</th><th style="text-align:right">Fatture em. / ric.</th></tr></thead>
@@ -751,7 +753,7 @@
         <section id="screen-import" class="screen" style="display:none">
             <div class="card">
                 <h3 class="card-title">🔄 Sincronizzazione automatica da Google Sheets</h3>
-                <p class="card-desc">Le consegne arrivano automaticamente dagli script Apps Script attivi sull'account Google aziendale: <strong>Sync Giornalieri v1</strong> (filiali 940 e 524, ogni sera alle 21:00) e <strong>Sync Mensili v4.2</strong> (tutte le altre filiali). Gli script riconoscono PRESTAZIONE (AVR/interna), i ritorni e i driver AVR anche con errori di battitura. I sorgenti di backup sono in <code>scripts/gas/</code> nel repository. L'import manuale qui sotto resta disponibile per recuperi straordinari.</p>
+                <p class="card-desc">Le consegne arrivano automaticamente dagli script Apps Script attivi sull'account Google aziendale: <strong>Sync Giornalieri v1</strong> (filiali 940 e 524, ogni sera alle 21:00) e <strong>Sync Mensili v4.2</strong> (tutte le altre filiali). Gli script riconoscono PRESTAZIONE (nostra/interna), i ritorni e i nostri driver anche con errori di battitura. I sorgenti di backup sono in <code>scripts/gas/</code> nel repository. L'import manuale qui sotto resta disponibile per recuperi straordinari.</p>
             </div>
             <div class="card">
                 <h3 class="card-title">Importa dati da file Excel</h3>

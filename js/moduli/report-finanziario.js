@@ -1,7 +1,7 @@
 // DELIVERY HUB v2 — Report Finanziario (P&L mensile)
 // Dal 05/10/2026 i numeri vengono da Fatture in Cloud (fattureMese/{mese},
 // scritta dalla CF ficSyncFatture per mese di COMPETENZA): ricavi = fatture
-// emesse ai clienti AVR, costi = fatture ricevute classificate per voce.
+// emesse ad Arena, costi = fatture ricevute classificate per voce.
 // I fogli Decò non sono più la fonte: le consegne per città arrivano dai
 // rapporti dell'app driver (reportDriver) e servono solo a ripartire.
 // Le voci senza fattura (buste paga, F24…) restano manuali in costiMensili.
@@ -20,7 +20,7 @@ var COSTI_VOCI = [
 ];
 var VOCI_FATTURA = COSTI_VOCI.filter(function(v) { return v.daFattura; });
 var VOCI_BUSTE = ['compensiDriver', 'nettoRizzuto', 'nettoFaro', 'hr']; // compilate dalla CF elaboraBustePaga
-var AZIENDE_FATTURA = { avr: 'AVR / Last Mile', washhub: 'Wash Hub', da_classificare: 'Da classificare' };
+var AZIENDE_FATTURA = { lastmile: 'Last Mile', washhub: 'Wash Hub', da_classificare: 'Da classificare' };
 var AREA_LABELS_RF = { CT: 'Catania', ME: 'Messina', EN: 'Enna', SR: 'Siracusa', PA: 'Palermo' };
 
 var rfState = { fm: null, costi: null, mostraWashHub: false };
@@ -53,7 +53,7 @@ async function renderReportFinanziario() {
             avviso.innerHTML = '⚠️ Fatture <strong>ricevute</strong> non disponibili: il token Fatture in Cloud non ha il permesso "Documenti ricevuti". I ricavi sono aggiornati, i costi restano manuali.' + (fm.ricevuteErrore ? ' <span style="color:var(--text-muted)">(' + escapeHtml(fm.ricevuteErrore) + ')</span>' : '');
         } else if (tot.nDaClassificare > 0) {
             avviso.style.display = 'block';
-            avviso.innerHTML = '🏷️ <strong>' + tot.nDaClassificare + ' fatture ricevute da classificare</strong> (AVR o Wash Hub?): finché non le assegni contano tra i costi AVR.';
+            avviso.innerHTML = '🏷️ <strong>' + tot.nDaClassificare + ' fatture ricevute da classificare</strong> (Last Mile o Wash Hub?): finché non le assegni contano tra i costi Last Mile.';
         } else {
             avviso.style.display = 'none';
         }
@@ -112,7 +112,7 @@ async function renderReportFinanziario() {
             return '<select class="input" style="padding:4px 6px;font-size:12px;margin:0" onchange="rfClassifica(\'' + r.ficId + '\',\'' + (r.fornitoreId || '') + '\',\'voce\',this.value)">' +
                 VOCI_FATTURA.map(function(v) { return '<option value="' + v.key + '"' + (r.voce === v.key ? ' selected' : '') + '>' + v.label + '</option>'; }).join('') + '</select>';
         };
-        // Le fatture dei fornitori Wash Hub non riguardano AVR: nascoste di default
+        // Le fatture dei fornitori Wash Hub non riguardano Last Mile: nascoste di default
         var nWashHub = ricevute.filter(function(r) { return r.azienda === 'washhub'; }).length;
         var visibili = rfState.mostraWashHub ? ricevute : ricevute.filter(function(r) { return r.azienda !== 'washhub'; });
         var rigaWH = nWashHub ? '<tr><td colspan="6" style="font-size:12px;color:var(--text-muted);text-align:center">' + nWashHub + ' fatture di fornitori Wash Hub ' + (rfState.mostraWashHub ? 'mostrate' : 'nascoste') + ' — <a href="#" onclick="rfState.mostraWashHub=!rfState.mostraWashHub;renderReportFinanziario();return false">' + (rfState.mostraWashHub ? 'nascondi' : 'mostra') + '</a></td></tr>' : '';
@@ -367,10 +367,12 @@ async function renderStoricoFinanziario() {
         } catch (e) { console.warn('storico costi non leggibili:', e.message); }
 
         var html = '';
+        var serie = []; // per il grafico: { mese, ricavi, costi, revenue, haDati }
         mesi.forEach(function(m) {
             var fm = fmMap[m], costi = costiMap[m] || {};
             var tot = fm && fm.totali;
             if (!tot && !Object.keys(costi).length) {
+                serie.push({ mese: m, ricavi: 0, costi: 0, revenue: 0, haDati: false });
                 html += '<tr style="opacity:0.4"><td>' + meseLabel(m) + '</td><td colspan="4" style="text-align:center;color:var(--text-muted);font-size:12px">Nessun dato</td></tr>';
                 return;
             }
@@ -384,6 +386,7 @@ async function renderStoricoFinanziario() {
             });
             var ricavi = tot ? tot.ricaviImponibile : 0;
             var rev = ricavi - totC;
+            serie.push({ mese: m, ricavi: ricavi, costi: totC, revenue: rev, haDati: !!tot });
             html += '<tr' + (m === state.meseCorrente ? ' style="background:rgba(34,197,94,0.05)"' : '') + '><td>' + (m === state.meseCorrente ? '<strong>' + meseLabel(m) + '</strong>' : meseLabel(m)) + '</td>' +
                 '<td style="text-align:right">' + (tot ? formatCurrency(ricavi) : '—') + '</td>' +
                 '<td style="text-align:right">' + formatCurrency(totC) + '</td>' +
@@ -391,6 +394,7 @@ async function renderStoricoFinanziario() {
                 '<td style="text-align:right">' + (tot ? (tot.nEmesse || 0) + ' / ' + (tot.nRicevute || 0) : '—') + '</td></tr>';
         });
         el.innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Nessun dato</td></tr>';
+        renderGraficoStorico(serie.reverse());
     } catch(e) {
         console.warn('storico:', e);
         el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Errore caricamento storico</td></tr>';
@@ -472,4 +476,59 @@ async function rfEliminaBusta(id) {
         await ficCall('elaboraBustePaga', { mese: state.meseCorrente, files: [] });
         await renderReportFinanziario();
     } catch (e) { toast('Errore: ' + e.message, 'error'); }
+}
+
+// ── Grafico storico: barre affiancate ricavi/costi per mese (SVG inline, un solo asse €) ──
+function renderGraficoStorico(serie) {
+    var box = document.getElementById('rfChart');
+    if (!box) return;
+    var dati = serie.filter(function(d) { return d.haDati; });
+    if (!dati.length) { box.innerHTML = ''; return; }
+    // dal primo mese con dati in poi (niente mesi vuoti davanti)
+    var primo = serie.findIndex(function(d) { return d.haDati; });
+    serie = serie.slice(primo);
+    var W = 900, H = 220, padL = 64, padR = 12, padT = 10, padB = 28;
+    var innerW = W - padL - padR, innerH = H - padT - padB;
+    var max = Math.max.apply(null, serie.map(function(d) { return Math.max(d.ricavi, d.costi); })) || 1;
+    var step = Math.pow(10, Math.floor(Math.log10(max)));
+    var tick = (max / step) <= 2 ? step / 2 : (max / step) <= 5 ? step : step * 2;
+    var top = Math.ceil(max / tick) * tick;
+    var y = function(v) { return padT + innerH - (v / top) * innerH; };
+    var slot = innerW / serie.length;
+    var barW = Math.max(6, Math.min(28, (slot - 12) / 2 - 1)); // 2 barre + 2px di aria tra loro
+    var mn = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    var k = function(v) { return v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0).replace('.', ',') + 'k' : String(v); };
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Fatturato e costi per mese">';
+    for (var v = 0; v <= top; v += tick) {
+        svg += '<line class="rf-grid" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>' +
+               '<text class="rf-axis" x="' + (padL - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">€' + k(v) + '</text>';
+    }
+    serie.forEach(function(d, i) {
+        var cx = padL + slot * i + slot / 2;
+        var xR = cx - barW - 1, xC = cx + 1;
+        var p = d.mese.split('-');
+        svg += '<text class="rf-axis" x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle">' + mn[parseInt(p[1], 10) - 1] + (p[1] === '01' || i === 0 ? ' ' + p[0].slice(2) : '') + '</text>';
+        if (!d.haDati) return;
+        var hR = Math.max(0, y(0) - y(d.ricavi)), hC = Math.max(0, y(0) - y(d.costi));
+        svg += '<rect class="rf-bar ricavi" x="' + xR + '" y="' + (y(0) - hR) + '" width="' + barW + '" height="' + hR + '"/>' +
+               '<rect class="rf-bar costi" x="' + xC + '" y="' + (y(0) - hC) + '" width="' + barW + '" height="' + hC + '"/>' +
+               '<rect class="rf-hit" x="' + (padL + slot * i) + '" y="' + padT + '" width="' + slot + '" height="' + innerH + '" data-i="' + i + '"/>';
+    });
+    svg += '<line class="rf-grid" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(0) + '" y2="' + y(0) + '" style="stroke:var(--text-light)"/></svg>';
+    box.innerHTML = '<div class="rf-legend"><span><i style="background:#0284c7"></i>Fatturato imponibile</span><span><i class="rf-legend-costi"></i>Costi</span></div>' + svg + '<div class="rf-tip"></div>';
+    var li = box.querySelector('.rf-legend-costi'); if (li) li.style.background = document.documentElement.classList.contains('theme-light') ? '#7c3aed' : '#a855f7';
+    var tip = box.querySelector('.rf-tip');
+    box.querySelectorAll('.rf-hit').forEach(function(r) {
+        r.addEventListener('mousemove', function(ev) {
+            var d = serie[parseInt(r.dataset.i, 10)];
+            tip.innerHTML = '<b>' + meseLabel(d.mese) + '</b><span>Fatturato ' + formatCurrency(d.ricavi) + '</span><span>Costi ' + formatCurrency(d.costi) + '</span><span style="color:' + (d.revenue >= 0 ? 'var(--success)' : 'var(--danger)') + ';font-weight:600">Revenue ' + formatCurrency(d.revenue) + (d.ricavi > 0 ? ' (' + Math.round(d.revenue / d.ricavi * 100) + '%)' : '') + '</span>';
+            tip.style.display = 'block';
+            var rb = box.getBoundingClientRect();
+            var x = ev.clientX - rb.left + 14, yy = ev.clientY - rb.top - 10;
+            if (x + tip.offsetWidth > rb.width) x = ev.clientX - rb.left - tip.offsetWidth - 14;
+            tip.style.left = x + 'px'; tip.style.top = yy + 'px';
+        });
+        r.addEventListener('mouseleave', function() { tip.style.display = 'none'; });
+    });
 }

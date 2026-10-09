@@ -39,9 +39,9 @@ test('ricevuta: competenza = data salvo testo/override; azienda e voce da fornit
     assert.equal(a.meseCompetenza, '2026-09');
     assert.equal(a.azienda, 'da_classificare');
     assert.equal(a.voce, 'altro');
-    const b = C.normalizzaRicevuta(r, { azienda: 'avr', voce: 'carburante' }, null);
-    assert.equal(b.azienda, 'avr'); assert.equal(b.voce, 'carburante');
-    const c = C.normalizzaRicevuta(r, { azienda: 'avr', voce: 'carburante' }, { azienda: 'washhub', voce: 'voceInesistente', meseCompetenza: '2026-08' });
+    const b = C.normalizzaRicevuta(r, { azienda: 'lastmile', voce: 'carburante' }, null);
+    assert.equal(b.azienda, 'lastmile'); assert.equal(b.voce, 'carburante');
+    const c = C.normalizzaRicevuta(r, { azienda: 'lastmile', voce: 'carburante' }, { azienda: 'washhub', voce: 'voceInesistente', meseCompetenza: '2026-08' });
     assert.equal(c.azienda, 'washhub'); assert.equal(c.voce, 'altro'); assert.equal(c.meseCompetenza, '2026-08');
 });
 
@@ -53,7 +53,7 @@ test('raggruppaPerMese: totali solo su righe valide, costi washhub esclusi, da_c
         C.normalizzaEmessa({ id: 4, number: 99, date: '2026-09-30', subject: 'Storno agosto 2026', entity: { id: 1, name: 'ARENA' }, amount_net: 1, amount_vat: 0.22, amount_gross: 1.22 }, { escludi: true }),
     ];
     const ricevute = [
-        C.normalizzaRicevuta({ id: 10, date: '2026-08-10', entity: { id: 5, name: 'ENI' }, amount_net: 100, amount_vat: 22, amount_gross: 122 }, { azienda: 'avr', voce: 'carburante' }),
+        C.normalizzaRicevuta({ id: 10, date: '2026-08-10', entity: { id: 5, name: 'ENI' }, amount_net: 100, amount_vat: 22, amount_gross: 122 }, { azienda: 'lastmile', voce: 'carburante' }),
         C.normalizzaRicevuta({ id: 11, date: '2026-08-11', entity: { id: 6, name: 'SAPONI SRL' }, amount_net: 50, amount_vat: 11, amount_gross: 61 }, { azienda: 'washhub', voce: 'altro' }),
         C.normalizzaRicevuta({ id: 12, date: '2026-08-12', entity: { id: 7, name: 'IGNOTO' }, amount_net: 30, amount_vat: 6.6, amount_gross: 36.6 }, null),
     ];

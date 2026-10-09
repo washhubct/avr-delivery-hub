@@ -1853,7 +1853,7 @@ exports.ficProssimoNumero = ficEndpoint('ficProssimoNumero', 'prossimoNumero');
 
 // ═══════════════════════════════════════════════════════════════════
 // SYNC FATTURE FIC → fattureMese/{YYYY-MM} (Report Finanziario)
-// Ricavi = fatture emesse ai clienti AVR (config/fic.cliente.ficClientId +
+// Ricavi = fatture emesse ai clienti Last Mile/Arena (config/fic.cliente.ficClientId +
 // config/fic.clientiAvr), costi = fatture ricevute. Il mese è quello di
 // COMPETENZA (fic-sync-core.js), non la data. Override manuali in
 // fattureOverride/{emessa_<id>|ricevuta_<id>}, default fornitore in

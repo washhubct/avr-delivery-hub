@@ -109,7 +109,7 @@ function normalizzaRicevuta(doc, fornitore, override) {
 }
 
 // Raggruppa per mese di competenza e calcola i totali (solo righe non escluse;
-// i costi contano solo azienda 'avr' + 'da_classificare', così un costo mai
+// i costi contano solo azienda 'lastmile' + 'da_classificare', così un costo mai
 // classificato non sparisce in silenzio: resta visibile da sistemare).
 function raggruppaPerMese(emesse, ricevute) {
     const mesi = {};
@@ -122,7 +122,7 @@ function raggruppaPerMese(emesse, ricevute) {
         const t = { ricaviImponibile: 0, ricaviIva: 0, ricaviLordo: 0, costiImponibile: 0, costiIva: 0, costiLordo: 0, costiPerVoce: {}, nEmesse: 0, nRicevute: 0, nDaClassificare: 0 };
         m.emesse.forEach((e) => { if (e.escludi) return; t.ricaviImponibile += e.imponibile; t.ricaviIva += e.iva; t.ricaviLordo += e.lordo; t.nEmesse++; });
         m.ricevute.forEach((r) => {
-            if (r.escludi || (r.azienda !== 'avr' && r.azienda !== 'da_classificare')) return;
+            if (r.escludi || (r.azienda !== 'lastmile' && r.azienda !== 'da_classificare')) return;
             if (r.azienda === 'da_classificare') t.nDaClassificare++;
             t.costiImponibile += r.imponibile; t.costiIva += r.iva; t.costiLordo += r.lordo; t.nRicevute++;
             t.costiPerVoce[r.voce] = num((t.costiPerVoce[r.voce] || 0) + r.imponibile);
