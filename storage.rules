@@ -10,11 +10,12 @@ service firebase.storage {
     match /danni/{allPaths=**} {
       allow read, write: if isUfficioDanni();
     }
-    // Buste paga (PDF): solo direzione; PDF < 10 MB
+    // Buste paga (PDF): solo direzione; un PDF può contenere tutti i cedolini
+    // del mese (il consulente manda un file unico) → fino a 50 MB
     match /bustePaga/{mese}/{file} {
       allow read, delete: if isUfficioDanni();
       allow write: if isUfficioDanni()
-                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.size < 50 * 1024 * 1024
                    && request.resource.contentType == 'application/pdf';
     }
     // Foto patente: ogni driver scrive SOLO nella propria cartella (uid),

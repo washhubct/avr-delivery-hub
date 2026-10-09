@@ -842,533 +842,6 @@ function buildEmailHtml(link) {
 </html>`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// SYNC CONSEGNE DA GOOGLE SHEETS (fogli filiale Decò)
-//
-// Legge i fogli "AVR FILIALE xxx" direttamente via Sheets API e
-// sincronizza la collection `consegne` con la stessa logica di
-// normalizzazione e dedup dell'import manuale (importa.js):
-//   • upsert con docId deterministico → mai duplicati, mai perdite
-//   • RITORNI esclusi (fatturati a parte dal modulo Ritorni)
-//   • PRESTAZIONE (AVR/INTERNA) importata: INTERNA = consegna Decò
-//   • nessuna cancellazione: solo insert/update
-//
-// Requisito: i fogli devono essere condivisi (lettura) con il
-// service account delle functions. L'email esatta viene loggata ad
-// ogni run ed è visibile in syncStatus/last.
-//
-// Config fogli: collection `driveSheets` (docs: {spreadsheetId, nome,
-// attivo}). Se vuota si usano i DEFAULT_SHEETS qui sotto.
-// ═══════════════════════════════════════════════════════════════════
-
-const { google } = require('googleapis');
-
-const DEFAULT_SHEETS = [
-    { spreadsheetId: '1Mbog1enTD18W0r7Ie03EzBchYR9lCF5yvpW6dQL1aBM', nome: 'AVR FILIALE 300' },
-    { spreadsheetId: '15dv1maX8zjteESUTi6QpQ9OnMK1tErm4qi7BytFcwrY', nome: 'AVR FILIALE 401' },
-    { spreadsheetId: '1WETOk-4_G_Xc4tpHrwDHfE5HMo9cTFJTux6qK7X4bDI', nome: 'AVR FILIALE 516 (ME)' },
-    { spreadsheetId: '1-4vHi9UbeWbbWpC_HmgO8DyF5NOP57bjj9HgJEIkd4A', nome: 'AVR FILIALE 533 (PA)' },
-    { spreadsheetId: '1iYh1Wo428fBbtNdsZYXb0zw_EpdvUHcF6dflfUWw25w', nome: 'AVR FILIALE 940' },
-    { spreadsheetId: '1ASFT3M9coo3Zuqf-iSgaoasoxThsto8hAoqojmf1Cxc', nome: 'AVR FILIALE 346 LEONE' },
-];
-
-const MESI_TAB = { GEN: 1, FEB: 2, MAR: 3, APR: 4, MAG: 5, GIU: 6, LUG: 7, AGO: 8, SET: 9, OTT: 10, NOV: 11, DIC: 12 };
-
-// "LUG 26" / "LUG26" → "2026-07", altrimenti null
-function meseFromTabName(name) {
-    const m = String(name || '').toUpperCase().trim()
-        .match(/^(GEN|FEB|MAR|APR|MAG|GIU|LUG|AGO|SET|OTT|NOV|DIC)\s?(\d{2})$/);
-    if (!m) return null;
-    return '20' + m[2] + '-' + String(MESI_TAB[m[1]]).padStart(2, '0');
-}
-
-// ── Repliche 1:1 della logica di importa.js (client) ──
-function syncDetectColumns(rows) {
-    for (let i = 0; i < Math.min(5, rows.length); i++) {
-        const row = rows[i];
-        if (!row) continue;
-        const headers = row.map(h => String(h || '').toUpperCase().trim());
-        const filIdx = headers.findIndex(h => h === 'FIL' || h === 'FIL.' || h === 'FIL. PARTENZA');
-        const dataIdx = headers.findIndex(h => h === 'DATA');
-        if (filIdx >= 0 && dataIdx >= 0) {
-            return {
-                headerIdx: i,
-                colMap: {
-                    filiale: filIdx,
-                    data: dataIdx,
-                    orderId: headers.findIndex(h => h.includes('ORDER ID')),
-                    fascia: headers.findIndex(h => h === 'FASCIA'),
-                    cognome: headers.findIndex(h => h === 'COGNOME'),
-                    nome: headers.findIndex(h => h === 'NOME'),
-                    provincia: headers.findIndex(h => h === 'PR'),
-                    citta: headers.findIndex(h => h.includes('CITTA')),
-                    indirizzo: headers.findIndex(h => h === 'INDIRIZZO'),
-                    importo: headers.findIndex(h => h.includes('IMPORTO EFFETTIVO') || h === 'IMPORTO'),
-                    pagamento: headers.findIndex(h => h === 'PAGAMENTO'),
-                    codiceDom: headers.findIndex(h => h.includes('CODICE DOMICILIO') || h.includes('CODICE_DOM')),
-                    driver: headers.findIndex(h => h === 'RIDER' || h === 'DRIVER'),
-                    targa: headers.findIndex(h => h.includes('TARGA')),
-                    consegnata: headers.findIndex(h => h.includes('CONSEGNATA')),
-                    prestazione: headers.findIndex(h => h === 'PRESTAZIONE'),
-                    richiesta: headers.findIndex(h => h.includes('RICHIESTA')),
-                    oraConsegna: headers.findIndex(h => h.includes('ORA CONSEGNA')),
-                },
-            };
-        }
-    }
-    return { headerIdx: -1, colMap: {} };
-}
-
-function syncGetVal(row, idx) {
-    if (idx == null || idx < 0 || idx >= row.length) return null;
-    const v = row[idx];
-    if (v === null || v === undefined || v === '') return null;
-    return String(v).trim();
-}
-
-function syncParseDate(val) {
-    if (!val) return null;
-    const s = String(val).trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-        const d = new Date(s.slice(0, 10) + 'T12:00:00Z');
-        if (!isNaN(d)) return d;
-    }
-    let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (m) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1], 12));
-    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
-    if (m) return new Date(Date.UTC(2000 + (+m[3]), +m[2] - 1, +m[1], 12));
-    const num = parseFloat(s);
-    if (!isNaN(num) && num > 40000 && num < 60000) {
-        return new Date(Math.round((num - 25569) * 86400 * 1000));
-    }
-    return null;
-}
-
-function syncMeseFromDate(d) {
-    return d.toISOString().slice(0, 7);
-}
-
-function syncAreaFromProvincia(prov) {
-    const p = String(prov || '').toUpperCase().trim();
-    const map = { CT: 'CT', EN: 'EN', ME: 'ME', SR: 'SR', PA: 'PA' };
-    return map[p] || null;
-}
-
-function syncParseImporto(val) {
-    if (val == null) return 0;
-    let s = String(val).trim().replace(/[€\s]/g, '');
-    // Formato italiano 1.234,56 → 1234.56
-    if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
-    const n = parseFloat(s);
-    return isNaN(n) ? 0 : n;
-}
-
-// Identica a consegnaDocId di importa.js → stessa chiave di dedup
-function syncConsegnaDocId(c) {
-    const d = c.data;
-    const dateStr = d.toISOString().slice(0, 10).replace(/-/g, '');
-    const fil = String(c.filiale || '').replace(/[^a-zA-Z0-9]/g, '');
-    const ref = (c.orderId || c.codiceDomicilio || '').replace(/[^a-zA-Z0-9]/g, '');
-    const cli = (c.cliente || '')
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
-    const imp = String(Math.round((c.importo || 0) * 100));
-    return `${fil}_${dateStr}_${ref || cli}_${imp}`.slice(0, 100);
-}
-
-function parseTabRows(rows, fonte, sheetName) {
-    const { headerIdx, colMap } = syncDetectColumns(rows);
-    if (headerIdx < 0) return { consegne: [], ritorni: 0, scarti: 0, struttura: false };
-
-    const consegne = [];
-    let ritorni = 0, scarti = 0;
-    for (let i = headerIdx + 1; i < rows.length; i++) {
-        const row = rows[i];
-        if (!row || row.length === 0) continue;
-
-        const filiale = syncGetVal(row, colMap.filiale);
-        const dataRaw = syncGetVal(row, colMap.data);
-        const cognome = syncGetVal(row, colMap.cognome);
-        if (!filiale && !cognome) continue;
-        if (!dataRaw) continue;
-
-        const richiesta = (syncGetVal(row, colMap.richiesta) || '').toUpperCase();
-        const targaRaw = (syncGetVal(row, colMap.targa) || '').toUpperCase();
-        if (richiesta.includes('RITORNO') || targaRaw === 'RITORNO') { ritorni++; continue; }
-
-        const dateObj = syncParseDate(dataRaw);
-        if (!dateObj) { scarti++; continue; }
-
-        const mese = syncMeseFromDate(dateObj);
-        // Guard: una riga con data fuori dal mese della tab resta comunque
-        // importata (fa fede la data), ma non deve rompere nulla.
-
-        const consegnataRaw = (syncGetVal(row, colMap.consegnata) || '').toUpperCase();
-        const provincia = syncGetVal(row, colMap.provincia);
-
-        consegne.push({
-            filiale: String(filiale || '').replace(/\.0$/, ''),
-            data: dateObj,
-            mese,
-            cliente: [cognome, syncGetVal(row, colMap.nome)].filter(Boolean).join(' ').trim() || null,
-            provincia: provincia || null,
-            citta: syncGetVal(row, colMap.citta) || null,
-            indirizzo: syncGetVal(row, colMap.indirizzo) || null,
-            importo: syncParseImporto(syncGetVal(row, colMap.importo)),
-            fascia: syncGetVal(row, colMap.fascia) || syncGetVal(row, colMap.oraConsegna) || null,
-            driver: syncGetVal(row, colMap.driver) || null,
-            targa: syncGetVal(row, colMap.targa) || null,
-            consegnata: consegnataRaw === 'SI',
-            nonConsegnata: consegnataRaw === 'NO',
-            prestazione: syncGetVal(row, colMap.prestazione) || null,
-            orderId: syncGetVal(row, colMap.orderId) || null,
-            pagamento: syncGetVal(row, colMap.pagamento) || null,
-            codiceDomicilio: syncGetVal(row, colMap.codiceDom) || null,
-            area: syncAreaFromProvincia(provincia),
-            fonte,
-            sheetName,
-        });
-    }
-    return { consegne, ritorni, scarti, struttura: true };
-}
-
-// Estrae lo spreadsheetId da un link Google Sheets
-function sheetIdFromLink(link) {
-    const m = String(link || '').match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]{20,})/);
-    return m ? m[1] : null;
-}
-
-// Fonte primaria: collection `filiali` (campo sheetLink, gestito dalla
-// schermata Filiali della dash — è lì che sono censiti tutti i fogli).
-// In aggiunta: collection `driveSheets` per fogli extra manuali.
-// Fallback: DEFAULT_SHEETS se non c'è nulla.
-async function loadSheetConfig() {
-    const byId = {}; // dedup per spreadsheetId (più filiali possono condividere un foglio)
-
-    try {
-        const snap = await db.collection('filiali').get();
-        snap.forEach(doc => {
-            const d = doc.data();
-            const id = sheetIdFromLink(d.sheetLink);
-            if (!id) return;
-            if (!byId[id]) {
-                byId[id] = { spreadsheetId: id, nome: 'FILIALE ' + (d.codice || doc.id) + (d.nome ? ' — ' + d.nome : '') };
-            } else {
-                byId[id].nome += ' + ' + (d.codice || doc.id);
-            }
-        });
-    } catch (e) {
-        console.warn('[sync] filiali config:', e.message);
-    }
-
-    try {
-        const snap = await db.collection('driveSheets').get();
-        snap.forEach(doc => {
-            const d = doc.data();
-            if (d.spreadsheetId && d.attivo !== false && !byId[d.spreadsheetId]) {
-                byId[d.spreadsheetId] = { spreadsheetId: d.spreadsheetId, nome: d.nome || doc.id };
-            }
-            // attivo:false su driveSheets disattiva anche un foglio da filiali
-            if (d.spreadsheetId && d.attivo === false) delete byId[d.spreadsheetId];
-        });
-    } catch (e) {
-        console.warn('[sync] driveSheets config:', e.message);
-    }
-
-    const configured = Object.values(byId);
-    if (configured.length > 0) return configured;
-    return DEFAULT_SHEETS;
-}
-
-async function eseguiSyncConsegne(mesiTarget) {
-    const auth = new google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    });
-    let saEmail = null;
-    try {
-        const client = await auth.getClient();
-        saEmail = client.email || (await auth.getCredentials()).client_email || null;
-    } catch (e) { /* best effort */ }
-
-    const sheetsApi = google.sheets({ version: 'v4', auth });
-    const fogli = await loadSheetConfig();
-
-    const dettagli = [];
-    let totUpserted = 0, totRitorni = 0, totScarti = 0;
-
-    for (const foglio of fogli) {
-        const det = { nome: foglio.nome, spreadsheetId: foglio.spreadsheetId, tabs: [], upserted: 0, errore: null };
-        try {
-            const meta = await sheetsApi.spreadsheets.get({
-                spreadsheetId: foglio.spreadsheetId,
-                fields: 'sheets.properties.title',
-            });
-            const tabNames = (meta.data.sheets || []).map(s => s.properties.title);
-            const target = tabNames.filter(t => {
-                const m = meseFromTabName(t);
-                return m && mesiTarget.includes(m);
-            });
-
-            for (const tab of target) {
-                const resp = await sheetsApi.spreadsheets.values.get({
-                    spreadsheetId: foglio.spreadsheetId,
-                    range: `'${tab.replace(/'/g, "''")}'`,
-                    valueRenderOption: 'FORMATTED_VALUE',
-                    dateTimeRenderOption: 'FORMATTED_STRING',
-                });
-                const rows = resp.data.values || [];
-                const { consegne, ritorni, scarti, struttura } = parseTabRows(rows, foglio.nome, tab);
-
-                if (!struttura) {
-                    det.tabs.push({ tab, warn: 'struttura non riconosciuta' });
-                    continue;
-                }
-
-                // Upsert in batch da 400
-                for (let i = 0; i < consegne.length; i += 400) {
-                    const batch = db.batch();
-                    consegne.slice(i, i + 400).forEach(c => {
-                        const docRef = db.collection('consegne').doc(syncConsegnaDocId(c));
-                        batch.set(docRef, {
-                            ...c,
-                            data: admin.firestore.Timestamp.fromDate(c.data),
-                            syncedAt: admin.firestore.FieldValue.serverTimestamp(),
-                            fonteTipo: 'drive_sync',
-                        }, { merge: true });
-                    });
-                    await batch.commit();
-                }
-
-                det.tabs.push({ tab, consegne: consegne.length, ritorniEsclusi: ritorni, scarti });
-                det.upserted += consegne.length;
-                totRitorni += ritorni;
-                totScarti += scarti;
-            }
-            totUpserted += det.upserted;
-        } catch (e) {
-            det.errore = e.message;
-            console.error(`[sync] ${foglio.nome}:`, e.message);
-        }
-        dettagli.push(det);
-    }
-
-    const risultato = {
-        at: admin.firestore.FieldValue.serverTimestamp(),
-        mesi: mesiTarget,
-        serviceAccount: saEmail,
-        totUpserted,
-        totRitorniEsclusi: totRitorni,
-        totScarti,
-        dettagli: JSON.parse(JSON.stringify(dettagli)),
-        errori: dettagli.filter(d => d.errore).length,
-    };
-    await db.collection('syncStatus').doc('last').set(risultato);
-    await db.collection('syncLog').add(risultato);
-    console.log('[sync] done:', JSON.stringify({ mesi: mesiTarget, totUpserted, errori: risultato.errori }));
-    return risultato;
-}
-
-function mesiTargetDefault() {
-    const now = meseInRome(new Date());
-    const mesi = [now.mese];
-    // Primi 10 giorni del mese: sincronizza anche il mese precedente
-    // per catturare righe aggiunte/corrette in ritardo dalle filiali
-    if (now.day <= 10) mesi.push(mesePrecedente(now.mese));
-    return mesi;
-}
-
-// Sync automatica notturna (03:30 Europe/Rome, dopo la chiusura giornata)
-// ⚠️ DISATTIVATO (non esportato): la pipeline di produzione è quella dei
-// GAS in scripts/gas (v1 giornalieri + v4.2 mensili) che scrive su
-// `consegne` con schema ID buildStableId. Riattivare questo canale solo
-// dopo aver allineato syncConsegnaDocId a quello schema, altrimenti le
-// stesse consegne verrebbero duplicate con ID diversi.
-const _syncConsegneScheduled_disattivato = onSchedule(
-    {
-        schedule: '30 3 * * *',
-        timeZone: 'Europe/Rome',
-        region: 'europe-west1',
-        memory: '512MiB',
-        timeoutSeconds: 540,
-    },
-    async () => {
-        await eseguiSyncConsegne(mesiTargetDefault());
-    }
-);
-
-// Trigger manuale (admin/staff): opzionale { mese: 'YYYY-MM' } per backfill
-// ⚠️ DISATTIVATO (non esportato): la pipeline di produzione è quella dei
-// GAS in scripts/gas (v1 giornalieri + v4.2 mensili) che scrive su
-// `consegne` con schema ID buildStableId. Riattivare questo canale solo
-// dopo aver allineato syncConsegnaDocId a quello schema, altrimenti le
-// stesse consegne verrebbero duplicate con ID diversi.
-const _syncConsegne_disattivato = onRequest(
-    {
-        region: 'europe-west1',
-        cors: ALLOWED_ORIGINS,
-        memory: '512MiB',
-        timeoutSeconds: 540,
-    },
-    async (req, res) => {
-        const origin = req.headers.origin || '';
-        const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-        res.set('Access-Control-Allow-Origin', allowedOrigin);
-        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
-        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-
-        const authHeader = req.headers.authorization || '';
-        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
-        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
-
-        let email = '';
-        try {
-            const decoded = await admin.auth().verifyIdToken(idToken);
-            email = (decoded.email || '').toLowerCase();
-        } catch (e) {
-            res.status(401).json({ error: 'Token non valido' });
-            return;
-        }
-        const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com', 'alessandra@avrlogisticarl.com', 'guido@last-mile.it'];
-        if (!ADMIN_EMAILS.includes(email)) { res.status(403).json({ error: 'Non autorizzato' }); return; }
-
-        const meseSpecifico = (req.body && req.body.mese) || null;
-        const mesi = (meseSpecifico && /^\d{4}-\d{2}$/.test(meseSpecifico))
-            ? [meseSpecifico]
-            : mesiTargetDefault();
-
-        try {
-            const r = await eseguiSyncConsegne(mesi);
-            res.json({ success: true, mesi, totUpserted: r.totUpserted, errori: r.errori, dettagli: r.dettagli });
-        } catch (e) {
-            console.error('[syncConsegne]', e);
-            res.status(500).json({ error: e.message });
-        }
-    }
-);
-
-// ═══════════════════════════════════════════════════════════════════
-// INGEST CONSEGNE DA APPS SCRIPT (push)
-//
-// Alternativa alla lettura diretta via Sheets API che NON richiede di
-// condividere i fogli col service account: lo script GAS
-// (scripts/sync-consegne-firestore.gs) gira sull'account che ha già
-// accesso ai fogli filiale e spinge i record qui.
-//
-// Protetto da secret condiviso (SYNC_INGEST_SECRET):
-//   firebase functions:secrets:set SYNC_INGEST_SECRET
-// e stesso valore nelle Script Properties del GAS (chiave SYNC_SECRET).
-//
-// Stesso docId di dedup del sync/import → nessun duplicato anche se
-// convivono più canali di importazione.
-// ═══════════════════════════════════════════════════════════════════
-
-const SYNC_INGEST_SECRET = defineSecret('SYNC_INGEST_SECRET');
-
-// ⚠️ DISATTIVATO (non esportato): la pipeline di produzione è quella dei
-// GAS in scripts/gas (v1 giornalieri + v4.2 mensili) che scrive su
-// `consegne` con schema ID buildStableId. Riattivare questo canale solo
-// dopo aver allineato syncConsegnaDocId a quello schema, altrimenti le
-// stesse consegne verrebbero duplicate con ID diversi.
-const _ingestConsegne_disattivato = onRequest(
-    {
-        region: 'europe-west1',
-        secrets: [SYNC_INGEST_SECRET],
-        memory: '512MiB',
-        timeoutSeconds: 300,
-    },
-    async (req, res) => {
-        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
-
-        const secret = req.headers['x-sync-secret'] || '';
-        if (!secret || secret !== SYNC_INGEST_SECRET.value()) {
-            res.status(401).json({ error: 'Secret non valido' });
-            return;
-        }
-
-        const body = req.body || {};
-
-        try {
-            // ── Chiusura run: salva riepilogo in syncStatus/syncLog ──
-            if (body.type === 'summary') {
-                const summary = {
-                    at: admin.firestore.FieldValue.serverTimestamp(),
-                    fonteTipo: 'apps_script',
-                    mesi: Array.isArray(body.mesi) ? body.mesi.slice(0, 12) : [],
-                    totUpserted: Number(body.totUpserted) || 0,
-                    totRitorniEsclusi: Number(body.totRitorniEsclusi) || 0,
-                    totScarti: Number(body.totScarti) || 0,
-                    errori: Number(body.errori) || 0,
-                    dettagli: Array.isArray(body.dettagli) ? body.dettagli.slice(0, 100) : [],
-                };
-                await db.collection('syncStatus').doc('last').set(summary);
-                await db.collection('syncLog').add(summary);
-                res.json({ success: true });
-                return;
-            }
-
-            // ── Batch di record ──
-            const records = Array.isArray(body.records) ? body.records : [];
-            if (records.length === 0) { res.json({ success: true, upserted: 0 }); return; }
-            if (records.length > 500) { res.status(400).json({ error: 'Max 500 record per richiesta' }); return; }
-
-            const validi = [];
-            let scarti = 0;
-            for (const r of records) {
-                // Validazione minima anti-garbage
-                if (!r || typeof r !== 'object') { scarti++; continue; }
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.data || ''))) { scarti++; continue; }
-                const filiale = String(r.filiale || '').trim().replace(/\.0$/, '');
-                if (!filiale && !r.cliente) { scarti++; continue; }
-                const importo = Number(r.importo);
-                validi.push({
-                    filiale,
-                    data: new Date(r.data + 'T12:00:00Z'),
-                    mese: String(r.data).slice(0, 7),
-                    cliente: r.cliente ? String(r.cliente).slice(0, 120) : null,
-                    provincia: r.provincia ? String(r.provincia).slice(0, 4) : null,
-                    citta: r.citta ? String(r.citta).slice(0, 80) : null,
-                    indirizzo: r.indirizzo ? String(r.indirizzo).slice(0, 160) : null,
-                    importo: isNaN(importo) ? 0 : Math.max(0, Math.min(importo, 100000)),
-                    fascia: r.fascia ? String(r.fascia).slice(0, 20) : null,
-                    driver: r.driver ? String(r.driver).slice(0, 60) : null,
-                    targa: r.targa ? String(r.targa).slice(0, 20) : null,
-                    consegnata: r.consegnata === true,
-                    nonConsegnata: r.nonConsegnata === true,
-                    prestazione: r.prestazione ? String(r.prestazione).slice(0, 20) : null,
-                    orderId: r.orderId ? String(r.orderId).slice(0, 40) : null,
-                    pagamento: r.pagamento ? String(r.pagamento).slice(0, 30) : null,
-                    codiceDomicilio: r.codiceDomicilio ? String(r.codiceDomicilio).slice(0, 40) : null,
-                    area: syncAreaFromProvincia(r.provincia),
-                    fonte: r.fonte ? String(r.fonte).slice(0, 80) : 'apps_script',
-                    sheetName: r.sheetName ? String(r.sheetName).slice(0, 40) : null,
-                });
-            }
-
-            for (let i = 0; i < validi.length; i += 400) {
-                const batch = db.batch();
-                validi.slice(i, i + 400).forEach(c => {
-                    const docRef = db.collection('consegne').doc(syncConsegnaDocId(c));
-                    batch.set(docRef, {
-                        ...c,
-                        data: admin.firestore.Timestamp.fromDate(c.data),
-                        syncedAt: admin.firestore.FieldValue.serverTimestamp(),
-                        fonteTipo: 'apps_script',
-                    }, { merge: true });
-                });
-                await batch.commit();
-            }
-
-            res.json({ success: true, upserted: validi.length, scarti });
-        } catch (e) {
-            console.error('[ingestConsegne]', e);
-            res.status(500).json({ error: e.message });
-        }
-    }
-);
-
 // ═══════════════════════════════════════════════════════════
 // PUSH NOTIFICATIONS — Driver App (Web Push via VAPID)
 // Il client (driveravrapp/js/push.js) salva la PushSubscription in
@@ -1560,12 +1033,10 @@ exports.pushPodioMensile = onSchedule(
 
 // ═══════════════════════════════════════════════════════════════════
 // CONTROLLI AUTOMATICI GIORNALIERI — sentinella dati, ore 8:30.
+// Fonte: rapporti dell'app driver (reportDriver) e anagrafica.
 // Verifica la giornata di ieri e manda email SOLO se trova anomalie:
-//   1. sync GAS fermo (nessuna scrittura da >36h)
-//   2. filiali mute (attive nei 7gg precedenti ma 0 consegne ieri)
-//   3. driver con consegne Decò ma zero report app
-//   4. possibili driver non censiti in anagrafica (rider ricorrente marcato interna)
-//   5. consegne 'da verificare' (rider vuoto) e date future
+//   1. filiali mute (attive nei 7gg precedenti ma 0 rapporti ieri)
+//   2. lunedì: patenti scadute/mancanti/non verificate, driver senza rapporti da >3 gg
 // ═══════════════════════════════════════════════════════════════════
 exports.controlliAutomatici = onSchedule(
     {
@@ -1586,73 +1057,48 @@ exports.controlliAutomatici = onSchedule(
         const dayOf = (v) => { const d = v && v.toDate ? v.toDate() : new Date(v); return isNaN(d) ? null : fmt(d); };
         const norm = (s) => String(s || '').toUpperCase().replace(/['\u2019` ]/g, '').trim();
 
-        const [conSnap, repSnap, anagSnap, cfgSnap] = await Promise.all([
-            db.collection('consegne').where('mese', '==', mese).get(),
+        const [repSnap, anagSnap] = await Promise.all([
             db.collection('reportDriver').where('mese', '==', mese).get(),
             db.collection('driverAnagrafica').get(),
-            db.collection('config').doc('controlli').get(),
         ]);
-        // Rider Decò noti (config/controlli.riderDecoNoti): non nostri per
-        // conferma esplicita — la sentinella non li segnala come non censiti.
-        const decoNoti = new Set(((cfgSnap.exists && cfgSnap.data().riderDecoNoti) || []).map((x) => String(x).toUpperCase().replace(/['\u2019` ]/g, '')));
 
-        const cognomi = [];
-        // Patenti (dato autodichiarato nell'app): scadute e mancanti bloccano
-        // l'app driver; qui si avvisa l'ufficio. Solo il lunedì per non
-        // ripetere ogni giorno le stesse righe finché il driver non aggiorna.
+        // Patenti: scadute e mancanti bloccano l'app driver; qui si avvisa
+        // l'ufficio. Solo il lunedì per non ripetere ogni giorno le stesse
+        // righe finché il driver non aggiorna.
         const lunedi = new Date().getUTCDay() === 1;
         const patScadute = [], patInScadenza = [], patMancanti = [], patRespinte = [], patNonVerificate = [];
         const giorniA = (ymd) => Math.round((new Date(ymd + 'T12:00:00Z') - new Date(oggi + 'T12:00:00Z')) / 86400000);
+        const attivi = new Set();
         anagSnap.forEach((d) => {
             const x = d.data();
-            if (x.attivo !== false && x.cognome) {
-                const nome = x.cognome + ' ' + (x.nome || '');
-                const pv = x.patenteVerifica || null;
-                if (pv && pv.stato === 'respinta') patRespinte.push(nome + ' (' + String(pv.motivo || '').slice(0, 70) + ')');
-                else if (!pv || pv.stato !== 'verificata') patNonVerificate.push(nome);
-                if (!x.numeroPatente || !/^\d{4}-\d{2}-\d{2}$/.test(x.scadenzaPatente || '')) patMancanti.push(nome);
-                else {
-                    const g = giorniA(x.scadenzaPatente);
-                    if (g < 0) patScadute.push(nome + ' (' + x.scadenzaPatente + ')');
-                    else if (g <= 30) patInScadenza.push(nome + ' (' + x.scadenzaPatente + ', ' + g + ' gg)');
-                }
-            }
-            if (!x.cognome) return;
-            cognomi.push(norm(x.cognome));
-            if (Array.isArray(x.alias)) x.alias.forEach((a) => { if (a) cognomi.push(norm(a)); });
-        });
-        const matchAnag = (rider) => { const r = norm(rider); return r && cognomi.some((c) => r.includes(c) || c.includes(r)); };
-
-        let maxSync = '';
-        const filialeIeri = {}, filialePrima = {}, decoDriverIeri = {}, riderInterniIeri = {};
-        let verificaIeri = 0, dateFuture = 0;
-        const importiSospetti = [];
-        conSnap.forEach((d) => {
-            const c = d.data();
-            if (c.sync && c.sync > maxSync) maxSync = c.sync;
-            if (c.tipo && c.tipo !== 'consegna') return;
-            const day = dayOf(c.data);
-            if (!day) return;
-            if (day > oggi) dateFuture++;
-            const fil = String(c.filiale || '?');
-            if (day === ieri) {
-                filialeIeri[fil] = (filialeIeri[fil] || 0) + 1;
-                if ((c.importo || 0) > 5000) importiSospetti.push(fil + ' ' + (c.filialeNome || '') + ' — €' + c.importo.toFixed(2) + ' (' + (c.rider || c.cognome || '?') + ')');
-                if (c.tipoDriver === 'verifica') verificaIeri++;
-                const rider = norm(c.rider);
-                if (rider && c.tipoDriver === 'avr') decoDriverIeri[rider] = (decoDriverIeri[rider] || 0) + 1;
-                if (rider && c.tipoDriver === 'interna' && !matchAnag(rider) && !decoNoti.has(rider)) riderInterniIeri[rider] = (riderInterniIeri[rider] || 0) + 1;
-            } else if (day < ieri && day >= fmt(new Date(Date.now() - 8 * 86400000))) {
-                filialePrima[fil] = (filialePrima[fil] || 0) + 1;
+            if (x.attivo === false || !x.cognome) return;
+            if (x.email) attivi.add(x.email.toLowerCase());
+            const nome = x.cognome + ' ' + (x.nome || '');
+            const pv = x.patenteVerifica || null;
+            if (pv && pv.stato === 'respinta') patRespinte.push(nome + ' (' + String(pv.motivo || '').slice(0, 70) + ')');
+            else if (!pv || pv.stato !== 'verificata') patNonVerificate.push(nome);
+            if (!x.numeroPatente || !/^\d{4}-\d{2}-\d{2}$/.test(x.scadenzaPatente || '')) patMancanti.push(nome);
+            else {
+                const g = giorniA(x.scadenzaPatente);
+                if (g < 0) patScadute.push(nome + ' (' + x.scadenzaPatente + ')');
+                else if (g <= 30) patInScadenza.push(nome + ' (' + x.scadenzaPatente + ', ' + g + ' gg)');
             }
         });
 
-        const appIeri = {};
+        // Rapporti app driver: filiali "mute" (attive nei 7 gg precedenti, zero ieri)
+        // e driver attivi senza alcun rapporto da più di 3 giorni.
+        const filialeIeri = {}, filialePrima = {}, ultimoReport = {};
+        const da7 = fmt(new Date(Date.now() - 8 * 86400000));
         repSnap.forEach((d) => {
             const r = d.data();
-            if (dayOf(r.data) !== ieri) return;
-            const k = norm(r.driver);
-            appIeri[k] = (appIeri[k] || 0) + (r.numConsegne || 0);
+            const day = dayOf(r.data);
+            if (!day) return;
+            const fil = String(r.filiale || '?') + (r.filialeNome ? ' ' + r.filialeNome : '');
+            const n = r.numConsegne || 0;
+            if (day === ieri) filialeIeri[fil] = (filialeIeri[fil] || 0) + n;
+            else if (day < ieri && day >= da7) filialePrima[fil] = (filialePrima[fil] || 0) + n;
+            const e = (r.driverEmail || '').toLowerCase();
+            if (e && day > (ultimoReport[e] || '')) ultimoReport[e] = day;
         });
 
         const anomalie = [];
@@ -1663,28 +1109,20 @@ exports.controlliAutomatici = onSchedule(
             if (patRespinte.length) anomalie.push('🟠 <b>Patente respinta dalla verifica AI</b> (foto non valide o dati non coerenti — da controllare in Anagrafica): ' + patRespinte.join('; '));
             if (patNonVerificate.length) anomalie.push('⚪ <b>Patente non ancora verificata con foto</b>: ' + patNonVerificate.join(', '));
         }
-        importiSospetti.forEach((x) => anomalie.push('🟣 <b>Scontrino sospetto</b> (>€5.000, probabile refuso — col prezziario vale €300): ' + x));
-        const oreDaSync = maxSync ? (Date.now() - new Date(maxSync).getTime()) / 3600000 : 999;
-        if (oreDaSync > 36) anomalie.push('🔴 <b>Sync GAS fermo</b>: ultima scrittura ' + (maxSync || 'mai') + ' (' + Math.round(oreDaSync) + ' ore fa). Controllare i trigger su script.google.com.');
-
-        if (!ieriDom && oreDaSync <= 36) {
+        if (!ieriDom) {
             Object.keys(filialePrima).forEach((fil) => {
-                if (filialePrima[fil] >= 10 && !filialeIeri[fil]) anomalie.push('🟠 <b>Filiale ' + fil + ' muta</b>: ' + filialePrima[fil] + ' consegne nei 7gg precedenti, zero ieri.');
+                if (filialePrima[fil] >= 10 && !filialeIeri[fil]) anomalie.push('🟠 <b>Filiale ' + fil + ' muta</b>: ' + filialePrima[fil] + ' consegne nei 7gg precedenti, zero rapporti ieri.');
             });
         }
-
-        Object.keys(decoDriverIeri).forEach((rider) => {
-            if (decoDriverIeri[rider] >= 3 && !Object.keys(appIeri).some((a) => a.includes(rider) || rider.includes(a))) {
-                anomalie.push('🟡 <b>App non usata</b>: ' + rider + ' — ' + decoDriverIeri[rider] + ' consegne Decò ieri, zero report app.');
-            }
+        const limite = fmt(new Date(Date.now() - 4 * 86400000));
+        const senzaReport = [];
+        anagSnap.forEach((d) => {
+            const x = d.data();
+            if (x.attivo === false || !x.email) return;
+            const e = x.email.toLowerCase();
+            if (!ultimoReport[e] || ultimoReport[e] < limite) senzaReport.push(x.cognome + ' ' + (x.nome || '') + (ultimoReport[e] ? ' (ultimo ' + ultimoReport[e].split('-').reverse().join('/') + ')' : ' (nessuno nel mese)'));
         });
-
-        Object.keys(riderInterniIeri).forEach((rider) => {
-            if (riderInterniIeri[rider] >= 5) anomalie.push('🔵 <b>Possibile driver non censito</b>: rider "' + rider + '" con ' + riderInterniIeri[rider] + ' consegne ieri, marcato interno e assente in anagrafica.');
-        });
-
-        if (verificaIeri > 0) anomalie.push('⚪ ' + verificaIeri + ' consegne di ieri <b>senza rider</b> (da verificare, escluse dal fatturato automatico).');
-        if (dateFuture > 0) anomalie.push('⚪ ' + dateFuture + ' consegne nel mese con <b>data futura</b> (refuso sul foglio).');
+        if (senzaReport.length && lunedi) anomalie.push('🟡 <b>App non usata da più di 3 giorni</b>: ' + senzaReport.join(', '));
 
         if (anomalie.length === 0) { console.log('[controlliAutomatici] ' + ieri + ': tutto ok'); return; }
 
@@ -1978,7 +1416,7 @@ exports.ficSyncFatture = onRequest(
 // files vuoto = solo ricalcolo (dopo una cancellazione dal gestionale).
 // ═══════════════════════════════════════════════════════════════════
 const BustePaga = require('./bustepaga-core.js');
-const BUSTA_MAX_BYTES = 10 * 1024 * 1024;
+const BUSTA_MAX_BYTES = 50 * 1024 * 1024;
 
 async function ricalcolaCostiMese(mese) {
     const snap = await db.collection('bustePaga').where('mese', '==', mese).get();
@@ -1992,7 +1430,7 @@ async function ricalcolaCostiMese(mese) {
 }
 
 exports.elaboraBustePaga = onRequest(
-    { secrets: [ANTHROPIC_API_KEY], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 540, memory: '1GiB' },
+    { secrets: [ANTHROPIC_API_KEY], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 540, memory: '2GiB' },
     async (req, res) => {
         const origin = req.headers.origin || '';
         res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
@@ -2019,56 +1457,98 @@ exports.elaboraBustePaga = onRequest(
         const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
         const modello = 'claude-opus-5-5';
         const esiti = [];
+        const { PDFDocument } = require('pdf-lib');
+
+        // Legge UNA pagina (un cedolino) con Claude
+        async function leggiPagina(pdfB64) {
+            const msg = await client.messages.parse({
+                model: modello,
+                max_tokens: 4096,
+                system: BustePaga.SYSTEM_PROMPT,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfB64 } },
+                        { type: 'text', text: 'Trascrivi i dati del cedolino nel formato richiesto. Il mese atteso dall\'ufficio è ' + mese + ': se il cedolino riporta un periodo diverso, indicalo comunque fedelmente. Se la pagina è solo una continuazione senza nome del lavoratore, imposta is_busta_paga=false.' },
+                    ],
+                }],
+                output_config: { effort: 'medium', format: { type: 'json_schema', schema: BustePaga.BUSTA_SCHEMA } },
+            });
+            if (msg.stop_reason === 'refusal') throw new Error('Lettura rifiutata dal modello');
+            if (!msg.parsed_output) throw new Error('Risposta non interpretabile');
+            return msg.parsed_output;
+        }
+
+        // Il consulente manda spesso un PDF unico con tutti i cedolini: una
+        // pagina = un cedolino. Si spezza per pagina e si legge in parallelo (5 alla volta).
+        async function paginePdf(buf) {
+            const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+            const n = src.getPageCount();
+            if (n <= 1) return [buf.toString('base64')];
+            const out = [];
+            for (let i = 0; i < Math.min(n, 150); i++) {
+                const d = await PDFDocument.create();
+                const [pg] = await d.copyPages(src, [i]);
+                d.addPage(pg);
+                out.push(Buffer.from(await d.save()).toString('base64'));
+            }
+            return out;
+        }
 
         for (const path of files) {
-            const esito = { file: path, stato: 'errore', messaggio: '' };
-            esiti.push(esito);
+            const nomeFile = path.split('/').pop();
             try {
                 const file = bucket.file(path);
                 const [exists] = await file.exists();
-                if (!exists) { esito.messaggio = 'File non trovato'; continue; }
+                if (!exists) { esiti.push({ file: path, stato: 'errore', messaggio: 'File non trovato' }); continue; }
                 const [meta] = await file.getMetadata();
-                if (Number(meta.size || 0) > BUSTA_MAX_BYTES) { esito.messaggio = 'PDF troppo grande (max 10 MB)'; continue; }
+                if (Number(meta.size || 0) > BUSTA_MAX_BYTES) { esiti.push({ file: path, stato: 'errore', messaggio: 'PDF troppo grande (max 50 MB)' }); continue; }
                 const [buf] = await file.download();
+                const pagine = await paginePdf(buf);
 
-                const msg = await client.messages.parse({
-                    model: modello,
-                    max_tokens: 4096,
-                    system: BustePaga.SYSTEM_PROMPT,
-                    messages: [{
-                        role: 'user',
-                        content: [
-                            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } },
-                            { type: 'text', text: 'Trascrivi i dati del cedolino nel formato richiesto. Il mese atteso dall\'ufficio è ' + mese + ': se il cedolino riporta un periodo diverso, indicalo comunque fedelmente.' },
-                        ],
-                    }],
-                    output_config: { effort: 'medium', format: { type: 'json_schema', schema: BustePaga.BUSTA_SCHEMA } },
+                const letture = new Array(pagine.length);
+                let idx = 0;
+                await Promise.all(new Array(Math.min(5, pagine.length)).fill(0).map(async () => {
+                    while (idx < pagine.length) {
+                        const i = idx++;
+                        try { letture[i] = { ok: true, e: await leggiPagina(pagine[i]) }; }
+                        catch (err) { letture[i] = { ok: false, err: err.message || String(err) }; }
+                    }
+                }));
+
+                // Unione per dipendente: se un cedolino occupa due pagine tengo la lettura col netto
+                const perId = {};
+                letture.forEach((l, i) => {
+                    const pag = pagine.length > 1 ? ' (pag. ' + (i + 1) + ')' : '';
+                    if (!l.ok) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + pag + ': ' + l.err }); return; }
+                    const e = l.e;
+                    if (!e.is_busta_paga) { if (pagine.length === 1) esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': non sembra un cedolino' + (e.note ? ' — ' + e.note : '') }); return; }
+                    if (!e.leggibile || (!e.cognome && !e.codice_fiscale)) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + pag + ': cedolino non leggibile' + (e.note ? ' — ' + e.note : '') }); return; }
+                    const id = BustePaga.idBusta(mese, e);
+                    if (!perId[id] || (e.netto_a_pagare > 0 && !(perId[id].netto_a_pagare > 0))) perId[id] = e;
                 });
-                if (msg.stop_reason === 'refusal') { esito.messaggio = 'Lettura rifiutata dal modello'; continue; }
-                const e = msg.parsed_output;
-                if (!e) { esito.messaggio = 'Risposta non interpretabile'; continue; }
-                if (!e.is_busta_paga) { esito.messaggio = 'Il PDF non sembra un cedolino' + (e.note ? ': ' + e.note : ''); continue; }
-                if (!e.leggibile || (!e.cognome && !e.codice_fiscale)) { esito.messaggio = 'Cedolino non leggibile' + (e.note ? ': ' + e.note : ''); continue; }
 
-                const cat = BustePaga.categoriaDipendente(e, anagrafica);
-                const id = BustePaga.idBusta(mese, e);
-                const avvisi = [];
-                if (e.periodo && e.periodo !== mese) avvisi.push('Il cedolino è di ' + e.periodo + ', caricato su ' + mese);
-                if (!(e.netto_a_pagare > 0)) avvisi.push('Netto a pagare non trovato');
-                if (cat.categoria === 'ufficio' && !/RIZZUTO|FARO/.test(BustePaga.norm(e.cognome))) avvisi.push('Non è in anagrafica driver: contato come ufficio (HR)');
-                if (e.note) avvisi.push(e.note);
-                const doc = {
-                    mese, periodoCedolino: e.periodo || null,
-                    cognome: e.cognome || '', nome: e.nome || '', codiceFiscale: (e.codice_fiscale || '').toUpperCase(),
-                    netto: Number(e.netto_a_pagare) || 0, lordo: Number(e.totale_competenze) || 0, costoAzienda: Number(e.costo_azienda) || 0,
-                    categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail, citta: cat.citta,
-                    file: path, stato: 'ok', avvisi, modello,
-                    elaboratoIl: new Date().toISOString(), elaboratoDa: email,
-                };
-                await db.collection('bustePaga').doc(id).set(doc);
-                esito.stato = 'ok'; esito.id = id; esito.dipendente = (e.cognome + ' ' + e.nome).trim(); esito.netto = doc.netto; esito.categoria = cat.categoria; esito.avvisi = avvisi;
+                for (const id of Object.keys(perId)) {
+                    const e = perId[id];
+                    const cat = BustePaga.categoriaDipendente(e, anagrafica);
+                    const avvisi = [];
+                    if (e.periodo && e.periodo !== mese) avvisi.push('Il cedolino è di ' + e.periodo + ', caricato su ' + mese);
+                    if (!(e.netto_a_pagare > 0)) avvisi.push('Netto a pagare non trovato');
+                    if (cat.categoria === 'ufficio' && !/RIZZUTO|FARO/.test(BustePaga.norm(e.cognome))) avvisi.push('Non è in anagrafica driver: contato come ufficio (HR)');
+                    if (e.note) avvisi.push(e.note);
+                    const doc = {
+                        mese, periodoCedolino: e.periodo || null,
+                        cognome: e.cognome || '', nome: e.nome || '', codiceFiscale: (e.codice_fiscale || '').toUpperCase(),
+                        netto: Number(e.netto_a_pagare) || 0, lordo: Number(e.totale_competenze) || 0, costoAzienda: Number(e.costo_azienda) || 0,
+                        categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail, citta: cat.citta,
+                        file: path, stato: 'ok', avvisi, modello,
+                        elaboratoIl: new Date().toISOString(), elaboratoDa: email,
+                    };
+                    await db.collection('bustePaga').doc(id).set(doc);
+                    esiti.push({ file: path, stato: 'ok', id, dipendente: (e.cognome + ' ' + e.nome).trim(), netto: doc.netto, categoria: cat.categoria, avvisi });
+                }
             } catch (err) {
-                esito.messaggio = 'Errore lettura: ' + (err.message || err);
+                esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': ' + (err.message || err) });
                 console.error('[elaboraBustePaga] ' + path + ': ' + (err.message || err));
             }
         }

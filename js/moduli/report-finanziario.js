@@ -449,7 +449,7 @@ async function rfCaricaBuste(files) {
             await firebase.storage().ref(path).put(lista[i], { contentType: 'application/pdf' });
             paths.push(path);
         }
-        if (stato) stato.textContent = 'Lettura di ' + paths.length + ' cedolini in corso (circa ' + Math.ceil(paths.length * 12 / 60) + ' min)…';
+        if (stato) stato.textContent = 'Lettura dei cedolini in corso (un PDF con tutte le buste va bene: circa 1 minuto ogni 30 pagine)…';
         var out = await ficCall('elaboraBustePaga', { mese: mese, files: paths });
         var ok = out.esiti.filter(function(x) { return x.stato === 'ok'; }).length;
         var ko = out.esiti.filter(function(x) { return x.stato !== 'ok'; });
