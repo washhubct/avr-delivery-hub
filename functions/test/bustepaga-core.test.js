@@ -49,9 +49,10 @@ test('ricalcolaCosti: netti per categoria, solo buste ok', () => {
         { stato: 'ok', categoria: 'faro', netto: 2000, lordo: 2700 },
         { stato: 'ok', categoria: 'ufficio', netto: 1200, lordo: 1600 },
         { stato: 'errore', categoria: 'driver', netto: 9999 },
-        { stato: 'ok', categoria: 'washhub', netto: 700, lordo: 900 },
+        { stato: 'ok', categoria: 'washhub', netto: 700, lordo: 900, imponibileInps: 1000, contributiDipendente: 92, irpefNetta: 50, addizionali: 8 },
     ]);
     assert.equal(t.washhub, 700); assert.equal(t.nWashhub, 1);
+    assert.equal(t.imponibileInpsWashhub, 1000); assert.equal(t.ritenuteDipendenteWashhub, 150); assert.equal(t.imponibileInps, 0);
     assert.equal(t.compensiDriver, 2900.5);
     assert.equal(t.nettoRizzuto, 1600);
     assert.equal(t.nettoFaro, 2000);

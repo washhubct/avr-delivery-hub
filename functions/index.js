@@ -1435,7 +1435,11 @@ async function ricalcolaCostiMese(mese, anagrafica, cfg) {
     }
     const t = BustePaga.ricalcolaCosti(buste);
     const upd = { mese, compensiDriver: t.compensiDriver, nettoRizzuto: t.nettoRizzuto, nettoFaro: t.nettoFaro, hr: t.hr,
-        bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, nWashhub: t.nWashhub, washhubNetti: t.washhub, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, perCitta: t.perCitta, aggiornatoIl: new Date().toISOString() } };
+        bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, nWashhub: t.nWashhub, washhubNetti: t.washhub, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, perCitta: t.perCitta,
+            imponibileInps: t.imponibileInps, imponibileInpsWashhub: t.imponibileInpsWashhub, ritenuteDipendente: t.ritenuteDipendente, ritenuteDipendenteWashhub: t.ritenuteDipendenteWashhub, tfrMese: t.tfrMese, tfrMeseWashhub: t.tfrMeseWashhub,
+            // quota dell'F24 (unico per Last Mile S.r.l.) attribuibile a Wash Hub, in proporzione all'imponibile INPS
+            quotaWashhubF24: (t.imponibileInps + t.imponibileInpsWashhub) > 0 ? Math.round(t.imponibileInpsWashhub / (t.imponibileInps + t.imponibileInpsWashhub) * 10000) / 10000 : 0,
+            aggiornatoIl: new Date().toISOString() } };
     if (t.nBuste === 0) { upd.compensiDriver = admin.firestore.FieldValue.delete(); upd.nettoRizzuto = admin.firestore.FieldValue.delete(); upd.nettoFaro = admin.firestore.FieldValue.delete(); upd.hr = admin.firestore.FieldValue.delete(); }
     await db.collection('costiMensili').doc(mese).set(upd, { merge: true });
     return t;
@@ -1553,6 +1557,7 @@ exports.elaboraBustePaga = onRequest(
                         mese, periodoCedolino: e.periodo || null,
                         cognome: e.cognome || '', nome: e.nome || '', codiceFiscale: (e.codice_fiscale || '').toUpperCase(),
                         netto: Number(e.netto_a_pagare) || 0, lordo: Number(e.totale_competenze) || 0, costoAzienda: Number(e.costo_azienda) || 0,
+                        imponibileInps: Number(e.imponibile_inps) || 0, contributiDipendente: Number(e.contributi_dipendente) || 0, irpefNetta: Number(e.irpef_netta) || 0, addizionali: Number(e.addizionali) || 0, tfrMese: Number(e.tfr_mese) || 0,
                         categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail, citta: cat.citta,
                         file: path, stato: 'ok', avvisi, modello,
                         elaboratoIl: new Date().toISOString(), elaboratoDa: email,

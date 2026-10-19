@@ -92,6 +92,12 @@ async function renderReportFinanziario() {
         var val, origine = '';
         if (v.daFattura && haRicevute && perVoce[v.key] !== undefined) { val = perVoce[v.key]; origine = ' <span style="font-size:10px;color:var(--accent)">(da fatture)</span>'; }
         else if (haBuste && VOCI_BUSTE.indexOf(v.key) >= 0) { val = parseFloat(costiData[v.key]) || 0; origine = ' <span style="font-size:10px;color:var(--accent)">(da buste paga)</span>'; }
+        else if (v.key === 'f24' && haBuste && costiData.bustePaga.quotaWashhubF24 > 0) {
+            // F24 unico per la società: la quota Wash Hub (pro-quota imponibile INPS dalle buste) non è un costo Decò
+            var q = costiData.bustePaga.quotaWashhubF24;
+            val = (costiData.f24 !== undefined ? parseFloat(costiData.f24) || 0 : v.default) * (1 - q);
+            origine = ' <span style="font-size:10px;color:var(--accent)">(quota Last Mile ' + Math.round((1 - q) * 100) + '%, il ' + Math.round(q * 100) + '% è Wash Hub)</span>';
+        }
         else if (v.key === 'compensiDriver') val = compensiDriver;
         else val = costiData[v.key] !== undefined ? parseFloat(costiData[v.key]) || 0 : (v.default || 0);
         valori[v.key] = val;
@@ -379,9 +385,11 @@ async function renderStoricoFinanziario() {
             var perVoce = (tot && tot.costiPerVoce) || {};
             var haRicevute = !!(fm && fm.ricevuteDisponibili !== false && (fm.ricevute || []).length);
             var totC = 0;
+            var qWH = (costi.bustePaga && costi.bustePaga.n > 0 && costi.bustePaga.quotaWashhubF24) || 0;
             COSTI_VOCI.forEach(function(v) {
                 if (v.daFattura && haRicevute && perVoce[v.key] !== undefined) totC += perVoce[v.key];
                 else if (v.key === 'compensiDriver') totC += parseFloat(costi.compensiDriver) || 0;
+                else if (v.key === 'f24') totC += (costi.f24 !== undefined ? parseFloat(costi.f24) || 0 : v.default) * (1 - qWH);
                 else totC += costi[v.key] !== undefined ? parseFloat(costi[v.key]) || 0 : (v.default || 0);
             });
             var ricavi = tot ? tot.ricaviImponibile : 0;
@@ -414,7 +422,7 @@ async function renderBustePaga(mese, costiData) {
         snap.forEach(function(d) { buste.push(Object.assign({ id: d.id }, d.data())); });
         buste.sort(function(a, b) { return (a.categoria + a.cognome).localeCompare(b.categoria + b.cognome); });
         var bp = costiData && costiData.bustePaga;
-        if (riep) riep.textContent = bp && bp.n ? bp.n + ' cedolini Last Mile · netti driver ' + formatCurrency(costiData.compensiDriver || 0) + ' · lordo ' + formatCurrency(bp.lordoTotale || 0) + (bp.nWashhub ? ' · Wash Hub: ' + bp.nWashhub + ' cedolini, netti ' + formatCurrency(bp.washhubNetti || 0) + ' (esclusi)' : '') : '';
+        if (riep) riep.textContent = bp && bp.n ? bp.n + ' cedolini Last Mile · netti driver ' + formatCurrency(costiData.compensiDriver || 0) + ' · lordo ' + formatCurrency(bp.lordoTotale || 0) + (bp.ritenuteDipendente ? ' · ritenute dipendenti ' + formatCurrency(bp.ritenuteDipendente) : '') + (bp.nWashhub ? ' · Wash Hub: ' + bp.nWashhub + ' cedolini, netti ' + formatCurrency(bp.washhubNetti || 0) + ', ' + Math.round((bp.quotaWashhubF24 || 0) * 100) + '% dell\'F24 (esclusi)' : '') : '';
         el.innerHTML = buste.map(function(b) {
             var avvisi = (b.avvisi || []).length ? '<div style="font-size:11px;color:var(--warning)">⚠️ ' + escapeHtml(b.avvisi.join(' · ')) + '</div>' : '';
             return '<tr' + (b.categoria === 'washhub' ? ' style="opacity:.5"' : '') + '>' +

@@ -6,7 +6,7 @@
 const BUSTA_SCHEMA = {
     type: 'object',
     additionalProperties: false,
-    required: ['is_busta_paga', 'leggibile', 'cognome', 'nome', 'codice_fiscale', 'periodo', 'netto_a_pagare', 'totale_competenze', 'costo_azienda', 'note'],
+    required: ['is_busta_paga', 'leggibile', 'cognome', 'nome', 'codice_fiscale', 'periodo', 'netto_a_pagare', 'totale_competenze', 'costo_azienda', 'imponibile_inps', 'contributi_dipendente', 'irpef_netta', 'addizionali', 'tfr_mese', 'note'],
     properties: {
         is_busta_paga: { type: 'boolean', description: 'true se il documento è un cedolino / busta paga (prospetto paga mensile di un lavoratore)' },
         leggibile: { type: 'boolean', description: 'false se i campi essenziali (nome, periodo, netto) non sono leggibili' },
@@ -17,6 +17,11 @@ const BUSTA_SCHEMA = {
         netto_a_pagare: { type: 'number', description: 'Importo "NETTO A PAGARE" / "NETTO DEL MESE" in euro, 0 se assente' },
         totale_competenze: { type: 'number', description: 'Totale competenze lorde del mese (retribuzione lorda), 0 se assente' },
         costo_azienda: { type: 'number', description: 'Costo complessivo per l\'azienda se stampato sul cedolino (es. "COSTO AZIENDA", "COSTO TOTALE"), altrimenti 0' },
+        imponibile_inps: { type: 'number', description: 'Imponibile previdenziale del mese: riquadro ENTE-VOCE "IVS" colonna IMPONIBILE (o "IMPONIBILE INPS"), 0 se assente' },
+        contributi_dipendente: { type: 'number', description: 'Contributi previdenziali a carico del lavoratore del mese: "TOTALE CONTRIBUTI" (IVS + altri), 0 se assente' },
+        irpef_netta: { type: 'number', description: 'IRPEF netta trattenuta nel mese: "TOTALE IRPEF MESE" (lorda meno detrazioni) più eventuale conguaglio/trattenuta TS, 0 se assente' },
+        addizionali: { type: 'number', description: 'Addizionali regionale e comunale trattenute nel mese: "TOT. ADDIZIONALI", 0 se assente' },
+        tfr_mese: { type: 'number', description: 'TFR maturato nel mese ("TFR MESE"), 0 se assente' },
         note: { type: 'string', description: 'SOLO anomalie che l\'ufficio deve sapere, in una frase (max 150 caratteri): più cedolini nello stesso PDF, totali che non tornano, tredicesima/quattordicesima, TFR liquidato, cedolino di conguaglio. Stringa vuota se è tutto regolare. Non commentare il mese atteso né l\'assenza del costo azienda: li gestisce il sistema.' },
     },
 };
@@ -24,6 +29,7 @@ const BUSTA_SCHEMA = {
 const SYSTEM_PROMPT = 'Sei l\'addetto amministrativo di una società di logistica italiana (Last Mile SRL). '
     + 'Ricevi il PDF di un cedolino paga (busta paga) emesso dal consulente del lavoro e devi trascrivere fedelmente i dati richiesti. '
     + 'Trascrivi SOLO ciò che è stampato: non stimare, non calcolare importi che non vedi (se il costo azienda non è stampato metti 0). '
+    + 'I campi previdenziali/fiscali stanno nei riquadri in basso: imponibile e contributi del lavoratore nel riquadro ENTE-VOCE (IVS, Altri, TOTALE CONTRIBUTI); IRPEF nel riquadro REDDITO/IRPEF (TOTALE IRPEF MESE); addizionali in TOT. ADDIZIONALI. '
     + 'Gli importi sono in euro con separatore decimale italiano (es. 1.234,56 = 1234.56). '
     + 'Il periodo è il mese di competenza della retribuzione indicato sul cedolino (es. "SETTEMBRE 2026" → "2026-09"). '
     + 'Se il PDF contiene più cedolini riporta il primo e segnalalo in note. Se il documento non è un cedolino imposta is_busta_paga=false.';
@@ -70,11 +76,19 @@ function idBusta(mese, estratto) {
 // netto a pagare per categoria. Il costo pieno = netti + F24 (contributi e
 // ritenute, inserito a mano) → per questo si usa il netto, non il lordo.
 function ricalcolaCosti(buste) {
-    const t = { compensiDriver: 0, nettoRizzuto: 0, nettoFaro: 0, hr: 0, washhub: 0, nBuste: 0, nDriver: 0, nUfficio: 0, nWashhub: 0, lordoTotale: 0, costoAziendaTotale: 0, perCitta: {} };
+    const t = { compensiDriver: 0, nettoRizzuto: 0, nettoFaro: 0, hr: 0, washhub: 0, nBuste: 0, nDriver: 0, nUfficio: 0, nWashhub: 0, lordoTotale: 0, costoAziendaTotale: 0, perCitta: {},
+        // base per ripartire l'F24 (unico per la società) tra Last Mile e Wash Hub
+        imponibileInps: 0, imponibileInpsWashhub: 0, ritenuteDipendente: 0, ritenuteDipendenteWashhub: 0, tfrMese: 0, tfrMeseWashhub: 0 };
     buste.forEach((b) => {
         if (b.stato !== 'ok') return;
         const netto = Number(b.netto) || 0;
-        if (b.categoria === 'washhub') { t.washhub += netto; t.nWashhub++; return; } // altra attività: non entra nei costi Last Mile
+        const rit = (Number(b.contributiDipendente) || 0) + (Number(b.irpefNetta) || 0) + (Number(b.addizionali) || 0);
+        if (b.categoria === 'washhub') { // altra attività: non entra nei costi Last Mile
+            t.washhub += netto; t.nWashhub++;
+            t.imponibileInpsWashhub += Number(b.imponibileInps) || 0; t.ritenuteDipendenteWashhub += rit; t.tfrMeseWashhub += Number(b.tfrMese) || 0;
+            return;
+        }
+        t.imponibileInps += Number(b.imponibileInps) || 0; t.ritenuteDipendente += rit; t.tfrMese += Number(b.tfrMese) || 0;
         t.nBuste++;
         t.lordoTotale += Number(b.lordo) || 0;
         t.costoAziendaTotale += Number(b.costoAzienda) || 0;
