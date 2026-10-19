@@ -1418,12 +1418,24 @@ exports.ficSyncFatture = onRequest(
 const BustePaga = require('./bustepaga-core.js');
 const BUSTA_MAX_BYTES = 50 * 1024 * 1024;
 
-async function ricalcolaCostiMese(mese) {
+async function ricalcolaCostiMese(mese, anagrafica, cfg) {
     const snap = await db.collection('bustePaga').where('mese', '==', mese).get();
-    const buste = []; snap.forEach((d) => buste.push(d.data()));
+    const buste = [];
+    // Riclassifica ogni cedolino con la config corrente (es. nuovo nome in washhub)
+    for (const d of snap.docs) {
+        const b = d.data();
+        if (b.stato === 'ok' && anagrafica) {
+            const cat = BustePaga.categoriaDipendente({ cognome: b.cognome, nome: b.nome, codice_fiscale: b.codiceFiscale }, anagrafica, cfg);
+            if (cat.categoria !== b.categoria || (cat.citta || null) !== (b.citta || null)) {
+                Object.assign(b, { categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail, citta: cat.citta, avvisi: (b.avvisi || []).filter((a) => !/contato come ufficio/.test(a)) });
+                await d.ref.update({ categoria: b.categoria, driverId: b.driverId, driverEmail: b.driverEmail, citta: b.citta, avvisi: b.avvisi });
+            }
+        }
+        buste.push(b);
+    }
     const t = BustePaga.ricalcolaCosti(buste);
     const upd = { mese, compensiDriver: t.compensiDriver, nettoRizzuto: t.nettoRizzuto, nettoFaro: t.nettoFaro, hr: t.hr,
-        bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, perCitta: t.perCitta, aggiornatoIl: new Date().toISOString() } };
+        bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, nWashhub: t.nWashhub, washhubNetti: t.washhub, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, perCitta: t.perCitta, aggiornatoIl: new Date().toISOString() } };
     if (t.nBuste === 0) { upd.compensiDriver = admin.firestore.FieldValue.delete(); upd.nettoRizzuto = admin.firestore.FieldValue.delete(); upd.nettoFaro = admin.firestore.FieldValue.delete(); upd.hr = admin.firestore.FieldValue.delete(); }
     await db.collection('costiMensili').doc(mese).set(upd, { merge: true });
     return t;
@@ -1452,6 +1464,7 @@ exports.elaboraBustePaga = onRequest(
 
         const anagSnap = await db.collection('driverAnagrafica').get();
         const anagrafica = []; anagSnap.forEach((d) => anagrafica.push({ id: d.id, ...d.data() }));
+        const cfgBp = (await db.collection('config').doc('bustePaga').get()).data() || {};
         const bucket = admin.storage().bucket();
         const Anthropic = require('@anthropic-ai/sdk');
         const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
@@ -1530,11 +1543,11 @@ exports.elaboraBustePaga = onRequest(
 
                 for (const id of Object.keys(perId)) {
                     const e = perId[id];
-                    const cat = BustePaga.categoriaDipendente(e, anagrafica);
+                    const cat = BustePaga.categoriaDipendente(e, anagrafica, cfgBp);
                     const avvisi = [];
                     if (e.periodo && e.periodo !== mese) avvisi.push('Il cedolino è di ' + e.periodo + ', caricato su ' + mese);
                     if (!(e.netto_a_pagare > 0)) avvisi.push('Netto a pagare non trovato');
-                    if (cat.categoria === 'ufficio' && !/RIZZUTO|FARO/.test(BustePaga.norm(e.cognome))) avvisi.push('Non è in anagrafica driver: contato come ufficio (HR)');
+                    if (cat.categoria === 'ufficio') avvisi.push('Non è in anagrafica driver: contato come ufficio (HR)');
                     if (e.note) avvisi.push(e.note);
                     const doc = {
                         mese, periodoCedolino: e.periodo || null,
@@ -1553,7 +1566,7 @@ exports.elaboraBustePaga = onRequest(
             }
         }
 
-        const totali = await ricalcolaCostiMese(mese);
+        const totali = await ricalcolaCostiMese(mese, anagrafica, cfgBp);
         console.log('[elaboraBustePaga]', email, mese, files.length + ' file, ok=' + esiti.filter((x) => x.stato === 'ok').length, JSON.stringify(totali));
         res.json({ ok: true, mese, esiti, totali });
     }

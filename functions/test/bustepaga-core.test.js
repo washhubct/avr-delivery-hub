@@ -28,6 +28,14 @@ test('categoria: responsabili e ufficio', () => {
     assert.equal(B.categoriaDipendente({ cognome: 'CASTIGLIA', nome: 'LAURA', codice_fiscale: '' }, anag).categoria, 'ufficio');
 });
 
+test('categoria: washhub da config (nome o CF), prima di tutto il resto', () => {
+    const cfg = { washhub: ['SCHIRRIPA ANTONINO', 'KUMAR', 'BRNNCL00A01C351X'] };
+    assert.equal(B.categoriaDipendente({ cognome: 'Schirripa', nome: 'Antonino', codice_fiscale: '' }, anag, cfg).categoria, 'washhub');
+    assert.equal(B.categoriaDipendente({ cognome: 'KUMAR', nome: 'PARVEEN', codice_fiscale: '' }, anag, cfg).categoria, 'washhub');
+    assert.equal(B.categoriaDipendente({ cognome: 'BRUNO', nome: '', codice_fiscale: 'BRNNCL00A01C351X' }, anag, cfg).categoria, 'washhub');
+    assert.equal(B.categoriaDipendente({ cognome: 'BRUNO', nome: '', codice_fiscale: 'BRNNCL00A01C351X' }, anag, null).categoria, 'driver');
+});
+
 test('idBusta stabile: CF se c\'è, altrimenti cognome_nome', () => {
     assert.equal(B.idBusta('2026-09', { codice_fiscale: 'BRNNCL00A01C351X', cognome: 'X', nome: 'Y' }), '2026-09_BRNNCL00A01C351X');
     assert.equal(B.idBusta('2026-09', { codice_fiscale: '', cognome: 'Di Prima', nome: 'Simone' }), '2026-09_DI_PRIMA_SIMONE');
@@ -41,7 +49,9 @@ test('ricalcolaCosti: netti per categoria, solo buste ok', () => {
         { stato: 'ok', categoria: 'faro', netto: 2000, lordo: 2700 },
         { stato: 'ok', categoria: 'ufficio', netto: 1200, lordo: 1600 },
         { stato: 'errore', categoria: 'driver', netto: 9999 },
+        { stato: 'ok', categoria: 'washhub', netto: 700, lordo: 900 },
     ]);
+    assert.equal(t.washhub, 700); assert.equal(t.nWashhub, 1);
     assert.equal(t.compensiDriver, 2900.5);
     assert.equal(t.nettoRizzuto, 1600);
     assert.equal(t.nettoFaro, 2000);

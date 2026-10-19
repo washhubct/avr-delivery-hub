@@ -402,7 +402,7 @@ async function renderStoricoFinanziario() {
 }
 
 // ── Buste paga: upload PDF in blocco → CF elaboraBustePaga (Claude legge il cedolino) ──
-var CATEGORIA_BUSTA = { driver: 'Driver', rizzuto: 'Rizzuto', faro: 'Faro', ufficio: 'Ufficio / HR' };
+var CATEGORIA_BUSTA = { driver: 'Driver', rizzuto: 'Rizzuto', faro: 'Faro', ufficio: 'Ufficio / HR', washhub: 'Wash Hub (escluso)' };
 
 async function renderBustePaga(mese, costiData) {
     var el = document.getElementById('rfTblBuste');
@@ -414,10 +414,10 @@ async function renderBustePaga(mese, costiData) {
         snap.forEach(function(d) { buste.push(Object.assign({ id: d.id }, d.data())); });
         buste.sort(function(a, b) { return (a.categoria + a.cognome).localeCompare(b.categoria + b.cognome); });
         var bp = costiData && costiData.bustePaga;
-        if (riep) riep.textContent = bp && bp.n ? bp.n + ' cedolini · netti driver ' + formatCurrency(costiData.compensiDriver || 0) + ' · lordo totale ' + formatCurrency(bp.lordoTotale || 0) + (bp.costoAziendaTotale ? ' · costo azienda stampato ' + formatCurrency(bp.costoAziendaTotale) : '') : '';
+        if (riep) riep.textContent = bp && bp.n ? bp.n + ' cedolini Last Mile · netti driver ' + formatCurrency(costiData.compensiDriver || 0) + ' · lordo ' + formatCurrency(bp.lordoTotale || 0) + (bp.nWashhub ? ' · Wash Hub: ' + bp.nWashhub + ' cedolini, netti ' + formatCurrency(bp.washhubNetti || 0) + ' (esclusi)' : '') : '';
         el.innerHTML = buste.map(function(b) {
             var avvisi = (b.avvisi || []).length ? '<div style="font-size:11px;color:var(--warning)">⚠️ ' + escapeHtml(b.avvisi.join(' · ')) + '</div>' : '';
-            return '<tr>' +
+            return '<tr' + (b.categoria === 'washhub' ? ' style="opacity:.5"' : '') + '>' +
                 '<td><strong>' + escapeHtml((b.cognome + ' ' + b.nome).trim()) + '</strong><div style="font-size:11px;color:var(--text-light)">' + escapeHtml(b.codiceFiscale || '') + '</div>' + avvisi + '</td>' +
                 '<td><span class="badge badge-info">' + (CATEGORIA_BUSTA[b.categoria] || b.categoria) + (b.citta ? ' · ' + escapeHtml(b.citta) : '') + '</span></td>' +
                 '<td style="text-align:right"><strong>' + formatCurrency(b.netto) + '</strong></td>' +

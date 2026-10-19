@@ -35,12 +35,18 @@ function norm(s) {
 }
 
 // Categoria di costo del dipendente:
+//  'washhub' → personale dell'autolavaggio Wash Hub (config/bustePaga.washhub:
+//              lista di "COGNOME NOME" o codici fiscali) — fuori dal P&L Last Mile
 //  'driver'  → anagrafica driver (per codice fiscale, poi cognome+nome)
 //  'rizzuto' / 'faro' → responsabili con voce propria nel P&L
 //  'ufficio' → tutti gli altri (HR, amministrazione)
-function categoriaDipendente(estratto, anagrafica) {
+function categoriaDipendente(estratto, anagrafica, cfg) {
     const cf = norm(estratto.codice_fiscale);
     const cognome = norm(estratto.cognome), nome = norm(estratto.nome);
+    const wh = ((cfg && cfg.washhub) || []).map(norm);
+    if (wh.length && (wh.includes(cf) || wh.includes((cognome + ' ' + nome).trim()) || wh.includes(cognome))) {
+        return { categoria: 'washhub', driverId: null, driverEmail: null, citta: null };
+    }
     let driver = null;
     if (cf.length === 16) driver = anagrafica.find((d) => norm(d.codiceFiscale) === cf) || null;
     if (!driver && cognome) {
@@ -64,10 +70,11 @@ function idBusta(mese, estratto) {
 // netto a pagare per categoria. Il costo pieno = netti + F24 (contributi e
 // ritenute, inserito a mano) → per questo si usa il netto, non il lordo.
 function ricalcolaCosti(buste) {
-    const t = { compensiDriver: 0, nettoRizzuto: 0, nettoFaro: 0, hr: 0, nBuste: 0, nDriver: 0, nUfficio: 0, lordoTotale: 0, costoAziendaTotale: 0, perCitta: {} };
+    const t = { compensiDriver: 0, nettoRizzuto: 0, nettoFaro: 0, hr: 0, washhub: 0, nBuste: 0, nDriver: 0, nUfficio: 0, nWashhub: 0, lordoTotale: 0, costoAziendaTotale: 0, perCitta: {} };
     buste.forEach((b) => {
         if (b.stato !== 'ok') return;
         const netto = Number(b.netto) || 0;
+        if (b.categoria === 'washhub') { t.washhub += netto; t.nWashhub++; return; } // altra attività: non entra nei costi Last Mile
         t.nBuste++;
         t.lordoTotale += Number(b.lordo) || 0;
         t.costoAziendaTotale += Number(b.costoAzienda) || 0;
