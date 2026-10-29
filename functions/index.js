@@ -1582,6 +1582,107 @@ exports.elaboraBustePaga = onRequest(
     }
 );
 
+// ═══════════════════════════════════════════════════════════════════
+// F24 — PDF delle deleghe (o quietanze) caricati dal gestionale in Storage
+// f24/{mese}/…, letti da Claude (f24-core.js). Le deleghe del mese stanno in
+// costiMensili/{mese}.f24Doc.moduli[] e il campo f24 = somma dei saldi: così
+// il P&L usa l'F24 reale al posto del valore inserito a mano.
+// body: { mese: 'YYYY-MM', files: ['f24/2026-09/x.pdf', …], rimuovi?: '<id delega>' }
+// ═══════════════════════════════════════════════════════════════════
+const F24 = require('./f24-core.js');
+const F24_MAX_BYTES = 10 * 1024 * 1024;
+
+exports.elaboraF24 = onRequest(
+    { secrets: [ANTHROPIC_API_KEY], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 300, memory: '1GiB' },
+    async (req, res) => {
+        const origin = req.headers.origin || '';
+        res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]);
+        res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (req.method === 'OPTIONS') { res.status(204).send(''); return; }
+        if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
+        const authHeader = req.headers.authorization || '';
+        const idToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '';
+        if (!idToken) { res.status(401).json({ error: 'Token mancante' }); return; }
+        let email = '';
+        try { email = ((await admin.auth().verifyIdToken(idToken)).email || '').toLowerCase(); } catch (e) { res.status(401).json({ error: 'Sessione non valida, rifai il login' }); return; }
+        if (!(await canFatturare(email))) { res.status(403).json({ error: 'Solo superadmin e amministratori' }); return; }
+
+        const body = req.body || {};
+        const mese = String(body.mese || '');
+        if (!/^\d{4}-\d{2}$/.test(mese)) { res.status(400).json({ error: 'Mese non valido' }); return; }
+        const files = (Array.isArray(body.files) ? body.files : []).map(String).filter((p) => p.startsWith('f24/' + mese + '/') && p.toLowerCase().endsWith('.pdf')).slice(0, 20);
+        const rimuovi = typeof body.rimuovi === 'string' && body.rimuovi ? body.rimuovi : null;
+
+        const ref = db.collection('costiMensili').doc(mese);
+        const cur = (await ref.get()).data() || {};
+        let moduli = (cur.f24Doc && Array.isArray(cur.f24Doc.moduli)) ? cur.f24Doc.moduli.slice() : [];
+        if (rimuovi) moduli = moduli.filter((m) => m.id !== rimuovi);
+        const esiti = [];
+
+        if (files.length) {
+            const bucket = admin.storage().bucket();
+            const Anthropic = require('@anthropic-ai/sdk');
+            const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
+            const modello = 'claude-opus-5-5';
+            for (const path of files) {
+                const nomeFile = path.split('/').pop();
+                try {
+                    const file = bucket.file(path);
+                    const [exists] = await file.exists();
+                    if (!exists) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': file non trovato' }); continue; }
+                    const [meta] = await file.getMetadata();
+                    if (Number(meta.size || 0) > F24_MAX_BYTES) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': PDF troppo grande (max 10 MB)' }); continue; }
+                    const [buf] = await file.download();
+                    const msg = await client.messages.parse({
+                        model: modello,
+                        max_tokens: 8192,
+                        system: F24.SYSTEM_PROMPT,
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } },
+                                { type: 'text', text: 'Trascrivi tutte le deleghe F24 presenti nel documento nel formato richiesto. L\'ufficio le sta imputando al mese di competenza ' + mese + ' (stipendi di quel mese): riporta comunque fedelmente i periodi di riferimento stampati.' },
+                            ],
+                        }],
+                        output_config: { effort: 'medium', format: { type: 'json_schema', schema: F24.F24_SCHEMA } },
+                    });
+                    if (msg.stop_reason === 'refusal') throw new Error('lettura rifiutata dal modello');
+                    const e = msg.parsed_output;
+                    if (!e) throw new Error('risposta non interpretabile');
+                    if (!e.is_f24) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': non sembra un F24' + (e.note ? ' — ' + e.note : '') }); continue; }
+                    if (!e.leggibile || !(e.deleghe || []).length) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': F24 non leggibile' + (e.note ? ' — ' + e.note : '') }); continue; }
+                    e.deleghe.forEach((d, i) => {
+                        const m = F24.moduloDaDelega(mese, d, i, path, { modello, elaboratoIl: new Date().toISOString(), elaboratoDa: email });
+                        if (e.note && i === 0) m.avvisi.push(e.note);
+                        moduli = moduli.filter((x) => x.id !== m.id);
+                        moduli.push(m);
+                        esiti.push({ file: path, stato: 'ok', id: m.id, saldo: m.saldo, dataVersamento: m.dataVersamento, avvisi: m.avvisi });
+                    });
+                } catch (err) {
+                    esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': ' + (err.message || err) });
+                    console.error('[elaboraF24] ' + path + ': ' + (err.message || err));
+                }
+            }
+        }
+
+        moduli.sort((a, b) => String(a.dataVersamento || '').localeCompare(String(b.dataVersamento || '')));
+        const r = F24.riepilogoF24(moduli);
+        const upd = { mese };
+        if (r.n > 0) {
+            upd.f24 = r.totale;
+            upd.f24Doc = { n: r.n, totale: r.totale, perSezione: r.perSezione, moduli, aggiornatoIl: new Date().toISOString(), aggiornatoDa: email };
+        } else {
+            // nessuna delega rimasta: si torna al valore manuale/default
+            upd.f24Doc = admin.firestore.FieldValue.delete();
+            if (cur.f24Doc) upd.f24 = admin.firestore.FieldValue.delete();
+        }
+        await ref.set(upd, { merge: true });
+        console.log('[elaboraF24]', email, mese, files.length + ' file, ok=' + esiti.filter((x) => x.stato === 'ok').length + (rimuovi ? ', rimosso ' + rimuovi : ''), JSON.stringify(r));
+        res.json({ ok: true, mese, esiti, riepilogo: r });
+    }
+);
+
 // 03:30 — allineamento notturno (nuove fatture ricevute arrivano dallo SDI a qualsiasi ora)
 exports.ficSyncNotturno = onSchedule(
     { schedule: '30 3 * * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [FIC_TOKEN, FIC_COMPANY_ID], timeoutSeconds: 300 },

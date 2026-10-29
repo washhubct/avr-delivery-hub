@@ -18,6 +18,13 @@ service firebase.storage {
                    && request.resource.size < 50 * 1024 * 1024
                    && request.resource.contentType == 'application/pdf';
     }
+    // F24 (PDF delle deleghe/quietanze): solo direzione, letti dalla CF elaboraF24
+    match /f24/{mese}/{file} {
+      allow read, delete: if isUfficioDanni();
+      allow write: if isUfficioDanni()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType == 'application/pdf';
+    }
     // Foto patente: ogni driver scrive SOLO nella propria cartella (uid),
     // immagini < 6 MB. Lettura: il driver stesso o un utente del gestionale
     // (doc utenti/{email} presente).

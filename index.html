@@ -650,7 +650,7 @@
                 <!-- COSTI -->
                 <div class="card">
                     <h3 class="card-title">Costi</h3>
-                    <p class="card-desc">Le voci <span style="color:var(--accent)">(da fatture)</span> si compilano da sole dalle fatture ricevute; le altre (buste paga, F24) a mano.</p>
+                    <p class="card-desc">Le voci <span style="color:var(--accent)">(da fatture)</span> si compilano da sole dalle fatture ricevute, stipendi e F24 dai PDF caricati sotto; il resto a mano.</p>
                     <div class="toolbar"><button class="btn btn-primary" onclick="openEditCosti()">✏️ Costi manuali</button></div>
                     <div class="table-wrap">
                         <table class="data-table">
@@ -677,7 +677,7 @@
             <!-- BUSTE PAGA -->
             <div class="card" style="margin-top:20px">
                 <h3 class="card-title">Costi — buste paga</h3>
-                <p class="card-desc">Carica i cedolini PDF del mese (anche tutti insieme): vengono letti automaticamente e i <strong>netti a pagare</strong> compilano stipendi driver, Rizzuto, Faro e ufficio. F24 (contributi e ritenute) resta a mano: netti + F24 = costo pieno del personale.</p>
+                <p class="card-desc">Carica i cedolini PDF del mese (anche tutti insieme): vengono letti automaticamente e i <strong>netti a pagare</strong> compilano stipendi driver, Rizzuto, Faro e ufficio. L'F24 (contributi e ritenute) si carica nella sezione sotto: netti + F24 = costo pieno del personale.</p>
                 <div class="toolbar" style="align-items:center;gap:12px">
                     <label class="btn btn-primary" for="rfBusteFile">📎 Carica buste paga (PDF)</label>
                     <input type="file" id="rfBusteFile" accept="application/pdf,.pdf" multiple style="display:none" onchange="rfCaricaBuste(this.files)">
@@ -688,6 +688,24 @@
                     <table class="data-table">
                         <thead><tr><th>Dipendente</th><th>Categoria</th><th style="text-align:right">Netto</th><th style="text-align:right">Lordo</th><th style="text-align:right">Costo azienda</th><th></th></tr></thead>
                         <tbody id="rfTblBuste"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- F24 -->
+            <div class="card" style="margin-top:20px">
+                <h3 class="card-title">Costi — F24</h3>
+                <p class="card-desc">Carica le deleghe F24 (o le quietanze) relative agli stipendi del mese: vengono lette automaticamente e il <strong>saldo versato</strong> compila la voce "F24 / Tasse" al posto del valore manuale. Un PDF può contenere più deleghe.</p>
+                <div class="toolbar" style="align-items:center;gap:12px">
+                    <label class="btn btn-primary" for="rfF24File">📎 Carica F24 (PDF)</label>
+                    <input type="file" id="rfF24File" accept="application/pdf,.pdf" multiple style="display:none" onchange="rfCaricaF24(this.files)">
+                    <span id="rfF24Stato" style="font-size:12px;color:var(--text-muted)"></span>
+                    <span id="rfF24Riepilogo" style="font-size:12px;color:var(--text-muted);margin-left:auto"></span>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Versamento</th><th>Sezioni</th><th>Periodo</th><th style="text-align:right">Saldo</th><th></th></tr></thead>
+                        <tbody id="rfTblF24"></tbody>
                     </table>
                 </div>
             </div>

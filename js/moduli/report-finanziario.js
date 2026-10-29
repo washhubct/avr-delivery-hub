@@ -4,7 +4,8 @@
 // emesse ad Arena, costi = fatture ricevute classificate per voce.
 // I fogli Decò non sono più la fonte: le consegne per città arrivano dai
 // rapporti dell'app driver (reportDriver) e servono solo a ripartire.
-// Le voci senza fattura (buste paga, F24…) restano manuali in costiMensili.
+// Buste paga e F24 arrivano dai PDF letti dalle CF elaboraBustePaga/elaboraF24
+// (costiMensili); le altre voci senza fattura restano manuali in costiMensili.
 
 var COSTI_VOCI = [
     { key: 'compensiDriver', label: 'Stipendi/compensi driver' },
@@ -92,11 +93,16 @@ async function renderReportFinanziario() {
         var val, origine = '';
         if (v.daFattura && haRicevute && perVoce[v.key] !== undefined) { val = perVoce[v.key]; origine = ' <span style="font-size:10px;color:var(--accent)">(da fatture)</span>'; }
         else if (haBuste && VOCI_BUSTE.indexOf(v.key) >= 0) { val = parseFloat(costiData[v.key]) || 0; origine = ' <span style="font-size:10px;color:var(--accent)">(da buste paga)</span>'; }
-        else if (v.key === 'f24' && haBuste && costiData.bustePaga.quotaWashhubF24 > 0) {
-            // F24 unico per la società: la quota Wash Hub (pro-quota imponibile INPS dalle buste) non è un costo Decò
-            var q = costiData.bustePaga.quotaWashhubF24;
+        else if (v.key === 'f24') {
+            // F24 unico per la società: dai PDF caricati (f24Doc) o a mano; la quota Wash Hub
+            // (pro-quota imponibile INPS dalle buste) non è un costo Last Mile
+            var haF24 = !!(costiData.f24Doc && costiData.f24Doc.n > 0);
+            var q = (haBuste && costiData.bustePaga.quotaWashhubF24 > 0) ? costiData.bustePaga.quotaWashhubF24 : 0;
             val = (costiData.f24 !== undefined ? parseFloat(costiData.f24) || 0 : v.default) * (1 - q);
-            origine = ' <span style="font-size:10px;color:var(--accent)">(quota Last Mile ' + Math.round((1 - q) * 100) + '%, il ' + Math.round(q * 100) + '% è Wash Hub)</span>';
+            var note = [];
+            if (haF24) note.push('da ' + costiData.f24Doc.n + ' F24 caricat' + (costiData.f24Doc.n === 1 ? 'o' : 'i'));
+            if (q) note.push('quota Last Mile ' + Math.round((1 - q) * 100) + '%, il ' + Math.round(q * 100) + '% è Wash Hub');
+            origine = note.length ? ' <span style="font-size:10px;color:var(--accent)">(' + note.join('; ') + ')</span>' : '';
         }
         else if (v.key === 'compensiDriver') val = compensiDriver;
         else val = costiData[v.key] !== undefined ? parseFloat(costiData[v.key]) || 0 : (v.default || 0);
@@ -138,6 +144,7 @@ async function renderReportFinanziario() {
     }
 
     await renderBustePaga(mese, costiData);
+    renderF24(mese, costiData);
 
     // === CONSEGNE E MARGINE PER CITTÀ (rapporti app driver) ===
     var perCitta = {};
@@ -316,10 +323,11 @@ function openEditCosti() {
     COSTI_VOCI.forEach(function(v) {
         var daFic = v.daFattura && haRicevute && perVoce[v.key] !== undefined;
         var daBuste = haBuste && VOCI_BUSTE.indexOf(v.key) >= 0;
-        var nota = daFic ? ' <span style="color:var(--accent)">(da fatture: ' + formatCurrency(perVoce[v.key]) + ')</span>' : daBuste ? ' <span style="color:var(--accent)">(da buste paga: ' + formatCurrency(parseFloat(costi[v.key]) || 0) + ')</span>' : '';
+        var daF24 = v.key === 'f24' && !!(costi.f24Doc && costi.f24Doc.n > 0);
+        var nota = daFic ? ' <span style="color:var(--accent)">(da fatture: ' + formatCurrency(perVoce[v.key]) + ')</span>' : daBuste ? ' <span style="color:var(--accent)">(da buste paga: ' + formatCurrency(parseFloat(costi[v.key]) || 0) + ')</span>' : daF24 ? ' <span style="color:var(--accent)">(da F24 caricati: ' + formatCurrency(parseFloat(costi.f24) || 0) + ')</span>' : '';
         html += '<div class="form-group" style="margin-bottom:10px">' +
             '<label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">' + v.label + nota + '</label>' +
-            '<input type="number" id="costo_' + v.key + '" class="input" value="' + (v.default || 0) + '" step="0.01" style="margin-bottom:0"' + ((daFic || daBuste) ? ' disabled' : '') + '>' +
+            '<input type="number" id="costo_' + v.key + '" class="input" value="' + (v.default || 0) + '" step="0.01" style="margin-bottom:0"' + ((daFic || daBuste || daF24) ? ' disabled' : '') + '>' +
             '</div>';
     });
     html += '<button class="btn btn-primary" onclick="doSaveCosti()" style="width:100%;margin-top:12px">Salva costi</button>';
@@ -482,6 +490,80 @@ async function rfEliminaBusta(id) {
     try {
         await db.collection('bustePaga').doc(id).delete();
         await ficCall('elaboraBustePaga', { mese: state.meseCorrente, files: [] });
+        await renderReportFinanziario();
+    } catch (e) { toast('Errore: ' + e.message, 'error'); }
+}
+
+// ── F24: upload PDF → CF elaboraF24 (Claude legge le deleghe) → costiMensili.f24 + f24Doc ──
+var SEZIONI_F24 = { erario: 'Erario', inps: 'INPS', regioni: 'Regioni', enti_locali: 'Enti locali', altri: 'INAIL / altri' };
+
+function renderF24(mese, costiData) {
+    var el = document.getElementById('rfTblF24');
+    if (!el) return;
+    var riep = document.getElementById('rfF24Riepilogo');
+    var doc = costiData && costiData.f24Doc;
+    var moduli = (doc && doc.moduli) || [];
+    if (riep) {
+        if (doc && doc.n) {
+            var sez = Object.keys(SEZIONI_F24).filter(function(k) { return doc.perSezione && doc.perSezione[k]; }).map(function(k) { return SEZIONI_F24[k] + ' ' + formatCurrency(doc.perSezione[k]); });
+            riep.textContent = doc.n + ' F24 · totale ' + formatCurrency(doc.totale) + (sez.length ? ' · ' + sez.join(' · ') : '');
+        } else riep.textContent = costiData && costiData.f24 !== undefined ? 'Valore manuale: ' + formatCurrency(costiData.f24) : '';
+    }
+    el.innerHTML = moduli.map(function(m) {
+        var sez = Object.keys(SEZIONI_F24).filter(function(k) { return m.sezioni && m.sezioni[k] && (m.sezioni[k].debito || m.sezioni[k].credito); })
+            .map(function(k) { var x = m.sezioni[k]; return SEZIONI_F24[k] + ' ' + formatCurrency(x.debito) + (x.credito ? ' <span style="color:var(--text-light)">(−' + formatCurrency(x.credito) + ')</span>' : ''); }).join('<br>');
+        var avvisi = (m.avvisi || []).length ? '<div style="font-size:11px;color:var(--warning)">⚠️ ' + escapeHtml(m.avvisi.join(' · ')) + '</div>' : '';
+        return '<tr>' +
+            '<td><strong>' + formatDateIt(m.dataVersamento) + '</strong>' + (m.quietanzato ? '<div style="font-size:11px;color:var(--success)">quietanzato</div>' : '') + avvisi + '</td>' +
+            '<td style="font-size:12px">' + (sez || '—') + '</td>' +
+            '<td style="font-size:12px">' + ((m.periodi || []).map(meseLabel).join(', ') || '—') + '</td>' +
+            '<td style="text-align:right"><strong>' + formatCurrency(m.saldo) + '</strong></td>' +
+            '<td><a href="#" onclick="rfApriF24(\'' + escapeHtml(m.file) + '\');return false" title="Apri PDF">📄</a> ' +
+                '<button class="btn btn-sm btn-danger" title="Elimina delega" onclick="rfEliminaF24(\'' + escapeHtml(m.id) + '\')">🗑️</button></td>' +
+        '</tr>';
+    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px">Nessun F24 caricato per ' + meseLabel(mese) + (costiData && costiData.f24 !== undefined ? ' — vale il valore manuale ' + formatCurrency(costiData.f24) : '') + '</td></tr>';
+}
+
+async function rfCaricaF24(files) {
+    var mese = state.meseCorrente;
+    var lista = Array.prototype.slice.call(files || []).filter(function(f) { return /\.pdf$/i.test(f.name); });
+    if (!lista.length) { toast('Seleziona uno o più PDF', 'error'); return; }
+    var stato = document.getElementById('rfF24Stato');
+    var input = document.getElementById('rfF24File');
+    if (input) input.disabled = true;
+    try {
+        var paths = [];
+        for (var i = 0; i < lista.length; i++) {
+            if (stato) stato.textContent = 'Carico ' + (i + 1) + '/' + lista.length + ': ' + lista[i].name;
+            var safe = lista[i].name.replace(/[^A-Za-z0-9._-]+/g, '_');
+            var path = 'f24/' + mese + '/' + Date.now() + '_' + safe;
+            await firebase.storage().ref(path).put(lista[i], { contentType: 'application/pdf' });
+            paths.push(path);
+        }
+        if (stato) stato.textContent = 'Lettura degli F24 in corso…';
+        var out = await ficCall('elaboraF24', { mese: mese, files: paths });
+        var ok = out.esiti.filter(function(x) { return x.stato === 'ok'; });
+        var ko = out.esiti.filter(function(x) { return x.stato !== 'ok'; });
+        if (stato) stato.innerHTML = ok.length + ' deleghe lette, totale ' + formatCurrency(out.riepilogo.totale) + (ko.length ? ', <span style="color:var(--danger)">' + ko.length + ' non lette</span>: ' + ko.map(function(x) { return escapeHtml(x.messaggio); }).join('; ') : '');
+        toast(ok.length + ' F24 elaborati', ko.length ? 'error' : 'success');
+        await renderReportFinanziario();
+    } catch (e) {
+        if (stato) stato.textContent = 'Errore: ' + e.message;
+        toast('Errore F24: ' + e.message, 'error');
+    } finally {
+        if (input) { input.disabled = false; input.value = ''; }
+    }
+}
+
+async function rfApriF24(path) {
+    try { window.open(await firebase.storage().ref(path).getDownloadURL(), '_blank'); }
+    catch (e) { toast('PDF non disponibile: ' + e.message, 'error'); }
+}
+
+async function rfEliminaF24(id) {
+    if (!confirm('Togliere questa delega dal mese? Il PDF resta in archivio, la voce F24 viene ricalcolata (senza deleghe torna al valore manuale).')) return;
+    try {
+        await ficCall('elaboraF24', { mese: state.meseCorrente, files: [], rimuovi: id });
         await renderReportFinanziario();
     } catch (e) { toast('Errore: ' + e.message, 'error'); }
 }
