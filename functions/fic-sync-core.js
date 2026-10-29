@@ -33,6 +33,17 @@ function meseDaTesto(testo) {
         const anno = m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]);
         if (idx && anno >= 2020 && anno <= 2099) return anno + '-' + pad2(idx);
     }
+    // Periodo "dal 01/10/2026 al 15/10/2026" / "01.10.2026 - 31.10.2026" (es. carburante Q8,
+    // fatturato a quindicina): mese del periodo; se cavalca due mesi, quello con più giorni
+    const r = t.match(/(\d{1,2})[\/.](\d{1,2})[\/.](20\d{2})\s*(?:al|a|-|–|\/)\s*(\d{1,2})[\/.](\d{1,2})[\/.](20\d{2})/);
+    if (r) {
+        const da = new Date(Date.UTC(+r[3], +r[2] - 1, +r[1])), a = new Date(Date.UTC(+r[6], +r[5] - 1, +r[4]));
+        if (!isNaN(da) && !isNaN(a) && a >= da) {
+            const giorni = {};
+            for (let d = new Date(da); d <= a; d.setUTCDate(d.getUTCDate() + 1)) { const k = d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1); giorni[k] = (giorni[k] || 0) + 1; }
+            return Object.keys(giorni).sort((x, y) => giorni[y] - giorni[x] || x.localeCompare(y))[0];
+        }
+    }
     // MM/YYYY ma non dentro una data DD/MM/YYYY (es. "del 16/06/2026")
     const n = t.match(/(?<![\d/])(0[1-9]|1[0-2])\/(20\d{2})\b/);
     if (n) return n[2] + '-' + n[1];

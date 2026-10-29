@@ -14,6 +14,14 @@ test('meseDaTesto riconosce i formati usati nelle fatture', () => {
     assert.equal(C.meseDaTesto(''), null);
 });
 
+test('meseDaTesto: periodo "dal … al …" (carburante Q8 a quindicina)', () => {
+    assert.equal(C.meseDaTesto('Fattura PJ 123 - Periodo dal 01/10/2026 al 15/10/2026'), '2026-10');
+    assert.equal(C.meseDaTesto('Rifornimenti carburante 16/10/2026 - 31/10/2026 carta Q8'), '2026-10');
+    assert.equal(C.meseDaTesto('Consumi dal 16.09.2026 al 15.10.2026'), '2026-09'); // 15 giorni di settembre contro 15 di ottobre → il primo
+    assert.equal(C.meseDaTesto('Canone dal 25/09/2026 al 24/10/2026'), '2026-10');
+    assert.equal(C.meseDaTesto('fattura del 02/11/2026 periodo dal 16/10/2026 al 31/10/2026'), '2026-10');
+});
+
 test('la data 16/06/2026 nel testo non viene scambiata per un mese', () => {
     // "16/06/2026" contiene "06/2026" ma preceduto da "16/": non deve matchare
     assert.equal(C.meseDaTesto('Giusto Contratto del 16/06/2026'), null);
