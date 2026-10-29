@@ -1434,12 +1434,17 @@ async function ricalcolaCostiMese(mese, anagrafica, cfg) {
         buste.push(b);
     }
     const t = BustePaga.ricalcolaCosti(buste);
+    // stato del mese: 'bozza' finché resta almeno un cedolino caricato come bozza (script CLI), altrimenti 'definitivo'
+    const nBozze = buste.filter((b) => b.bozza === true).length;
     const upd = { mese, compensiDriver: t.compensiDriver, nettoRizzuto: t.nettoRizzuto, nettoFaro: t.nettoFaro, hr: t.hr,
         bustePaga: { n: t.nBuste, nDriver: t.nDriver, nUfficio: t.nUfficio, nWashhub: t.nWashhub, washhubNetti: t.washhub, lordoTotale: t.lordoTotale, costoAziendaTotale: t.costoAziendaTotale, perCitta: t.perCitta,
             imponibileInps: t.imponibileInps, imponibileInpsWashhub: t.imponibileInpsWashhub, ritenuteDipendente: t.ritenuteDipendente, ritenuteDipendenteWashhub: t.ritenuteDipendenteWashhub, tfrMese: t.tfrMese, tfrMeseWashhub: t.tfrMeseWashhub,
             // quota dell'F24 (unico per Last Mile S.r.l.) attribuibile a Wash Hub, in proporzione all'imponibile INPS
             quotaWashhubF24: (t.imponibileInps + t.imponibileInpsWashhub) > 0 ? Math.round(t.imponibileInpsWashhub / (t.imponibileInps + t.imponibileInpsWashhub) * 10000) / 10000 : 0,
+            stato: nBozze ? 'bozza' : 'definitivo', nBozze,
             aggiornatoIl: new Date().toISOString() } };
+    // la nota del caricamento bozze (script CLI) decade quando il mese è definitivo
+    if (!nBozze) upd.bustePaga.note = admin.firestore.FieldValue.delete();
     if (t.nBuste === 0) { upd.compensiDriver = admin.firestore.FieldValue.delete(); upd.nettoRizzuto = admin.firestore.FieldValue.delete(); upd.nettoFaro = admin.firestore.FieldValue.delete(); upd.hr = admin.firestore.FieldValue.delete(); }
     await db.collection('costiMensili').doc(mese).set(upd, { merge: true });
     return t;
