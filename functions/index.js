@@ -1450,6 +1450,120 @@ async function ricalcolaCostiMese(mese, anagrafica, cfg) {
     return t;
 }
 
+// Motore comune (gestionale e posta): legge i PDF in Storage, scrive bustePaga/{id} e ricalcola il mese.
+// bozza=true marca i cedolini come provvisori (mail "BOZZE …" del consulente).
+async function elaboraBustePagaCore({ mese, files, email, bozza }) {
+    const anagSnap = await db.collection('driverAnagrafica').get();
+    const anagrafica = []; anagSnap.forEach((d) => anagrafica.push({ id: d.id, ...d.data() }));
+    const cfgBp = (await db.collection('config').doc('bustePaga').get()).data() || {};
+    const bucket = admin.storage().bucket();
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
+    const modello = 'claude-opus-5-5';
+    const esiti = [];
+    const { PDFDocument } = require('pdf-lib');
+
+    // Legge UNA pagina (un cedolino) con Claude
+    async function leggiPagina(pdfB64) {
+        const msg = await client.messages.parse({
+            model: modello,
+            max_tokens: 4096,
+            system: BustePaga.SYSTEM_PROMPT,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfB64 } },
+                    { type: 'text', text: 'Trascrivi i dati del cedolino nel formato richiesto. Il mese atteso dall\'ufficio è ' + mese + ': se il cedolino riporta un periodo diverso, indicalo comunque fedelmente. Se la pagina è solo una continuazione senza nome del lavoratore, imposta is_busta_paga=false.' },
+                ],
+            }],
+            output_config: { effort: 'medium', format: { type: 'json_schema', schema: BustePaga.BUSTA_SCHEMA } },
+        });
+        if (msg.stop_reason === 'refusal') throw new Error('Lettura rifiutata dal modello');
+        if (!msg.parsed_output) throw new Error('Risposta non interpretabile');
+        return msg.parsed_output;
+    }
+
+    // Il consulente manda spesso un PDF unico con tutti i cedolini: una
+    // pagina = un cedolino. Si spezza per pagina e si legge in parallelo (5 alla volta).
+    async function paginePdf(buf) {
+        const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+        const n = src.getPageCount();
+        if (n <= 1) return [buf.toString('base64')];
+        const out = [];
+        for (let i = 0; i < Math.min(n, 150); i++) {
+            const d = await PDFDocument.create();
+            const [pg] = await d.copyPages(src, [i]);
+            d.addPage(pg);
+            out.push(Buffer.from(await d.save()).toString('base64'));
+        }
+        return out;
+    }
+
+    for (const path of files) {
+        const nomeFile = path.split('/').pop();
+        try {
+            const file = bucket.file(path);
+            const [exists] = await file.exists();
+            if (!exists) { esiti.push({ file: path, stato: 'errore', messaggio: 'File non trovato' }); continue; }
+            const [meta] = await file.getMetadata();
+            if (Number(meta.size || 0) > BUSTA_MAX_BYTES) { esiti.push({ file: path, stato: 'errore', messaggio: 'PDF troppo grande (max 50 MB)' }); continue; }
+            const [buf] = await file.download();
+            const pagine = await paginePdf(buf);
+
+            const letture = new Array(pagine.length);
+            let idx = 0;
+            await Promise.all(new Array(Math.min(5, pagine.length)).fill(0).map(async () => {
+                while (idx < pagine.length) {
+                    const i = idx++;
+                    try { letture[i] = { ok: true, e: await leggiPagina(pagine[i]) }; }
+                    catch (err) { letture[i] = { ok: false, err: err.message || String(err) }; }
+                }
+            }));
+
+            // Unione per dipendente: se un cedolino occupa due pagine tengo la lettura col netto
+            const perId = {};
+            letture.forEach((l, i) => {
+                const pag = pagine.length > 1 ? ' (pag. ' + (i + 1) + ')' : '';
+                if (!l.ok) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + pag + ': ' + l.err }); return; }
+                const e = l.e;
+                if (!e.is_busta_paga) { if (pagine.length === 1) esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': non sembra un cedolino' + (e.note ? ' — ' + e.note : '') }); return; }
+                if (!e.leggibile || (!e.cognome && !e.codice_fiscale)) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + pag + ': cedolino non leggibile' + (e.note ? ' — ' + e.note : '') }); return; }
+                const id = BustePaga.idBusta(mese, e);
+                if (!perId[id] || (e.netto_a_pagare > 0 && !(perId[id].netto_a_pagare > 0))) perId[id] = e;
+            });
+
+            for (const id of Object.keys(perId)) {
+                const e = perId[id];
+                const cat = BustePaga.categoriaDipendente(e, anagrafica, cfgBp);
+                const avvisi = [];
+                if (e.periodo && e.periodo !== mese) avvisi.push('Il cedolino è di ' + e.periodo + ', caricato su ' + mese);
+                if (!(e.netto_a_pagare > 0)) avvisi.push('Netto a pagare non trovato');
+                if (cat.categoria === 'ufficio') avvisi.push('Non è in anagrafica driver: contato come ufficio (HR)');
+                if (e.note) avvisi.push(e.note);
+                const doc = {
+                    mese, periodoCedolino: e.periodo || null,
+                    cognome: e.cognome || '', nome: e.nome || '', codiceFiscale: (e.codice_fiscale || '').toUpperCase(),
+                    netto: Number(e.netto_a_pagare) || 0, lordo: Number(e.totale_competenze) || 0, costoAzienda: Number(e.costo_azienda) || 0,
+                    imponibileInps: Number(e.imponibile_inps) || 0, contributiDipendente: Number(e.contributi_dipendente) || 0, irpefNetta: Number(e.irpef_netta) || 0, addizionali: Number(e.addizionali) || 0, tfrMese: Number(e.tfr_mese) || 0,
+                    categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail, citta: cat.citta,
+                    file: path, stato: 'ok', avvisi, modello,
+                    elaboratoIl: new Date().toISOString(), elaboratoDa: email,
+                };
+                if (bozza) doc.bozza = true;
+                await db.collection('bustePaga').doc(id).set(doc);
+                esiti.push({ file: path, stato: 'ok', id, dipendente: (e.cognome + ' ' + e.nome).trim(), netto: doc.netto, categoria: cat.categoria, avvisi });
+            }
+        } catch (err) {
+            esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': ' + (err.message || err) });
+            console.error('[elaboraBustePaga] ' + path + ': ' + (err.message || err));
+        }
+    }
+
+    const totali = await ricalcolaCostiMese(mese, anagrafica, cfgBp);
+    console.log('[elaboraBustePaga]', email, mese, files.length + ' file, ok=' + esiti.filter((x) => x.stato === 'ok').length, JSON.stringify(totali));
+    return { ok: true, mese, esiti, totali };
+}
+
 exports.elaboraBustePaga = onRequest(
     { secrets: [ANTHROPIC_API_KEY], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 540, memory: '2GiB' },
     async (req, res) => {
@@ -1471,114 +1585,7 @@ exports.elaboraBustePaga = onRequest(
         if (!/^\d{4}-\d{2}$/.test(mese)) { res.status(400).json({ error: 'Mese non valido' }); return; }
         const files = (Array.isArray(body.files) ? body.files : []).map(String).filter((p) => p.startsWith('bustePaga/' + mese + '/') && p.toLowerCase().endsWith('.pdf')).slice(0, 60);
 
-        const anagSnap = await db.collection('driverAnagrafica').get();
-        const anagrafica = []; anagSnap.forEach((d) => anagrafica.push({ id: d.id, ...d.data() }));
-        const cfgBp = (await db.collection('config').doc('bustePaga').get()).data() || {};
-        const bucket = admin.storage().bucket();
-        const Anthropic = require('@anthropic-ai/sdk');
-        const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
-        const modello = 'claude-opus-5-5';
-        const esiti = [];
-        const { PDFDocument } = require('pdf-lib');
-
-        // Legge UNA pagina (un cedolino) con Claude
-        async function leggiPagina(pdfB64) {
-            const msg = await client.messages.parse({
-                model: modello,
-                max_tokens: 4096,
-                system: BustePaga.SYSTEM_PROMPT,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfB64 } },
-                        { type: 'text', text: 'Trascrivi i dati del cedolino nel formato richiesto. Il mese atteso dall\'ufficio è ' + mese + ': se il cedolino riporta un periodo diverso, indicalo comunque fedelmente. Se la pagina è solo una continuazione senza nome del lavoratore, imposta is_busta_paga=false.' },
-                    ],
-                }],
-                output_config: { effort: 'medium', format: { type: 'json_schema', schema: BustePaga.BUSTA_SCHEMA } },
-            });
-            if (msg.stop_reason === 'refusal') throw new Error('Lettura rifiutata dal modello');
-            if (!msg.parsed_output) throw new Error('Risposta non interpretabile');
-            return msg.parsed_output;
-        }
-
-        // Il consulente manda spesso un PDF unico con tutti i cedolini: una
-        // pagina = un cedolino. Si spezza per pagina e si legge in parallelo (5 alla volta).
-        async function paginePdf(buf) {
-            const src = await PDFDocument.load(buf, { ignoreEncryption: true });
-            const n = src.getPageCount();
-            if (n <= 1) return [buf.toString('base64')];
-            const out = [];
-            for (let i = 0; i < Math.min(n, 150); i++) {
-                const d = await PDFDocument.create();
-                const [pg] = await d.copyPages(src, [i]);
-                d.addPage(pg);
-                out.push(Buffer.from(await d.save()).toString('base64'));
-            }
-            return out;
-        }
-
-        for (const path of files) {
-            const nomeFile = path.split('/').pop();
-            try {
-                const file = bucket.file(path);
-                const [exists] = await file.exists();
-                if (!exists) { esiti.push({ file: path, stato: 'errore', messaggio: 'File non trovato' }); continue; }
-                const [meta] = await file.getMetadata();
-                if (Number(meta.size || 0) > BUSTA_MAX_BYTES) { esiti.push({ file: path, stato: 'errore', messaggio: 'PDF troppo grande (max 50 MB)' }); continue; }
-                const [buf] = await file.download();
-                const pagine = await paginePdf(buf);
-
-                const letture = new Array(pagine.length);
-                let idx = 0;
-                await Promise.all(new Array(Math.min(5, pagine.length)).fill(0).map(async () => {
-                    while (idx < pagine.length) {
-                        const i = idx++;
-                        try { letture[i] = { ok: true, e: await leggiPagina(pagine[i]) }; }
-                        catch (err) { letture[i] = { ok: false, err: err.message || String(err) }; }
-                    }
-                }));
-
-                // Unione per dipendente: se un cedolino occupa due pagine tengo la lettura col netto
-                const perId = {};
-                letture.forEach((l, i) => {
-                    const pag = pagine.length > 1 ? ' (pag. ' + (i + 1) + ')' : '';
-                    if (!l.ok) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + pag + ': ' + l.err }); return; }
-                    const e = l.e;
-                    if (!e.is_busta_paga) { if (pagine.length === 1) esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': non sembra un cedolino' + (e.note ? ' — ' + e.note : '') }); return; }
-                    if (!e.leggibile || (!e.cognome && !e.codice_fiscale)) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + pag + ': cedolino non leggibile' + (e.note ? ' — ' + e.note : '') }); return; }
-                    const id = BustePaga.idBusta(mese, e);
-                    if (!perId[id] || (e.netto_a_pagare > 0 && !(perId[id].netto_a_pagare > 0))) perId[id] = e;
-                });
-
-                for (const id of Object.keys(perId)) {
-                    const e = perId[id];
-                    const cat = BustePaga.categoriaDipendente(e, anagrafica, cfgBp);
-                    const avvisi = [];
-                    if (e.periodo && e.periodo !== mese) avvisi.push('Il cedolino è di ' + e.periodo + ', caricato su ' + mese);
-                    if (!(e.netto_a_pagare > 0)) avvisi.push('Netto a pagare non trovato');
-                    if (cat.categoria === 'ufficio') avvisi.push('Non è in anagrafica driver: contato come ufficio (HR)');
-                    if (e.note) avvisi.push(e.note);
-                    const doc = {
-                        mese, periodoCedolino: e.periodo || null,
-                        cognome: e.cognome || '', nome: e.nome || '', codiceFiscale: (e.codice_fiscale || '').toUpperCase(),
-                        netto: Number(e.netto_a_pagare) || 0, lordo: Number(e.totale_competenze) || 0, costoAzienda: Number(e.costo_azienda) || 0,
-                        imponibileInps: Number(e.imponibile_inps) || 0, contributiDipendente: Number(e.contributi_dipendente) || 0, irpefNetta: Number(e.irpef_netta) || 0, addizionali: Number(e.addizionali) || 0, tfrMese: Number(e.tfr_mese) || 0,
-                        categoria: cat.categoria, driverId: cat.driverId, driverEmail: cat.driverEmail, citta: cat.citta,
-                        file: path, stato: 'ok', avvisi, modello,
-                        elaboratoIl: new Date().toISOString(), elaboratoDa: email,
-                    };
-                    await db.collection('bustePaga').doc(id).set(doc);
-                    esiti.push({ file: path, stato: 'ok', id, dipendente: (e.cognome + ' ' + e.nome).trim(), netto: doc.netto, categoria: cat.categoria, avvisi });
-                }
-            } catch (err) {
-                esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': ' + (err.message || err) });
-                console.error('[elaboraBustePaga] ' + path + ': ' + (err.message || err));
-            }
-        }
-
-        const totali = await ricalcolaCostiMese(mese, anagrafica, cfgBp);
-        console.log('[elaboraBustePaga]', email, mese, files.length + ' file, ok=' + esiti.filter((x) => x.stato === 'ok').length, JSON.stringify(totali));
-        res.json({ ok: true, mese, esiti, totali });
+        res.json(await elaboraBustePagaCore({ mese, files, email }));
     }
 );
 
@@ -1591,6 +1598,76 @@ exports.elaboraBustePaga = onRequest(
 // ═══════════════════════════════════════════════════════════════════
 const F24 = require('./f24-core.js');
 const F24_MAX_BYTES = 10 * 1024 * 1024;
+
+// Motore comune (gestionale e posta): legge le deleghe, aggiorna costiMensili/{mese}.f24 e f24Doc.
+async function elaboraF24Core({ mese, files, rimuovi, email }) {
+    const ref = db.collection('costiMensili').doc(mese);
+    const cur = (await ref.get()).data() || {};
+    let moduli = (cur.f24Doc && Array.isArray(cur.f24Doc.moduli)) ? cur.f24Doc.moduli.slice() : [];
+    if (rimuovi) moduli = moduli.filter((m) => m.id !== rimuovi);
+    const esiti = [];
+
+    if (files.length) {
+        const bucket = admin.storage().bucket();
+        const Anthropic = require('@anthropic-ai/sdk');
+        const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
+        const modello = 'claude-opus-5-5';
+        for (const path of files) {
+            const nomeFile = path.split('/').pop();
+            try {
+                const file = bucket.file(path);
+                const [exists] = await file.exists();
+                if (!exists) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': file non trovato' }); continue; }
+                const [meta] = await file.getMetadata();
+                if (Number(meta.size || 0) > F24_MAX_BYTES) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': PDF troppo grande (max 10 MB)' }); continue; }
+                const [buf] = await file.download();
+                const msg = await client.messages.parse({
+                    model: modello,
+                    max_tokens: 8192,
+                    system: F24.SYSTEM_PROMPT,
+                    messages: [{
+                        role: 'user',
+                        content: [
+                            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } },
+                            { type: 'text', text: 'Trascrivi tutte le deleghe F24 presenti nel documento nel formato richiesto. L\'ufficio le sta imputando al mese di competenza ' + mese + ' (stipendi di quel mese): riporta comunque fedelmente i periodi di riferimento stampati.' },
+                        ],
+                    }],
+                    output_config: { effort: 'medium', format: { type: 'json_schema', schema: F24.F24_SCHEMA } },
+                });
+                if (msg.stop_reason === 'refusal') throw new Error('lettura rifiutata dal modello');
+                const e = msg.parsed_output;
+                if (!e) throw new Error('risposta non interpretabile');
+                if (!e.is_f24) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': non sembra un F24' + (e.note ? ' — ' + e.note : '') }); continue; }
+                if (!e.leggibile || !(e.deleghe || []).length) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': F24 non leggibile' + (e.note ? ' — ' + e.note : '') }); continue; }
+                e.deleghe.forEach((d, i) => {
+                    const m = F24.moduloDaDelega(mese, d, i, path, { modello, elaboratoIl: new Date().toISOString(), elaboratoDa: email });
+                    if (e.note && i === 0) m.avvisi.push(e.note);
+                    moduli = moduli.filter((x) => x.id !== m.id);
+                    moduli.push(m);
+                    esiti.push({ file: path, stato: 'ok', id: m.id, saldo: m.saldo, dataVersamento: m.dataVersamento, avvisi: m.avvisi });
+                });
+            } catch (err) {
+                esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': ' + (err.message || err) });
+                console.error('[elaboraF24] ' + path + ': ' + (err.message || err));
+            }
+        }
+    }
+
+    moduli.sort((a, b) => String(a.dataVersamento || '').localeCompare(String(b.dataVersamento || '')));
+    const r = F24.riepilogoF24(moduli);
+    const upd = { mese };
+    if (r.n > 0) {
+        upd.f24 = r.totale;
+        upd.f24Doc = { n: r.n, totale: r.totale, perSezione: r.perSezione, moduli, aggiornatoIl: new Date().toISOString(), aggiornatoDa: email };
+    } else {
+        // nessuna delega rimasta: si torna al valore manuale/default
+        upd.f24Doc = admin.firestore.FieldValue.delete();
+        if (cur.f24Doc) upd.f24 = admin.firestore.FieldValue.delete();
+    }
+    await ref.set(upd, { merge: true });
+    console.log('[elaboraF24]', email, mese, files.length + ' file, ok=' + esiti.filter((x) => x.stato === 'ok').length + (rimuovi ? ', rimosso ' + rimuovi : ''), JSON.stringify(r));
+    return { ok: true, mese, esiti, riepilogo: r, moduli };
+}
 
 exports.elaboraF24 = onRequest(
     { secrets: [ANTHROPIC_API_KEY], region: 'europe-west1', cors: ALLOWED_ORIGINS, timeoutSeconds: 300, memory: '1GiB' },
@@ -1614,72 +1691,7 @@ exports.elaboraF24 = onRequest(
         const files = (Array.isArray(body.files) ? body.files : []).map(String).filter((p) => p.startsWith('f24/' + mese + '/') && p.toLowerCase().endsWith('.pdf')).slice(0, 20);
         const rimuovi = typeof body.rimuovi === 'string' && body.rimuovi ? body.rimuovi : null;
 
-        const ref = db.collection('costiMensili').doc(mese);
-        const cur = (await ref.get()).data() || {};
-        let moduli = (cur.f24Doc && Array.isArray(cur.f24Doc.moduli)) ? cur.f24Doc.moduli.slice() : [];
-        if (rimuovi) moduli = moduli.filter((m) => m.id !== rimuovi);
-        const esiti = [];
-
-        if (files.length) {
-            const bucket = admin.storage().bucket();
-            const Anthropic = require('@anthropic-ai/sdk');
-            const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value().trim() });
-            const modello = 'claude-opus-5-5';
-            for (const path of files) {
-                const nomeFile = path.split('/').pop();
-                try {
-                    const file = bucket.file(path);
-                    const [exists] = await file.exists();
-                    if (!exists) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': file non trovato' }); continue; }
-                    const [meta] = await file.getMetadata();
-                    if (Number(meta.size || 0) > F24_MAX_BYTES) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': PDF troppo grande (max 10 MB)' }); continue; }
-                    const [buf] = await file.download();
-                    const msg = await client.messages.parse({
-                        model: modello,
-                        max_tokens: 8192,
-                        system: F24.SYSTEM_PROMPT,
-                        messages: [{
-                            role: 'user',
-                            content: [
-                                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } },
-                                { type: 'text', text: 'Trascrivi tutte le deleghe F24 presenti nel documento nel formato richiesto. L\'ufficio le sta imputando al mese di competenza ' + mese + ' (stipendi di quel mese): riporta comunque fedelmente i periodi di riferimento stampati.' },
-                            ],
-                        }],
-                        output_config: { effort: 'medium', format: { type: 'json_schema', schema: F24.F24_SCHEMA } },
-                    });
-                    if (msg.stop_reason === 'refusal') throw new Error('lettura rifiutata dal modello');
-                    const e = msg.parsed_output;
-                    if (!e) throw new Error('risposta non interpretabile');
-                    if (!e.is_f24) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': non sembra un F24' + (e.note ? ' — ' + e.note : '') }); continue; }
-                    if (!e.leggibile || !(e.deleghe || []).length) { esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': F24 non leggibile' + (e.note ? ' — ' + e.note : '') }); continue; }
-                    e.deleghe.forEach((d, i) => {
-                        const m = F24.moduloDaDelega(mese, d, i, path, { modello, elaboratoIl: new Date().toISOString(), elaboratoDa: email });
-                        if (e.note && i === 0) m.avvisi.push(e.note);
-                        moduli = moduli.filter((x) => x.id !== m.id);
-                        moduli.push(m);
-                        esiti.push({ file: path, stato: 'ok', id: m.id, saldo: m.saldo, dataVersamento: m.dataVersamento, avvisi: m.avvisi });
-                    });
-                } catch (err) {
-                    esiti.push({ file: path, stato: 'errore', messaggio: nomeFile + ': ' + (err.message || err) });
-                    console.error('[elaboraF24] ' + path + ': ' + (err.message || err));
-                }
-            }
-        }
-
-        moduli.sort((a, b) => String(a.dataVersamento || '').localeCompare(String(b.dataVersamento || '')));
-        const r = F24.riepilogoF24(moduli);
-        const upd = { mese };
-        if (r.n > 0) {
-            upd.f24 = r.totale;
-            upd.f24Doc = { n: r.n, totale: r.totale, perSezione: r.perSezione, moduli, aggiornatoIl: new Date().toISOString(), aggiornatoDa: email };
-        } else {
-            // nessuna delega rimasta: si torna al valore manuale/default
-            upd.f24Doc = admin.firestore.FieldValue.delete();
-            if (cur.f24Doc) upd.f24 = admin.firestore.FieldValue.delete();
-        }
-        await ref.set(upd, { merge: true });
-        console.log('[elaboraF24]', email, mese, files.length + ' file, ok=' + esiti.filter((x) => x.stato === 'ok').length + (rimuovi ? ', rimosso ' + rimuovi : ''), JSON.stringify(r));
-        res.json({ ok: true, mese, esiti, riepilogo: r });
+        res.json(await elaboraF24Core({ mese, files, rimuovi, email }));
     }
 );
 
@@ -1687,6 +1699,188 @@ exports.elaboraF24 = onRequest(
 exports.ficSyncNotturno = onSchedule(
     { schedule: '30 3 * * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [FIC_TOKEN, FIC_COMPANY_ID], timeoutSeconds: 300 },
     async () => { const out = await eseguiFicSync(); console.log('[ficSyncNotturno]', JSON.stringify(out)); }
+);
+
+// ═══════════════════════════════════════════════════════════════════
+// POSTA AMMINISTRATIVA — buste paga e F24 dalle mail del consulente del lavoro
+// (M&R Consulting) senza caricamenti a mano. Legge le caselle Workspace in
+// config/posta.caselle (delega a livello di dominio keyless, gmail-dwd.js),
+// prende le mail con PDF del mittente, ricava il MESE DI COMPETENZA dall'oggetto
+// ("INVIO DOCUMENTI MESE LUGLIO 2026"), salva i PDF in Storage e li passa agli
+// stessi motori del gestionale (elaboraBustePagaCore / elaboraF24Core). Gli F24
+// letti vengono anche creati su Fatture in Cloud (Gestione F24) con il PDF.
+// Idempotente: postaElaborata/{casella_messageId} e postaAllegati/{sha256}.
+// Le buste di un mese già definitivo nel gestionale non vengono rilette.
+// ═══════════════════════════════════════════════════════════════════
+const Posta = require('./posta-core.js');
+const Gmail = require('./gmail-dwd.js');
+const POSTA_DEFAULT = { attivo: true, caselle: ['risorse.umane@last-mile.it', 'guido@last-mile.it'], mittenti: ['giovannirametta51@gmail.com'], dal: '2026-07-01', maxMessaggi: 300 };
+
+async function eseguiPosta() {
+    const cfg = Object.assign({}, POSTA_DEFAULT, (await db.collection('config').doc('posta').get()).data() || {});
+    if (cfg.attivo === false) return { saltato: 'config/posta.attivo = false' };
+    const bucket = admin.storage().bucket();
+    const riepilogo = { messaggi: 0, nuovi: 0, allegati: 0, buste: [], f24: [], errori: [] };
+    const q = Posta.queryGmail(cfg.mittenti, cfg.dal);
+    for (const casella of cfg.caselle) {
+        let gm, ids;
+        try { gm = Gmail.creaGmail(casella, await Gmail.tokenGmail(casella)); ids = await gm.cercaMessaggi(q, cfg.maxMessaggi); }
+        catch (e) { riepilogo.errori.push(casella + ': ' + e.message); console.error('[posta] ' + casella + ': ' + e.message); continue; }
+        riepilogo.messaggi += ids.length;
+        for (const id of ids.reverse()) { // dal più vecchio: le bozze prima delle definitive
+            const ref = db.collection('postaElaborata').doc(casella.replace(/[^a-z0-9]/gi, '_') + '_' + id);
+            if ((await ref.get()).exists) continue;
+            riepilogo.nuovi++;
+            let msg;
+            try { msg = await gm.messaggio(id); } catch (e) { riepilogo.errori.push(id + ': ' + e.message); continue; }
+            const oggetto = Posta.header(msg.payload, 'Subject');
+            const mese = Posta.meseDaOggetto(oggetto);
+            const bozza = Posta.isBozza(oggetto);
+            const record = { casella, messageId: id, oggetto, da: Posta.header(msg.payload, 'From'), dataMail: Posta.header(msg.payload, 'Date'), mese, bozza, allegati: [], elaboratoIl: new Date().toISOString() };
+            if (!Posta.pertinente(oggetto)) { record.stato = 'non_pertinente'; await ref.set(record); continue; } // UNILAV, assunzioni, malattie…
+            const allegati = Posta.allegatiDaPayload(msg.payload).filter((a) => Posta.tipoAllegato(a.nome, a.mimeType, oggetto));
+            if (!mese) { record.stato = 'mese_non_trovato'; await ref.set(record); riepilogo.errori.push('"' + oggetto + '": mese non riconosciuto nell\'oggetto'); continue; }
+            if (!allegati.length) { record.stato = 'senza_pdf'; await ref.set(record); continue; }
+
+            const perTipo = { buste: [], f24: [] };
+            for (const a of allegati) {
+                const tipo = Posta.tipoAllegato(a.nome, a.mimeType, oggetto);
+                const esito = { nome: a.nome, tipo, size: a.size };
+                try {
+                    const buf = await gm.allegato(id, a.attachmentId);
+                    const sha = crypto.createHash('sha256').update(buf).digest('hex');
+                    esito.sha = sha;
+                    const dup = await db.collection('postaAllegati').doc(sha).get();
+                    if (dup.exists) { esito.stato = 'duplicato'; esito.file = dup.data().file; record.allegati.push(esito); continue; }
+                    const path = (tipo === 'f24' ? 'f24/' : 'bustePaga/') + mese + '/posta_' + sha.slice(0, 8) + '_' + Posta.nomeFileSicuro(a.nome);
+                    await bucket.file(path).save(buf, { contentType: 'application/pdf', resumable: false, metadata: { metadata: { origine: 'posta', casella, messageId: id } } });
+                    await db.collection('postaAllegati').doc(sha).set({ file: path, tipo, mese, casella, messageId: id, nome: a.nome, salvatoIl: new Date().toISOString() });
+                    esito.file = path; esito.stato = 'salvato';
+                    perTipo[tipo].push(path);
+                    riepilogo.allegati++;
+                } catch (e) { esito.stato = 'errore'; esito.messaggio = e.message; riepilogo.errori.push(a.nome + ': ' + e.message); }
+                record.allegati.push(esito);
+            }
+
+            const chi = 'posta:' + casella;
+            if (perTipo.buste.length) {
+                const cur = (await db.collection('costiMensili').doc(mese).get()).data() || {};
+                const nGia = (cur.bustePaga && Number(cur.bustePaga.n)) || 0;
+                // le bozze non toccano mai un mese che ha già cedolini; le definitive sovrascrivono le bozze, mai un mese definitivo
+                if (bozza && nGia > 0) {
+                    record.buste = { stato: 'saltato', motivo: 'bozze ignorate: ' + mese + ' ha già ' + nGia + ' cedolini' };
+                } else if (!bozza && nGia > 0 && cur.bustePaga.stato === 'definitivo') {
+                    record.buste = { stato: 'saltato', motivo: 'buste paga ' + mese + ' già caricate e definitive (' + nGia + ' cedolini)' };
+                } else {
+                    try {
+                        const out = await elaboraBustePagaCore({ mese, files: perTipo.buste, email: chi, bozza });
+                        record.buste = { stato: 'ok', ok: out.esiti.filter((x) => x.stato === 'ok').length, errori: out.esiti.filter((x) => x.stato !== 'ok').map((x) => x.messaggio).slice(0, 30), totali: out.totali };
+                        riepilogo.buste.push(mese + (bozza ? ' (bozze)' : '') + ': ' + record.buste.ok + ' cedolini');
+                    } catch (e) { record.buste = { stato: 'errore', messaggio: e.message }; riepilogo.errori.push('buste ' + mese + ': ' + e.message); }
+                }
+            }
+            if (perTipo.f24.length) {
+                try {
+                    // la quietanza arriva in una mail del mese successivo ("QUIETANZA AGOSTO"): se la stessa
+                    // delega (scadenza + saldo) è già su un mese vicino, qui si toglie e là si marca quietanzata
+                    const vicini = [];
+                    for (const mv of Posta.mesiVicini(mese, 2, 1)) {
+                        const dv = (await db.collection('costiMensili').doc(mv).get()).data();
+                        if (dv && dv.f24Doc && Array.isArray(dv.f24Doc.moduli)) dv.f24Doc.moduli.forEach((x) => vicini.push(Object.assign({ _mese: mv }, x)));
+                    }
+                    let out = await elaboraF24Core({ mese, files: perTipo.f24, rimuovi: null, email: chi });
+                    for (const e of out.esiti.filter((x) => x.stato === 'ok')) {
+                        const mio = out.moduli.find((x) => x.id === e.id);
+                        const uguale = mio && Posta.trovaModuloUguale(vicini, mio);
+                        if (!uguale) continue;
+                        out = await elaboraF24Core({ mese, files: [], rimuovi: e.id, email: chi });
+                        e.stato = 'duplicato'; e.messaggio = 'stessa delega già su ' + uguale._mese;
+                        if (mio.quietanzato && !uguale.quietanzato) {
+                            const refV = db.collection('costiMensili').doc(uguale._mese);
+                            const dv = (await refV.get()).data() || {};
+                            const mods = (dv.f24Doc && dv.f24Doc.moduli || []).map((x) => x.id === uguale.id ? Object.assign({}, x, { quietanzato: true, quietanzaFile: mio.file }) : x);
+                            await refV.update({ 'f24Doc.moduli': mods });
+                        }
+                    }
+                    const nuovi = out.esiti.filter((x) => x.stato === 'ok');
+                    record.f24 = { stato: 'ok', esiti: out.esiti };
+                    riepilogo.f24.push(mese + ': ' + (nuovi.map((x) => x.saldo).join(' + ') || 'nessuna delega') + (out.esiti.some((x) => x.stato !== 'ok') ? ' (con errori)' : ''));
+                    if (nuovi.length) record.f24.fic = await allineaF24SuFic(mese, nuovi.map((x) => x.id));
+                } catch (e) { record.f24 = { stato: 'errore', messaggio: e.message }; riepilogo.errori.push('F24 ' + mese + ': ' + e.message); }
+            }
+            record.stato = 'elaborato';
+            await ref.set(record);
+        }
+    }
+    // Deleghe degli ultimi mesi ancora senza F24 su FIC (errore precedente, o caricate dal gestionale): riprova
+    for (const mv of [oggiMese()].concat(Posta.mesiVicini(oggiMese(), 3, 0))) {
+        try {
+            const dv = (await db.collection('costiMensili').doc(mv).get()).data();
+            const daFare = ((dv && dv.f24Doc && dv.f24Doc.moduli) || []).filter((x) => !(x.fic && x.fic.taxId)).map((x) => x.id);
+            if (daFare.length) riepilogo.ficRiallineati = (riepilogo.ficRiallineati || []).concat((await allineaF24SuFic(mv, daFare)).map((e) => mv + ' ' + e.id + ': ' + e.fic + (e.messaggio ? ' (' + e.messaggio + ')' : '')));
+        } catch (e) { riepilogo.errori.push('riallineo FIC ' + mv + ': ' + e.message); }
+    }
+    return riepilogo;
+}
+function oggiMese() { return new Date().toISOString().slice(0, 7); }
+
+// Crea su Fatture in Cloud (Gestione F24) le deleghe appena lette, con il PDF allegato.
+// Se Guido l'aveva già caricato a mano (stessa scadenza e importo) si aggancia a quello.
+async function allineaF24SuFic(mese, ids) {
+    const ref = db.collection('costiMensili').doc(mese);
+    const cur = (await ref.get()).data() || {};
+    const moduli = (cur.f24Doc && Array.isArray(cur.f24Doc.moduli)) ? cur.f24Doc.moduli.slice() : [];
+    const fic = createFicClient({ token: FIC_TOKEN.value(), companyId: FIC_COMPANY_ID.value() });
+    const c = '/c/' + encodeURIComponent(fic.companyId);
+    const esistenti = ((await fic.request('GET', c + '/taxes?per_page=100&fieldset=detailed')) || {}).data || [];
+    // conto di pagamento: FIC lo pretende per gli F24 "pagati" (quello predefinito, altrimenti il primo)
+    const conti = ((await fic.request('GET', c + '/info/payment_accounts')) || {}).data || [];
+    const conto = conti.find((a) => a.is_default) || conti.find((a) => /bpm/i.test(a.name || '')) || conti[0] || null;
+    const bucket = admin.storage().bucket();
+    const oggi = new Date().toISOString().slice(0, 10);
+    const esiti = [];
+    for (const m of moduli) {
+        if (!ids.includes(m.id) || (m.fic && m.fic.taxId)) continue;
+        try {
+            const gia = Posta.trovaTaxFic(esistenti, m);
+            if (gia) {
+                const diff = Math.round(((Number(gia.amount) || 0) - m.saldo) * 100) / 100;
+                m.fic = { taxId: gia.id, stato: 'esistente', importoFic: gia.amount, dataFic: gia.due_date, il: new Date().toISOString() };
+                if (Math.abs(diff) >= 0.01) m.avvisi = (m.avvisi || []).concat(['Su FIC risulta ' + Number(gia.amount).toFixed(2) + ' € con scadenza ' + gia.due_date + ' (differenza ' + diff.toFixed(2) + ' €)']);
+                esiti.push({ id: m.id, fic: 'esistente', taxId: gia.id }); continue;
+            }
+            const [buf] = await bucket.file(m.file).download();
+            const fd = new FormData();
+            const nome = Posta.nomeFileSicuro(m.file.split('/').pop());
+            fd.append('filename', nome);
+            fd.append('attachment', new Blob([buf], { type: 'application/pdf' }), nome);
+            const up = await fetch('https://api-v2.fattureincloud.it' + c + '/taxes/attachment', { method: 'POST', headers: { Authorization: 'Bearer ' + FIC_TOKEN.value() }, body: fd });
+            if (!up.ok) throw new Error('allegato FIC HTTP ' + up.status + ': ' + (await up.text()).slice(0, 200));
+            const token = ((await up.json()).data || {}).attachment_token;
+            const pagato = !!(m.quietanzato || (m.dataVersamento && m.dataVersamento <= oggi)) && !!conto;
+            const creato = await fic.request('POST', c + '/taxes', { data: {
+                amount: m.saldo, description: Posta.descrizioneF24Fic(m, mese), due_date: m.dataVersamento || oggi,
+                status: pagato ? 'paid' : 'not_paid',
+                ...(pagato ? { payment_account: { id: conto.id }, paid_date: m.dataVersamento || oggi } : {}),
+                ...(token ? { attachment_token: token } : {}),
+            } });
+            const taxId = creato && creato.data && creato.data.id;
+            m.fic = { taxId: taxId || null, stato: 'creato', il: new Date().toISOString() };
+            esiti.push({ id: m.id, fic: 'creato', taxId });
+        } catch (e) {
+            m.fic = { stato: 'errore', messaggio: e.message, il: new Date().toISOString() };
+            esiti.push({ id: m.id, fic: 'errore', messaggio: e.message });
+            console.error('[posta] FIC F24 ' + m.id + ': ' + e.message);
+        }
+    }
+    await ref.update({ 'f24Doc.moduli': moduli });
+    return esiti;
+}
+
+// 04:00 — dopo la sync FIC delle 03:30. Avviabile anche a mano (POST all'URL con identity token).
+exports.postaNotturna = onSchedule(
+    { schedule: '0 4 * * *', timeZone: 'Europe/Rome', region: 'europe-west1', secrets: [ANTHROPIC_API_KEY, FIC_TOKEN, FIC_COMPANY_ID], timeoutSeconds: 540, memory: '2GiB' },
+    async () => { const out = await eseguiPosta(); console.log('[postaNotturna]', JSON.stringify(out)); }
 );
 
 // ═══════════════════════════════════════════════════════════════════
