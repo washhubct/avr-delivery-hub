@@ -8,6 +8,7 @@ const admin = require('firebase-admin');
 const crypto = require('crypto');
 const webpush = require('web-push');
 const PatenteCore = require('./patente-core.js');
+const LB = require('./leaderboard-core.js');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -378,9 +379,12 @@ async function sendResendInvitoEmail({ apiKey, to, link, nome, mansione, provinc
 // Europe/Rome, ricalcola mese corrente sempre + mese precedente nei
 // primi 10 giorni del mese (per catturare scritture late).
 //
-// Scrive due doc per mese:
-//   • leaderboard/{YYYY-MM}     → letto da app driver (anonimo, solo cognome)
-//   • leaderboardFull/{YYYY-MM} → letto da dashboard admin (con nome reale)
+// Scrive per mese:
+//   • leaderboard/{YYYY-MM}        → classifica generale anonima (app vecchie)
+//   • leaderboard/{YYYY-MM}_{PROV} → classifica anonima della provincia con montepremi,
+//                                    premi e soglia: l'app legge solo quella del driver
+//   • leaderboardFull/{YYYY-MM}    → gestionale: generale + province con nomi reali
+// Regole premi (6 cent a consegna, 12 giorni, zero danni, patente, soglia 85%) in leaderboard-core.js.
 // ═══════════════════════════════════════════════════════════════════
 
 function meseInRome(date) {
@@ -402,17 +406,26 @@ function mesePrecedente(meseStr) {
     return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
-    // Consegne del mese + tempi (durataMin registrata dall'app driver)
+async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome, storicoProvince) {
+    const oggi = giornoInRome(new Date());
+    // Consegne del mese + tempi (durataMin registrata dall'app driver) + giorni lavorati
     const repSnap = await db.collection('reportDriver').where('mese', '==', mese).get();
     const consegnePerDriver = {};
     const tempoPerDriver = {}; // { minuti, consegneConTempo }
+    const giorniPerDriver = {}; // Set di giorni YYYY-MM-DD con almeno una consegna
     repSnap.forEach(doc => {
         const d = doc.data();
         const drv = ((d.driver || '') + '').toUpperCase().trim();
         if (!drv) return;
         const n = d.numConsegne || 0;
         consegnePerDriver[drv] = (consegnePerDriver[drv] || 0) + n;
+        if (n > 0) {
+            const dt = d.data && typeof d.data.toDate === 'function' ? d.data.toDate() : (d.data ? new Date(d.data) : null);
+            if (dt && !isNaN(dt)) {
+                if (!giorniPerDriver[drv]) giorniPerDriver[drv] = new Set();
+                giorniPerDriver[drv].add(giornoInRome(dt));
+            }
+        }
         if (d.durataMin > 0 && n > 0) {
             if (!tempoPerDriver[drv]) tempoPerDriver[drv] = { minuti: 0, consegneConTempo: 0 };
             tempoPerDriver[drv].minuti += d.durataMin;
@@ -460,13 +473,18 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
         let score = consegne + bonusVelocita;
         if (numDanni === 0) score += 50;
         score -= numDanni * 30;
+        const a = anagByCognome[drv];
+        const patenteOk = !!(a && a.patenteVerifica && a.patenteVerifica.stato === 'verificata' && (!a.scadenzaPatente || a.scadenzaPatente >= oggi));
         return {
             driver: drv,
+            citta: a && a.citta ? String(a.citta).toUpperCase().trim() : '',
             consegne,
+            giorni: giorniPerDriver[drv] ? giorniPerDriver[drv].size : 0,
             danni: numDanni,
             bonusZeroDanni: numDanni === 0,
             tempoMedioMin,
             bonusVelocita,
+            patenteOk,
             score: Math.max(0, score),
         };
     });
@@ -483,7 +501,7 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
     // email per riconoscere la riga "SEI TU" e derivare il nickname.
     // Driver senza email in anagrafica: hash del cognome con prefisso
     // (non ricostruibile lato client, quindi comunque anonimo).
-    const anon = drivers.map(d => {
+    const anonDi = (d) => {
         const a = anagByCognome[d.driver];
         const email = a && a.email ? String(a.email).toLowerCase().trim() : null;
         const h = crypto.createHash('sha256')
@@ -493,35 +511,91 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome) {
         return {
             h,
             consegne: d.consegne,
+            giorni: d.giorni,
             danni: d.danni,
             bonusZeroDanni: d.bonusZeroDanni,
             tempoMedioMin: d.tempoMedioMin,
             bonusVelocita: d.bonusVelocita,
             score: d.score,
             posPrec: d.posPrec,
+            ...(d.posizione ? { posizione: d.posizione, premiabile: d.premiabile, motiviNonPremiabile: d.motiviNonPremiabile, premio: d.premio } : {}),
         };
-    });
+    };
+    const anon = drivers.map(anonDi);
 
     // Versione full (letta da admin): include nome reale dall'anagrafica
-    const full = drivers.map(d => {
+    const fullDi = (d) => {
         const a = anagByCognome[d.driver];
         return {
             driver: d.driver,
             cognome: a && a.cognome ? a.cognome : d.driver,
             nome: a && a.nome ? a.nome : '',
             email: a && a.email ? a.email : '',
-            citta: a && a.citta ? a.citta : '',
+            citta: d.citta,
             consegne: d.consegne,
+            giorni: d.giorni,
             danni: d.danni,
             bonusZeroDanni: d.bonusZeroDanni,
             tempoMedioMin: d.tempoMedioMin,
             bonusVelocita: d.bonusVelocita,
+            patenteOk: d.patenteOk,
             score: d.score,
             posPrec: d.posPrec,
+            ...(d.posizione ? { posizione: d.posizione, premiabile: d.premiabile, motiviNonPremiabile: d.motiviNonPremiabile, premio: d.premio } : {}),
         };
+    };
+    const full = drivers.map(fullDi);
+
+    // Classifiche per provincia (CT, ME, PA, SR) con montepremi, premi e soglia.
+    // La posizione nel mese precedente qui è quella della classifica di provincia.
+    const now = meseInRome(new Date());
+    const inCorso = now.mese === mese;
+    const giorniMese = LB.giorniNelMese(mese);
+    const giornoDelMese = inCorso ? now.day : giorniMese;
+    const provinceAnon = {}, provinceFull = {};
+    LB.PROVINCE_PREMI.forEach(p => {
+        const c = LB.classificaProvincia(p, drivers.filter(d => d.citta === p), (storicoProvince && storicoProvince[p]) || [], giornoDelMese, giorniMese);
+        const prevProv = prevMesePositions && prevMesePositions.province && prevMesePositions.province[p];
+        c.drivers.forEach(d => { d.posPrec = (prevProv && prevProv[d.driver]) || null; });
+        const base = { provincia: p, nome: c.nome, nDriver: c.nDriver, consegne: c.consegne, montepremi: c.montepremi, importi: c.importi, soglia: c.soglia };
+        provinceAnon[p] = Object.assign({}, base, { drivers: c.drivers.map(anonDi) });
+        provinceFull[p] = Object.assign({}, base, { premi: c.premi, drivers: c.drivers.map(fullDi) });
     });
 
-    return { anon, full };
+    return { anon, full, provinceAnon, provinceFull, inCorso };
+}
+
+// Consegne per provincia nei 3 mesi precedenti (per la soglia di attivazione dei premi).
+// Legge i totali già salvati in leaderboardFull/{mese}.province; se un mese è stato
+// calcolato prima di questa versione ricostruisce i totali dai rapporti.
+async function loadStoricoProvince(mese, anagByCognome) {
+    const out = {};
+    LB.PROVINCE_PREMI.forEach(p => { out[p] = []; });
+    let m = mese;
+    for (let k = 0; k < 3; k++) {
+        m = mesePrecedente(m);
+        let totali = null;
+        try {
+            const doc = await db.collection('leaderboardFull').doc(m).get();
+            const prov = doc.exists && doc.data().province;
+            if (prov) { totali = {}; LB.PROVINCE_PREMI.forEach(p => { totali[p] = (prov[p] && Number(prov[p].consegne)) || 0; }); }
+        } catch (e) { console.warn('[leaderboard] storico', m, e.message); }
+        if (!totali) {
+            totali = {};
+            LB.PROVINCE_PREMI.forEach(p => { totali[p] = 0; });
+            try {
+                const snap = await db.collection('reportDriver').where('mese', '==', m).get();
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const a = anagByCognome[((d.driver || '') + '').toUpperCase().trim()];
+                    const p = a && a.citta ? String(a.citta).toUpperCase().trim() : '';
+                    if (totali[p] !== undefined) totali[p] += d.numConsegne || 0;
+                });
+            } catch (e) { console.warn('[leaderboard] storico rapporti', m, e.message); }
+        }
+        LB.PROVINCE_PREMI.forEach(p => out[p].push(totali[p]));
+    }
+    return out;
 }
 
 async function loadPrevMesePositions(mesePrec) {
@@ -530,9 +604,13 @@ async function loadPrevMesePositions(mesePrec) {
         // che nella versione anonima non esiste più.
         const doc = await db.collection('leaderboardFull').doc(mesePrec).get();
         if (!doc.exists) return null;
-        const arr = doc.data().drivers || [];
-        const map = {};
-        arr.forEach((d, i) => { map[d.driver] = i + 1; });
+        const data = doc.data();
+        const map = { province: {} };
+        (data.drivers || []).forEach((d, i) => { map[d.driver] = i + 1; });
+        Object.keys(data.province || {}).forEach(p => {
+            map.province[p] = {};
+            ((data.province[p] || {}).drivers || []).forEach((d, i) => { map.province[p][d.driver] = i + 1; });
+        });
         return map;
     } catch (e) {
         console.warn('[leaderboard] prev mese load:', e.message);
@@ -542,7 +620,8 @@ async function loadPrevMesePositions(mesePrec) {
 
 async function precalcoloMese(mese, anagByCognome) {
     const prevPositions = await loadPrevMesePositions(mesePrecedente(mese));
-    const { anon, full } = await buildLeaderboardForMese(mese, prevPositions, anagByCognome);
+    const storico = await loadStoricoProvince(mese, anagByCognome);
+    const { anon, full, provinceAnon, provinceFull, inCorso } = await buildLeaderboardForMese(mese, prevPositions, anagByCognome, storico);
 
     // Guard: non scrivere doc vuoto se non c'è nulla da rappresentare
     if (anon.length === 0) {
@@ -558,21 +637,26 @@ async function precalcoloMese(mese, anagByCognome) {
         totalDrivers: anon.length,
         lastUpdate: ts,
     });
+    LB.PROVINCE_PREMI.forEach(p => {
+        batch.set(db.collection('leaderboard').doc(mese + '_' + p), Object.assign({ mese, inCorso, regole: LB.REGOLE, lastUpdate: ts }, provinceAnon[p]));
+    });
     batch.set(db.collection('leaderboardFull').doc(mese), {
         mese,
         drivers: full,
         totalDrivers: full.length,
+        province: provinceFull,
+        regole: LB.REGOLE,
+        inCorso,
         lastUpdate: ts,
     });
     await batch.commit();
-    console.log(`[leaderboard] ${mese}: ${anon.length} driver aggiornati`);
-    return { mese, nDrivers: anon.length, skipped: false };
+    const riep = LB.PROVINCE_PREMI.map(p => `${p} ${provinceFull[p].nDriver} drv/${provinceFull[p].consegne} cons/€${provinceFull[p].montepremi}`).join(', ');
+    console.log(`[leaderboard] ${mese}: ${anon.length} driver aggiornati — ${riep}`);
+    return { mese, nDrivers: anon.length, skipped: false, province: riep };
 }
 
-async function eseguiPrecalcolo() {
-    const now = meseInRome(new Date());
-
-    // Anagrafica letta una sola volta (cardinalità bassa)
+// Anagrafica per cognome (cardinalità bassa, letta una volta per esecuzione)
+async function caricaAnagByCognome() {
     const anagByCognome = {};
     try {
         const snap = await db.collection('driverAnagrafica').get();
@@ -584,6 +668,15 @@ async function eseguiPrecalcolo() {
     } catch (e) {
         console.warn('[leaderboard] anagrafica load:', e.message);
     }
+    return anagByCognome;
+}
+
+// Uso da CLI (backfill dei mesi passati): non è una Cloud Function, il deploy la ignora
+exports.cliPrecalcoloMese = async (mese) => precalcoloMese(mese, await caricaAnagByCognome());
+
+async function eseguiPrecalcolo() {
+    const now = meseInRome(new Date());
+    const anagByCognome = await caricaAnagByCognome();
 
     const mesi = [now.mese];
     // Nei primi 10 giorni del mese, aggiorna anche il mese precedente
@@ -653,14 +746,7 @@ exports.rebuildLeaderboard = onRequest(
 
         try {
             if (meseSpecifico && /^\d{4}-\d{2}$/.test(meseSpecifico)) {
-                const anagByCognome = {};
-                const snap = await db.collection('driverAnagrafica').get();
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    const k = ((data.cognome || '') + '').toUpperCase().trim();
-                    if (k) anagByCognome[k] = data;
-                });
-                const r = await precalcoloMese(meseSpecifico, anagByCognome);
+                const r = await precalcoloMese(meseSpecifico, await caricaAnagByCognome());
                 res.json({ success: true, result: r });
             } else {
                 const results = await eseguiPrecalcolo();
@@ -1007,13 +1093,20 @@ exports.pushPodioMensile = onSchedule(
         const mese = meseInRome(now).mese;
         const doc = await db.collection('leaderboardFull').doc(mese).get();
         if (!doc.exists) { console.log(`[push] podio: leaderboardFull/${mese} assente`); return; }
-        const top3 = (doc.data().drivers || []).slice(0, 3);
-        if (top3.length === 0) return;
+        // Vincitori per provincia (premi già assegnati saltando i non premiabili);
+        // niente push se la provincia non è in linea con la soglia.
+        const province = doc.data().province || {};
+        const vincitori = [];
+        Object.keys(province).forEach(p => {
+            const c = province[p];
+            if (c.soglia && !(c.soglia.superata || c.soglia.proiezioneOk)) return;
+            (c.premi || []).forEach((x, i) => vincitori.push({ ...x, nome: c.nome, medaglia: ['🥇', '🥈', '🥉'][i] || '🏅' }));
+        });
+        if (vincitori.length === 0) return;
 
         initWebpush();
-        const medaglie = ['🥇', '🥈', '🥉'];
-        for (let i = 0; i < top3.length; i++) {
-            const cognome = (top3[i].driver || '').toUpperCase().trim();
+        for (const v of vincitori) {
+            const cognome = (v.driver || '').toUpperCase().trim();
             if (!cognome) continue;
             // Match per cognome: pushSubscriptions.driver è il cognome uppercase
             const snap = await db.collection('pushSubscriptions').where('driver', '==', cognome).get();
@@ -1022,10 +1115,10 @@ exports.pushPodioMensile = onSchedule(
             if (subs.length === 0) continue;
             const r = await inviaPushASubs(subs, {
                 title: 'Last Mile Driver',
-                body: `${medaglie[i]} Sei sul podio! Hai chiuso il mese ${i + 1}° in classifica 🏆`,
+                body: `${v.medaglia} Sei sul podio di ${v.nome}! Hai chiuso il mese ${v.posizione}° in classifica: premio €${v.importo} (buono Q8 o Amazon, scegli tu) 🏆`,
                 url: './',
             });
-            console.log(`[push] podio ${mese}: ${cognome} ${i + 1}° sent=${r.sent}`);
+            console.log(`[push] podio ${mese} ${v.nome}: ${cognome} ${v.posizione}° €${v.importo} sent=${r.sent}`);
         }
     }
 );

@@ -1,9 +1,25 @@
 // DELIVERY HUB — Classifica Driver (vista admin con nomi reali)
 // Legge leaderboardFull/{mese} scritta dalla Cloud Function precalcolaLeaderboard.
-// Usata per decidere chi premiare a fine mese.
-// Premi mensili in buoni pasto: 1° €100, 2° €70, 3° €40.
+// Dal 31/10/2026 le classifiche sono per provincia (CT, ME, PA, SR; Enna esclusa):
+// ogni provincia ha un montepremi legato alle consegne del mese (6 cent a consegna,
+// min 100 / max 500 €), ripartito 50/30/20 con 5+ driver o 60/40 con 3-4, pagato
+// solo se la provincia fa almeno l'85% della media dei 3 mesi precedenti.
+// Premiabile: 12 giorni lavorati, zero danni, patente verificata. Il premio è un
+// buono Q8 o Amazon a scelta del vincitore. Regole in functions/leaderboard-core.js.
 
-var PREMI_CLASSIFICA = { 1: 100, 2: 70, 3: 40 };
+var CLASSIFICA_PROVINCE = ['CT', 'ME', 'PA', 'SR'];
+var CLASSIFICA_NOMI = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Siracusa', EN: 'Enna' };
+var CLASSIFICA_MOTIVI = { giorni: 'meno di 12 giorni lavorati', danni: 'danno nel mese', patente: 'patente non verificata' };
+var classificaState = { prov: null, mese: null };
+
+function classificaTabsVisibili(data) {
+    var prov = provinceVisibili(); // null = tutte
+    var tabs = CLASSIFICA_PROVINCE.filter(function(p) { return data.province && data.province[p] && (!prov || prov.indexOf(p) >= 0); });
+    tabs.push('TUTTE');
+    return tabs;
+}
+
+function classificaNome(d) { return ((d.nome || '') + ' ' + (d.cognome || d.driver)).trim(); }
 
 async function renderClassifica() {
     var mese = state.meseCorrente;
@@ -34,118 +50,164 @@ async function renderClassifica() {
     }
 
     var data = doc.data();
-    var drivers = data.drivers || [];
-    // Responsabile di zona: solo i driver delle sue province (la posizione resta quella generale)
-    var prov = provinceVisibili();
-    if (prov) {
-        drivers = drivers.map(function(d, i) { return Object.assign({ posizioneGenerale: i + 1 }, d); })
-            .filter(function(d) { return prov.indexOf(String(d.citta || '').toUpperCase()) >= 0; });
-    }
     var lastUpdate = data.lastUpdate && data.lastUpdate.toDate ? data.lastUpdate.toDate() : null;
     var lastUpdateStr = lastUpdate ? lastUpdate.toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 
-    if (drivers.length === 0) {
-        el.innerHTML =
-            '<div class="card" style="text-align:center;padding:40px">' +
-            '<div style="font-size:36px;margin-bottom:8px">📭</div>' +
-            '<p style="font-weight:600;color:var(--text)">Nessun driver attivo nel mese</p>' +
-            '<p class="card-desc">Ultimo aggiornamento: ' + lastUpdateStr + '</p>' +
-            '</div>';
-        return;
-    }
+    var tabs = classificaTabsVisibili(data);
+    if (classificaState.mese !== mese || tabs.indexOf(classificaState.prov) < 0) classificaState.prov = tabs[0];
+    classificaState.mese = mese;
+    var tab = classificaState.prov;
 
-    var totConsegne = drivers.reduce(function(s, d) { return s + (d.consegne || 0); }, 0);
-    var totDanni = drivers.reduce(function(s, d) { return s + (d.danni || 0); }, 0);
-    var driverPuliti = drivers.filter(function(d) { return d.bonusZeroDanni; }).length;
+    var tabsHtml = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">' + tabs.map(function(p) {
+        var c = p === 'TUTTE' ? null : data.province[p];
+        var label = p === 'TUTTE' ? '🌍 Tutte' : CLASSIFICA_NOMI[p] + (c ? ' <span style="opacity:.7;font-weight:500">· ' + c.nDriver + ' driver · €' + c.montepremi + '</span>' : '');
+        return '<button class="btn btn-sm' + (p === tab ? ' btn-primary' : '') + '" onclick="classificaState.prov=\'' + p + '\';renderClassifica()">' + label + '</button>';
+    }).join('') + '</div>';
 
-    var rowsHtml = drivers.map(function(d, i) {
-        var pos = d.posizioneGenerale || (i + 1); // posizione nella classifica generale
-        var posBadge;
-        if (pos === 1) posBadge = '<span style="font-size:18px">🥇</span>';
-        else if (pos === 2) posBadge = '<span style="font-size:18px">🥈</span>';
-        else if (pos === 3) posBadge = '<span style="font-size:18px">🥉</span>';
-        else posBadge = '<span style="font-weight:700;color:var(--text-light)">' + pos + '</span>';
+    var avvisoVecchio = !data.province
+        ? '<div class="card" style="margin-bottom:16px;background:var(--warning-bg)">⚠️ Questo mese è stato calcolato prima delle classifiche per provincia: premi e montepremi compaiono dopo un ricalcolo. <button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Ricalcola ora</button></div>'
+        : '';
 
-        var trendHtml = renderTrend(d.posPrec, pos);
-        var bonusParts = [];
-        if (d.bonusVelocita > 0) bonusParts.push('<span class="badge" style="background:var(--info-bg);color:var(--accent);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">⚡ +' + d.bonusVelocita + '</span>');
-        if (d.bonusZeroDanni) bonusParts.push('<span class="badge" style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">🛡️ Zero danni</span>');
-        var bonusHtml = bonusParts.length ? bonusParts.join(' ') : '<span style="color:var(--text-light)">—</span>';
+    var regole = data.regole || { euroPerConsegna: 0.06, montepremiMin: 100, montepremiMax: 500, minGiorniLavorati: 12, sogliaPct: 0.85, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
+    var scoringDesc = 'Scoring: 1 consegna = 1 pt · ⚡ Velocità (tempo medio &lt;20 min = +30, &lt;25 min = +15, con almeno 10 consegne con orari) · Zero danni = +50 pt · Danno = -30 pt';
 
-        var tempoHtml = d.tempoMedioMin != null
-            ? d.tempoMedioMin.toFixed(1).replace('.', ',') + ' min'
-            : '<span style="color:var(--text-light)">—</span>';
+    var body = tab === 'TUTTE'
+        ? renderClassificaGenerale(data, mese, lastUpdateStr, scoringDesc)
+        : renderClassificaProvincia(data.province[tab], data, mese, lastUpdateStr, scoringDesc, regole);
 
-        var premio = PREMI_CLASSIFICA[pos];
-        var premioHtml = premio
-            ? '<span class="badge" style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">🎁 €' + premio + ' buoni pasto</span>'
-            : '<span style="color:var(--text-light)">—</span>';
+    el.innerHTML = tabsHtml + avvisoVecchio + body;
+}
 
-        var nomeReale = (d.nome || '') + ' ' + (d.cognome || d.driver);
-        nomeReale = nomeReale.trim();
+function classificaPosBadge(pos) {
+    if (pos === 1) return '<span style="font-size:18px">🥇</span>';
+    if (pos === 2) return '<span style="font-size:18px">🥈</span>';
+    if (pos === 3) return '<span style="font-size:18px">🥉</span>';
+    return '<span style="font-weight:700;color:var(--text-light)">' + pos + '</span>';
+}
 
+function classificaBonusHtml(d) {
+    var parts = [];
+    if (d.bonusVelocita > 0) parts.push('<span class="badge" style="background:var(--info-bg);color:var(--accent);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">⚡ +' + d.bonusVelocita + '</span>');
+    if (d.bonusZeroDanni) parts.push('<span class="badge" style="background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600">🛡️ Zero danni</span>');
+    return parts.length ? parts.join(' ') : '<span style="color:var(--text-light)">—</span>';
+}
+
+function classificaTempoHtml(d) {
+    return d.tempoMedioMin != null ? d.tempoMedioMin.toFixed(1).replace('.', ',') + ' min' : '<span style="color:var(--text-light)">—</span>';
+}
+
+function classificaStatCard(items) {
+    return '<div class="card" style="display:grid;grid-template-columns:repeat(' + items.length + ',1fr);gap:16px;margin-bottom:20px">' + items.map(function(it) {
+        return '<div><div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px">' + it.label + '</div>' +
+            '<div style="font-size:22px;font-weight:700;color:' + (it.color || 'var(--text)') + ';margin-top:4px">' + it.value + '</div>' +
+            (it.sub ? '<div style="font-size:11px;color:var(--text-muted)">' + it.sub + '</div>' : '') + '</div>';
+    }).join('') + '</div>';
+}
+
+// ── Classifica di una provincia: montepremi, soglia, podio, tabella ──
+function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, regole) {
+    var drivers = c.drivers || [];
+    var inCorso = !!data.inCorso;
+    var s = c.soglia || {};
+
+    // Stato soglia
+    var stato, statoColore, statoBg;
+    if (!s.richiesto) { stato = 'Soglia non applicata: nessun mese precedente con dati'; statoColore = 'var(--text-muted)'; statoBg = 'var(--info-bg)'; }
+    else if (!inCorso) {
+        if (s.superata) { stato = '✓ Premi confermati: ' + s.consegne + ' consegne su ' + s.richiesto + ' richieste'; statoColore = 'var(--success)'; statoBg = 'var(--success-bg)'; }
+        else { stato = '✗ Premi sospesi: ' + s.consegne + ' consegne, ne servivano ' + s.richiesto; statoColore = 'var(--danger)'; statoBg = 'var(--danger-bg)'; }
+    } else if (s.proiezioneOk) { stato = '📈 In linea: proiezione ' + s.proiezione + ' consegne su ' + s.richiesto + ' richieste'; statoColore = 'var(--success)'; statoBg = 'var(--success-bg)'; }
+    else { stato = '⚠️ Sotto soglia: proiezione ' + s.proiezione + ' consegne, ne servono ' + s.richiesto; statoColore = '#b45309'; statoBg = 'var(--warning-bg)'; }
+    var sogliaSub = s.richiesto ? 'Media ' + s.mesiStorico + ' mes' + (s.mesiStorico === 1 ? 'e' : 'i') + ' precedent' + (s.mesiStorico === 1 ? 'e' : 'i') + ': ' + s.media + ' consegne · richiesto l\'' + Math.round((regole.sogliaPct || 0.85) * 100) + '%' : '';
+
+    var importi = c.importi || [];
+    var premiStr = importi.length ? importi.map(function(x, i) { return ['🥇', '🥈', '🥉'][i] + ' €' + x; }).join(' · ') : 'nessun premio (servono almeno 3 driver)';
+
+    var montepremiCard =
+        '<div class="card" style="margin-bottom:20px;background:linear-gradient(135deg,var(--navy,#0f1d3d),#1e3a8a);color:#fff">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">' +
+            '<div>' +
+              '<div style="font-size:11px;opacity:.75;text-transform:uppercase;letter-spacing:1px">Montepremi ' + escapeHtmlSafe(c.nome) + ' · ' + meseLabel(mese) + '</div>' +
+              '<div style="font-size:34px;font-weight:800;margin-top:2px">€' + c.montepremi + '</div>' +
+              '<div style="font-size:12px;opacity:.85">' + c.consegne + ' consegne di squadra × ' + (regole.euroPerConsegna || 0.06).toFixed(2).replace('.', ',') + ' € · minimo €' + regole.montepremiMin + ' · massimo €' + regole.montepremiMax + '</div>' +
+            '</div>' +
+            '<div style="text-align:right">' +
+              '<div style="font-size:11px;opacity:.75;text-transform:uppercase;letter-spacing:1px">Premi</div>' +
+              '<div style="font-size:16px;font-weight:700;margin-top:4px">' + premiStr + '</div>' +
+              '<div style="font-size:11px;opacity:.85;margin-top:4px">' + escapeHtmlSafe(regole.premio || '') + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="margin-top:14px;padding:10px 14px;border-radius:8px;background:' + statoBg + ';color:' + statoColore + ';font-weight:700;font-size:13px">' + stato +
+            (sogliaSub ? '<div style="font-weight:500;font-size:11px;opacity:.9;margin-top:2px">' + sogliaSub + '</div>' : '') + '</div>' +
+        '</div>';
+
+    // Podio: i premi già assegnati dalla CF (saltano chi non è premiabile)
+    var premi = c.premi || [];
+    var podioOrder = importi.length >= 3 ? [1, 0, 2] : [0, 1];
+    var podioHtml = podioOrder.filter(function(i) { return i < importi.length; }).map(function(i) {
+        var medal = ['🥇', '🥈', '🥉'][i];
+        var isFirst = i === 0;
+        var pr = premi[i];
+        if (!pr) {
+            return '<div style="flex:1;text-align:center;padding:16px 12px;border:1.5px dashed var(--border);border-radius:12px;opacity:.6">' +
+                '<div style="font-size:26px">' + medal + '</div><div style="font-size:12px;color:var(--text-light);margin-top:6px">€' + importi[i] + ' · nessun driver premiabile</div></div>';
+        }
+        var d = drivers.find(function(x) { return x.driver === pr.driver; }) || { driver: pr.driver };
+        return '<div style="flex:1;text-align:center;padding:' + (isFirst ? '22px 12px' : '16px 12px') + ';background:' + (isFirst ? '#fffbeb' : 'var(--white)') + ';border:1.5px solid ' + (isFirst ? '#fbbf24' : 'var(--border)') + ';border-radius:12px' + (isFirst ? ';box-shadow:0 4px 12px rgba(251,191,36,0.25)' : '') + '">' +
+            '<div style="font-size:' + (isFirst ? '34px' : '26px') + '">' + medal + '</div>' +
+            '<div style="font-weight:700;color:var(--text);margin-top:6px;font-size:' + (isFirst ? '15px' : '13px') + '">' + escapeHtmlSafe(classificaNome(d)) + '</div>' +
+            '<div style="font-size:11px;color:var(--text-muted)">' + pr.posizione + '° · ' + (d.consegne || 0) + ' consegne · ' + (d.giorni || 0) + ' gg · ' + (d.score || 0) + ' pt</div>' +
+            '<div style="margin-top:8px;display:inline-block;background:#fef3c7;color:#b45309;font-weight:800;padding:4px 12px;border-radius:8px;font-size:' + (isFirst ? '16px' : '14px') + '">🎁 €' + pr.importo + '</div>' +
+            '<div style="font-size:10px;color:var(--text-light);margin-top:4px">buono Q8 o Amazon</div>' +
+        '</div>';
+    }).join('');
+
+    var podioCard = importi.length
+        ? '<div class="card" style="margin-bottom:20px">' +
+            '<div class="card-title">🏆 Podio ' + escapeHtmlSafe(c.nome) + ' ' + meseLabel(mese) + (inCorso ? ' — provvisorio' : '') + '</div>' +
+            '<div class="card-desc">Premiabile solo chi ha almeno ' + regole.minGiorniLavorati + ' giorni lavorati, zero danni e patente verificata: il premio passa al successivo. Fringe benefit: esenti fino a 1.000 € l\'anno per dipendente, oltre vanno in busta.</div>' +
+            '<div style="display:flex;gap:14px;align-items:flex-end;margin-top:14px">' + podioHtml + '</div>' +
+          '</div>'
+        : '';
+
+    var totDanni = drivers.reduce(function(sum, d) { return sum + (d.danni || 0); }, 0);
+    var premiabili = drivers.filter(function(d) { return d.premiabile; }).length;
+    var statCard = classificaStatCard([
+        { label: 'Driver in classifica', value: c.nDriver },
+        { label: 'Consegne', value: c.consegne },
+        { label: 'Premiabili', value: premiabili + ' / ' + drivers.length, color: 'var(--success)' },
+        { label: 'Danni', value: totDanni, color: totDanni > 0 ? 'var(--danger)' : 'var(--text)' },
+    ]);
+
+    var rowsHtml = drivers.map(function(d) {
+        var pos = d.posizione;
+        var premioHtml;
+        if (d.premio > 0) premioHtml = '<span class="badge" style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">🎁 €' + d.premio + '</span>';
+        else if (!d.premiabile) premioHtml = '<span style="font-size:11px;color:var(--danger)" title="Non premiabile">✗ ' + (d.motiviNonPremiabile || []).map(function(m) { return CLASSIFICA_MOTIVI[m] || m; }).join(', ') + '</span>';
+        else premioHtml = '<span style="font-size:11px;color:var(--success)">✓ premiabile</span>';
         return (
             '<tr>' +
-              '<td style="text-align:center;width:50px">' + posBadge + '</td>' +
-              '<td><strong>' + escapeHtmlSafe(nomeReale) + '</strong>' +
+              '<td style="text-align:center;width:50px">' + classificaPosBadge(pos) + '</td>' +
+              '<td><strong>' + escapeHtmlSafe(classificaNome(d)) + '</strong>' +
                 (d.email ? '<div style="font-size:11px;color:var(--text-light);margin-top:2px">' + escapeHtmlSafe(d.email) + '</div>' : '') +
               '</td>' +
-              '<td style="color:var(--text-muted)">' + escapeHtmlSafe(d.citta || '—') + '</td>' +
+              '<td style="text-align:right;color:' + ((d.giorni || 0) < regole.minGiorniLavorati ? 'var(--danger)' : 'var(--text)') + '">' + (d.giorni || 0) + '</td>' +
               '<td style="text-align:right"><strong>' + (d.consegne || 0) + '</strong></td>' +
-              '<td style="text-align:right">' + tempoHtml + '</td>' +
+              '<td style="text-align:right">' + classificaTempoHtml(d) + '</td>' +
               '<td style="text-align:right;color:' + ((d.danni || 0) > 0 ? 'var(--danger)' : 'var(--text-light)') + '">' + (d.danni || 0) + '</td>' +
-              '<td>' + bonusHtml + '</td>' +
+              '<td style="text-align:center">' + (d.patenteOk ? '<span style="color:var(--success)">✓</span>' : '<span style="color:var(--danger)" title="Patente non verificata">✗</span>') + '</td>' +
+              '<td>' + classificaBonusHtml(d) + '</td>' +
               '<td style="text-align:right"><strong style="color:var(--accent);font-size:15px">' + (d.score || 0) + '</strong></td>' +
-              '<td style="text-align:center">' + trendHtml + '</td>' +
+              '<td style="text-align:center">' + renderTrend(d.posPrec, pos) + '</td>' +
               '<td>' + premioHtml + '</td>' +
             '</tr>'
         );
-    }).join('');
+    }).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Nessun driver di ' + escapeHtmlSafe(c.nome) + ' con consegne nel mese</td></tr>';
 
-    // Podio premi — riferimento per inserire il bonus buoni pasto in busta paga
-    var podioOrder = [2, 1, 3]; // visual: 2° a sinistra, 1° al centro, 3° a destra
-    var podioHtml = podioOrder.map(function(pos) {
-        var d = prov ? drivers.find(function(x) { return x.posizioneGenerale === pos; }) : drivers[pos - 1];
-        var premio = PREMI_CLASSIFICA[pos];
-        var medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : '🥉';
-        var isFirst = pos === 1;
-        if (!d) {
-            return '<div style="flex:1;text-align:center;padding:16px 12px;border:1.5px dashed var(--border);border-radius:12px;opacity:.5">' +
-                '<div style="font-size:26px">' + medal + '</div><div style="font-size:12px;color:var(--text-light);margin-top:6px">' + (prov ? 'Driver di altra zona' : 'Nessun driver') + '</div></div>';
-        }
-        var nome = ((d.nome || '') + ' ' + (d.cognome || d.driver)).trim();
-        return '<div style="flex:1;text-align:center;padding:' + (isFirst ? '22px 12px' : '16px 12px') + ';background:' + (isFirst ? '#fffbeb' : 'var(--white)') + ';border:1.5px solid ' + (isFirst ? '#fbbf24' : 'var(--border)') + ';border-radius:12px' + (isFirst ? ';box-shadow:0 4px 12px rgba(251,191,36,0.25)' : '') + '">' +
-            '<div style="font-size:' + (isFirst ? '34px' : '26px') + '">' + medal + '</div>' +
-            '<div style="font-weight:700;color:var(--text);margin-top:6px;font-size:' + (isFirst ? '15px' : '13px') + '">' + escapeHtmlSafe(nome) + '</div>' +
-            '<div style="font-size:11px;color:var(--text-muted)">' + escapeHtmlSafe(d.citta || '—') + ' · ' + (d.consegne || 0) + ' consegne · ' + (d.score || 0) + ' pt</div>' +
-            '<div style="margin-top:8px;display:inline-block;background:#fef3c7;color:#b45309;font-weight:800;padding:4px 12px;border-radius:8px;font-size:' + (isFirst ? '16px' : '14px') + '">🎁 €' + premio + '</div>' +
-            '<div style="font-size:10px;color:var(--text-light);margin-top:4px">buoni pasto</div>' +
-        '</div>';
-    }).join('');
-
-    var podioCard =
-        '<div class="card" style="margin-bottom:20px">' +
-          '<div class="card-title">🏆 Podio ' + meseLabel(mese) + ' — bonus da inserire in busta paga</div>' +
-          '<div class="card-desc">Buoni pasto da riconoscere ai primi 3 classificati del mese insieme alla busta paga.</div>' +
-          '<div style="display:flex;gap:14px;align-items:flex-end;margin-top:14px">' + podioHtml + '</div>' +
-        '</div>';
-
-    el.innerHTML =
-        podioCard +
-        '<div class="card" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">' +
-          '<div><div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px">Driver attivi</div>' +
-            '<div style="font-size:22px;font-weight:700;color:var(--text);margin-top:4px">' + drivers.length + '</div></div>' +
-          '<div><div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px">Consegne totali</div>' +
-            '<div style="font-size:22px;font-weight:700;color:var(--text);margin-top:4px">' + totConsegne + '</div></div>' +
-          '<div><div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px">Driver senza danni</div>' +
-            '<div style="font-size:22px;font-weight:700;color:var(--success);margin-top:4px">' + driverPuliti + ' / ' + drivers.length + '</div></div>' +
-          '<div><div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px">Danni totali</div>' +
-            '<div style="font-size:22px;font-weight:700;color:' + (totDanni > 0 ? 'var(--danger)' : 'var(--text)') + ';margin-top:4px">' + totDanni + '</div></div>' +
-        '</div>' +
-
+    return montepremiCard + podioCard + statCard +
         '<div class="card">' +
-          '<div class="card-title">🏆 Classifica ' + meseLabel(mese) + '</div>' +
-          '<div class="card-desc">Aggiornata ' + lastUpdateStr + ' · Scoring: 1 consegna = 1 pt · ⚡ Velocità (tempo medio &lt;20 min = +30, &lt;25 min = +15, con almeno 10 consegne con orari) · Zero danni = +50 pt · Danno = -30 pt · Premi buoni pasto: 🥇 €100 · 🥈 €70 · 🥉 €40</div>' +
+          '<div class="card-title">🏆 Classifica ' + escapeHtmlSafe(c.nome) + ' ' + meseLabel(mese) + '</div>' +
+          '<div class="card-desc">Aggiornata ' + lastUpdateStr + ' · ' + scoringDesc + '</div>' +
           '<div style="display:flex;gap:8px;margin-bottom:12px">' +
             '<button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Rebuild ora</button>' +
             '<button class="btn btn-sm" onclick="esportaClassificaCsv()">📥 Esporta CSV</button>' +
@@ -155,14 +217,90 @@ async function renderClassifica() {
               '<thead><tr>' +
                 '<th style="text-align:center">Pos.</th>' +
                 '<th>Driver</th>' +
-                '<th>Città</th>' +
+                '<th style="text-align:right">Giorni</th>' +
+                '<th style="text-align:right">Consegne</th>' +
+                '<th style="text-align:right">Tempo medio</th>' +
+                '<th style="text-align:right">Danni</th>' +
+                '<th style="text-align:center">Patente</th>' +
+                '<th>Bonus</th>' +
+                '<th style="text-align:right">Score</th>' +
+                '<th style="text-align:center">Trend</th>' +
+                '<th>Premio</th>' +
+              '</tr></thead>' +
+              '<tbody>' + rowsHtml + '</tbody>' +
+            '</table>' +
+          '</div>' +
+        '</div>';
+}
+
+// ── Classifica generale (tutte le province, senza premi): confronto d'insieme ──
+function renderClassificaGenerale(data, mese, lastUpdateStr, scoringDesc) {
+    var drivers = data.drivers || [];
+    var prov = provinceVisibili();
+    drivers = drivers.map(function(d, i) { return Object.assign({ posizioneGenerale: i + 1 }, d); });
+    if (prov) drivers = drivers.filter(function(d) { return prov.indexOf(String(d.citta || '').toUpperCase()) >= 0; });
+
+    if (drivers.length === 0) {
+        return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:36px;margin-bottom:8px">📭</div>' +
+            '<p style="font-weight:600;color:var(--text)">Nessun driver attivo nel mese</p><p class="card-desc">Ultimo aggiornamento: ' + lastUpdateStr + '</p></div>';
+    }
+
+    var totConsegne = drivers.reduce(function(s, d) { return s + (d.consegne || 0); }, 0);
+    var totDanni = drivers.reduce(function(s, d) { return s + (d.danni || 0); }, 0);
+    var driverPuliti = drivers.filter(function(d) { return d.bonusZeroDanni; }).length;
+    var montepremiTot = 0;
+    CLASSIFICA_PROVINCE.forEach(function(p) { if (data.province && data.province[p] && data.province[p].importi && data.province[p].importi.length) montepremiTot += data.province[p].montepremi; });
+
+    var statCard = classificaStatCard([
+        { label: 'Driver attivi', value: drivers.length },
+        { label: 'Consegne totali', value: totConsegne },
+        { label: 'Driver senza danni', value: driverPuliti + ' / ' + drivers.length, color: 'var(--success)' },
+        { label: 'Danni totali', value: totDanni, color: totDanni > 0 ? 'var(--danger)' : 'var(--text)' },
+        { label: 'Montepremi del mese', value: '€' + montepremiTot, sub: 'somma delle province con premi' },
+    ]);
+
+    var rowsHtml = drivers.map(function(d) {
+        var pos = d.posizioneGenerale;
+        var citta = String(d.citta || '').toUpperCase();
+        return (
+            '<tr>' +
+              '<td style="text-align:center;width:50px">' + classificaPosBadge(pos) + '</td>' +
+              '<td><strong>' + escapeHtmlSafe(classificaNome(d)) + '</strong>' +
+                (d.email ? '<div style="font-size:11px;color:var(--text-light);margin-top:2px">' + escapeHtmlSafe(d.email) + '</div>' : '') +
+              '</td>' +
+              '<td style="color:var(--text-muted)">' + escapeHtmlSafe(CLASSIFICA_NOMI[citta] || citta || '—') + (CLASSIFICA_PROVINCE.indexOf(citta) < 0 ? ' <span style="font-size:10px;color:var(--text-light)">(senza premi)</span>' : '') + '</td>' +
+              '<td style="text-align:right">' + (d.giorni || 0) + '</td>' +
+              '<td style="text-align:right"><strong>' + (d.consegne || 0) + '</strong></td>' +
+              '<td style="text-align:right">' + classificaTempoHtml(d) + '</td>' +
+              '<td style="text-align:right;color:' + ((d.danni || 0) > 0 ? 'var(--danger)' : 'var(--text-light)') + '">' + (d.danni || 0) + '</td>' +
+              '<td>' + classificaBonusHtml(d) + '</td>' +
+              '<td style="text-align:right"><strong style="color:var(--accent);font-size:15px">' + (d.score || 0) + '</strong></td>' +
+              '<td style="text-align:center">' + renderTrend(d.posPrec, pos) + '</td>' +
+            '</tr>'
+        );
+    }).join('');
+
+    return statCard +
+        '<div class="card">' +
+          '<div class="card-title">🌍 Classifica generale ' + meseLabel(mese) + '</div>' +
+          '<div class="card-desc">Solo confronto: i premi si assegnano nelle classifiche per provincia (Catania, Messina, Palermo, Siracusa). Aggiornata ' + lastUpdateStr + ' · ' + scoringDesc + '</div>' +
+          '<div style="display:flex;gap:8px;margin-bottom:12px">' +
+            '<button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Rebuild ora</button>' +
+            '<button class="btn btn-sm" onclick="esportaClassificaCsv()">📥 Esporta CSV</button>' +
+          '</div>' +
+          '<div class="table-wrap">' +
+            '<table class="data-table">' +
+              '<thead><tr>' +
+                '<th style="text-align:center">Pos.</th>' +
+                '<th>Driver</th>' +
+                '<th>Provincia</th>' +
+                '<th style="text-align:right">Giorni</th>' +
                 '<th style="text-align:right">Consegne</th>' +
                 '<th style="text-align:right">Tempo medio</th>' +
                 '<th style="text-align:right">Danni</th>' +
                 '<th>Bonus</th>' +
                 '<th style="text-align:right">Score</th>' +
                 '<th style="text-align:center">Trend</th>' +
-                '<th>Premio</th>' +
               '</tr></thead>' +
               '<tbody>' + rowsHtml + '</tbody>' +
             '</table>' +
@@ -217,33 +355,46 @@ async function rebuildClassifica() {
     }
 }
 
+// CSV della scheda corrente: una provincia (con premi) o la generale
 async function esportaClassificaCsv() {
     var mese = state.meseCorrente;
     try {
         var doc = await db.collection('leaderboardFull').doc(mese).get();
         if (!doc.exists) { toast('Classifica non disponibile', 'error'); return; }
-        var drivers = doc.data().drivers || [];
-        var rows = [['Posizione', 'Cognome', 'Nome', 'Email', 'Citta', 'Consegne', 'Tempo medio (min)', 'Bonus velocita', 'Danni', 'Zero danni', 'Score', 'Posizione mese precedente', 'Premio buoni pasto (EUR)']];
+        var data = doc.data();
+        var tab = classificaState.prov || 'TUTTE';
+        var perProv = tab !== 'TUTTE' && data.province && data.province[tab];
+        var drivers = perProv ? (data.province[tab].drivers || []) : (data.drivers || []);
+        var rows = [['Posizione', 'Cognome', 'Nome', 'Email', 'Provincia', 'Giorni lavorati', 'Consegne', 'Tempo medio (min)', 'Bonus velocita', 'Danni', 'Zero danni', 'Patente verificata', 'Score', 'Posizione mese precedente', 'Premiabile', 'Motivo non premiabile', 'Premio (EUR)']];
         drivers.forEach(function(d, i) {
             rows.push([
-                i + 1,
+                d.posizione || (i + 1),
                 d.cognome || d.driver || '',
                 d.nome || '',
                 d.email || '',
                 d.citta || '',
+                d.giorni || 0,
                 d.consegne || 0,
                 d.tempoMedioMin != null ? d.tempoMedioMin : '',
                 d.bonusVelocita || 0,
                 d.danni || 0,
                 d.bonusZeroDanni ? 'SI' : 'NO',
+                d.patenteOk ? 'SI' : 'NO',
                 d.score || 0,
                 d.posPrec || '',
-                PREMI_CLASSIFICA[i + 1] || '',
+                perProv ? (d.premiabile ? 'SI' : 'NO') : '',
+                perProv ? (d.motiviNonPremiabile || []).map(function(m) { return CLASSIFICA_MOTIVI[m] || m; }).join(', ') : '',
+                perProv ? (d.premio || '') : '',
             ]);
         });
+        if (perProv) {
+            var c = data.province[tab];
+            rows.push([]);
+            rows.push(['Montepremi ' + c.nome, c.montepremi, 'Consegne', c.consegne, 'Soglia richiesta', (c.soglia && c.soglia.richiesto) || 0, 'Soglia superata', c.soglia && c.soglia.superata ? 'SI' : 'NO', 'Premio', (data.regole && data.regole.premio) || '']);
+        }
         var csv = rows.map(function(r) {
-            return r.map(function(c) {
-                var s = String(c);
+            return r.map(function(cell) {
+                var s = String(cell);
                 if (/[",;\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
                 return s;
             }).join(';');
@@ -252,7 +403,7 @@ async function esportaClassificaCsv() {
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
-        a.download = 'classifica_' + mese + '.csv';
+        a.download = 'classifica_' + mese + (perProv ? '_' + tab : '') + '.csv';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
