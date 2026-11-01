@@ -3,22 +3,23 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const L = require('../leaderboard-core.js');
 
-test('montepremi: 6 cent a consegna, arrotondato ai 10 €, tra 100 e 500', () => {
-    assert.equal(L.montepremi(4154), 250);   // Catania settembre
-    assert.equal(L.montepremi(1954), 120);   // Messina
-    assert.equal(L.montepremi(977), 100);    // Siracusa: sotto il minimo
-    assert.equal(L.montepremi(535), 100);    // Palermo
-    assert.equal(L.montepremi(0), 100);
-    assert.equal(L.montepremi(20000), 500);  // tetto
+test('montepremi: 5 cent a consegna, arrotondato ai 10 €, tra 40 e 200 (primo di Catania max 100 €)', () => {
+    assert.equal(L.montepremi(4137), 200);   // Catania ottobre: al tetto → 100/60/40
+    assert.equal(L.montepremi(1390), 70);    // Messina → 35/20/15
+    assert.equal(L.montepremi(1024), 50);    // Palermo → 30/20
+    assert.equal(L.montepremi(750), 40);     // Siracusa → 25/15
+    assert.equal(L.montepremi(300), 40);     // sotto il minimo
+    assert.equal(L.montepremi(0), 40);
+    assert.equal(L.montepremi(20000), 200);  // tetto
 });
 
 test('ripartisci: 50/30/20 con 5+ driver, 60/40 con 3-4, niente sotto i 3; somma sempre uguale al totale', () => {
-    assert.deepEqual(L.ripartisci(250, 9), [125, 75, 50]);
-    assert.deepEqual(L.ripartisci(120, 7), [60, 35, 25]);
-    assert.deepEqual(L.ripartisci(100, 3), [60, 40]);
-    assert.deepEqual(L.ripartisci(100, 4), [60, 40]);
+    assert.deepEqual(L.ripartisci(200, 9), [100, 60, 40]);
+    assert.deepEqual(L.ripartisci(70, 7), [35, 20, 15]);
+    assert.deepEqual(L.ripartisci(50, 3), [30, 20]);
+    assert.deepEqual(L.ripartisci(40, 4), [25, 15]);
     assert.deepEqual(L.ripartisci(100, 2), []);
-    [250, 120, 100, 310, 500].forEach((t) => [3, 5, 8].forEach((n) => assert.equal(L.ripartisci(t, n).reduce((s, x) => s + x, 0), t)));
+    [200, 70, 50, 40, 100, 130].forEach((t) => [3, 5, 8].forEach((n) => assert.equal(L.ripartisci(t, n).reduce((s, x) => s + x, 0), t)));
 });
 
 test('premiabile: 12 giorni, zero danni, patente verificata', () => {
@@ -38,13 +39,13 @@ test('tetto 1.000 €/anno: premio ridotto al residuo, chi ha raggiunto il tetto
         { driver: 'E', consegne: 300, danni: 0, giorni: 20, patenteOk: true, score: 380 },
     ];
     const c = L.classificaProvincia('CT', drivers, [], 31, 31, null, { A: 1000, B: 950 });
-    assert.deepEqual(c.importi, [70, 40, 30]);  // 2250 cons → 140 €
+    assert.deepEqual(c.importi, [55, 35, 20]);  // 2250 cons → 110 €
     assert.deepEqual(c.drivers[0].motiviNonPremiabile, ['tetto']);
     assert.equal(c.drivers[0].premio, 0);
     assert.deepEqual(c.premi, [
-        { posizione: 2, driver: 'B', importo: 50, ridotto: true },   // residuo 50 su 70
-        { posizione: 3, driver: 'C', importo: 40, ridotto: false },
-        { posizione: 4, driver: 'D', importo: 30, ridotto: false },
+        { posizione: 2, driver: 'B', importo: 50, ridotto: true },   // residuo 50 su 55
+        { posizione: 3, driver: 'C', importo: 35, ridotto: false },
+        { posizione: 4, driver: 'D', importo: 20, ridotto: false },
     ]);
     assert.equal(c.drivers[1].premiAnno, 950);
     assert.deepEqual(L.mesiTetto('2026-11'), []);
@@ -81,10 +82,10 @@ test('classificaProvincia: posizioni, premi che saltano i non premiabili, totale
     const c = L.classificaProvincia('CT', drivers.slice().reverse(), [2400, 2600], 31, 31);
     assert.equal(c.nome, 'Catania');
     assert.equal(c.consegne, 2500);
-    assert.equal(c.montepremi, 150);
-    assert.deepEqual(c.importi, [75, 45, 30]);
+    assert.equal(c.montepremi, 130);
+    assert.deepEqual(c.importi, [65, 40, 25]);
     assert.deepEqual(c.drivers.map((d) => d.driver), ['A', 'B', 'C', 'D', 'E', 'F']);
-    assert.deepEqual(c.premi, [{ posizione: 2, driver: 'B', importo: 75, ridotto: false }, { posizione: 5, driver: 'E', importo: 45, ridotto: false }, { posizione: 6, driver: 'F', importo: 30, ridotto: false }]);
+    assert.deepEqual(c.premi, [{ posizione: 2, driver: 'B', importo: 65, ridotto: false }, { posizione: 5, driver: 'E', importo: 40, ridotto: false }, { posizione: 6, driver: 'F', importo: 25, ridotto: false }]);
     assert.deepEqual(c.drivers[0].motiviNonPremiabile, ['danni']);
     assert.equal(c.drivers[0].premio, 0);
     assert.equal(c.soglia.richiesto, 2125);

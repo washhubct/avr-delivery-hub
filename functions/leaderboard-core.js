@@ -5,8 +5,10 @@
 //
 // Regole approvate da Guido il 31/10/2026:
 //   • quattro classifiche separate: Catania, Messina, Palermo, Siracusa (Enna esclusa: un solo driver)
-//   • montepremi mensile della provincia = 6 centesimi per consegna dei suoi driver,
-//     arrotondato ai 10 €, minimo 100 €, massimo 500 €
+//   • montepremi mensile della provincia = 5 centesimi per consegna dei suoi driver,
+//     arrotondato ai 10 €, minimo 40 €, massimo 200 € (così il primo di Catania, la provincia
+//     con più ricavi, prende al massimo 100 €; le altre province sono in proporzione alle consegne)
+//     — scala ridotta da Guido il 01/11/2026 (prima 6 cent, 100-500 €)
 //   • ripartizione: con 5+ driver 50/30/20 ai primi tre, con 3-4 driver 60/40 ai primi due,
 //     con meno di 3 driver niente premi
 //   • premiabile solo chi ha almeno 12 giorni lavorati, zero danni nel mese e patente verificata;
@@ -23,9 +25,9 @@ const PROVINCE_PREMI = ['CT', 'ME', 'PA', 'SR'];
 const NOME_PROVINCIA = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Siracusa', EN: 'Enna' };
 
 const REGOLE = {
-    euroPerConsegna: 0.06,
-    montepremiMin: 100,
-    montepremiMax: 500,
+    euroPerConsegna: 0.05,
+    montepremiMin: 40,
+    montepremiMax: 200,
     minGiorniLavorati: 12,
     sogliaPct: 0.85,
     minDriverTrePremi: 5,

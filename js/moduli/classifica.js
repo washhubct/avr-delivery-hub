@@ -1,8 +1,8 @@
 // DELIVERY HUB — Classifica Driver (vista admin con nomi reali)
 // Legge leaderboardFull/{mese} scritta dalla Cloud Function precalcolaLeaderboard.
 // Dal 31/10/2026 le classifiche sono per provincia (CT, ME, PA, SR; Enna esclusa):
-// ogni provincia ha un montepremi legato alle consegne del mese (6 cent a consegna,
-// min 100 / max 500 €), ripartito 50/30/20 con 5+ driver o 60/40 con 3-4, pagato
+// ogni provincia ha un montepremi legato alle consegne del mese (5 cent a consegna,
+// min 40 / max 200 €: il primo di Catania prende al massimo 100 €), ripartito 50/30/20 con 5+ driver o 60/40 con 3-4, pagato
 // solo se la provincia fa almeno l'85% della media dei 3 mesi precedenti.
 // Premiabile: 12 giorni lavorati, zero danni, patente verificata. Il premio è un
 // buono Q8 o Amazon a scelta del vincitore. Regole in functions/leaderboard-core.js.
@@ -68,7 +68,7 @@ async function renderClassifica() {
         ? '<div class="card" style="margin-bottom:16px;background:var(--warning-bg)">⚠️ Questo mese è stato calcolato prima delle classifiche per provincia: premi e montepremi compaiono dopo un ricalcolo. <button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Ricalcola ora</button></div>'
         : '';
 
-    var regole = data.regole || { euroPerConsegna: 0.06, montepremiMin: 100, montepremiMax: 500, minGiorniLavorati: 12, sogliaPct: 0.85, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
+    var regole = data.regole || { euroPerConsegna: 0.05, montepremiMin: 40, montepremiMax: 200, minGiorniLavorati: 12, sogliaPct: 0.85, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
     var scoringDesc = 'Scoring: 1 consegna = 1 pt · ⚡ Velocità (tempo medio &lt;20 min = +30, &lt;25 min = +15, con almeno 10 consegne con orari) · Zero danni = +50 pt · Danno = -30 pt';
 
     var body = tab === 'TUTTE'
@@ -129,7 +129,7 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
             '<div>' +
               '<div style="font-size:11px;opacity:.75;text-transform:uppercase;letter-spacing:1px">Montepremi ' + escapeHtmlSafe(c.nome) + ' · ' + meseLabel(mese) + '</div>' +
               '<div style="font-size:34px;font-weight:800;margin-top:2px">€' + c.montepremi + '</div>' +
-              '<div style="font-size:12px;opacity:.85">' + c.consegne + ' consegne di squadra × ' + (regole.euroPerConsegna || 0.06).toFixed(2).replace('.', ',') + ' € · minimo €' + regole.montepremiMin + ' · massimo €' + regole.montepremiMax + '</div>' +
+              '<div style="font-size:12px;opacity:.85">' + c.consegne + ' consegne di squadra × ' + (regole.euroPerConsegna || 0.05).toFixed(2).replace('.', ',') + ' € · minimo €' + regole.montepremiMin + ' · massimo €' + regole.montepremiMax + '</div>' +
             '</div>' +
             '<div style="text-align:right">' +
               '<div style="font-size:11px;opacity:.75;text-transform:uppercase;letter-spacing:1px">Premi</div>' +
