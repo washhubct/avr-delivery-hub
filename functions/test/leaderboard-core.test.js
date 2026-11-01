@@ -25,6 +25,32 @@ test('premiabile: 12 giorni, zero danni, patente verificata', () => {
     assert.deepEqual(L.premiabile({ giorni: 20, danni: 0, patenteOk: true }), { ok: true, motivi: [] });
     assert.deepEqual(L.premiabile({ giorni: 11, danni: 0, patenteOk: true }).motivi, ['giorni']);
     assert.deepEqual(L.premiabile({ giorni: 20, danni: 1, patenteOk: false }).motivi, ['danni', 'patente']);
+    assert.deepEqual(L.premiabile({ giorni: 20, danni: 0, patenteOk: true, premiAnno: 1000 }).motivi, ['tetto']);
+    assert.deepEqual(L.premiabile({ giorni: 20, danni: 0, patenteOk: true, premiAnno: 950 }).motivi, []);
+});
+
+test('tetto 1.000 €/anno: premio ridotto al residuo, chi ha raggiunto il tetto salta', () => {
+    const drivers = [
+        { driver: 'A', consegne: 600, danni: 0, giorni: 25, patenteOk: true, score: 650 },
+        { driver: 'B', consegne: 500, danni: 0, giorni: 24, patenteOk: true, score: 580 },
+        { driver: 'C', consegne: 450, danni: 0, giorni: 20, patenteOk: true, score: 530 },
+        { driver: 'D', consegne: 400, danni: 0, giorni: 22, patenteOk: true, score: 470 },
+        { driver: 'E', consegne: 300, danni: 0, giorni: 20, patenteOk: true, score: 380 },
+    ];
+    const c = L.classificaProvincia('CT', drivers, [], 31, 31, null, { A: 1000, B: 950 });
+    assert.deepEqual(c.importi, [70, 40, 30]);  // 2250 cons → 140 €
+    assert.deepEqual(c.drivers[0].motiviNonPremiabile, ['tetto']);
+    assert.equal(c.drivers[0].premio, 0);
+    assert.deepEqual(c.premi, [
+        { posizione: 2, driver: 'B', importo: 50, ridotto: true },   // residuo 50 su 70
+        { posizione: 3, driver: 'C', importo: 40, ridotto: false },
+        { posizione: 4, driver: 'D', importo: 30, ridotto: false },
+    ]);
+    assert.equal(c.drivers[1].premiAnno, 950);
+    assert.deepEqual(L.mesiTetto('2026-11'), []);
+    assert.deepEqual(L.mesiTetto('2026-12'), ['2026-11']);
+    assert.deepEqual(L.mesiTetto('2027-03'), ['2027-01', '2027-02']);
+    assert.deepEqual(L.mesiTetto('2027-01'), []);
 });
 
 test('soglia: 85% della media dei mesi con dati; proiezione pro-rata durante il mese', () => {
@@ -58,7 +84,7 @@ test('classificaProvincia: posizioni, premi che saltano i non premiabili, totale
     assert.equal(c.montepremi, 150);
     assert.deepEqual(c.importi, [75, 45, 30]);
     assert.deepEqual(c.drivers.map((d) => d.driver), ['A', 'B', 'C', 'D', 'E', 'F']);
-    assert.deepEqual(c.premi, [{ posizione: 2, driver: 'B', importo: 75 }, { posizione: 5, driver: 'E', importo: 45 }, { posizione: 6, driver: 'F', importo: 30 }]);
+    assert.deepEqual(c.premi, [{ posizione: 2, driver: 'B', importo: 75, ridotto: false }, { posizione: 5, driver: 'E', importo: 45, ridotto: false }, { posizione: 6, driver: 'F', importo: 30, ridotto: false }]);
     assert.deepEqual(c.drivers[0].motiviNonPremiabile, ['danni']);
     assert.equal(c.drivers[0].premio, 0);
     assert.equal(c.soglia.richiesto, 2125);

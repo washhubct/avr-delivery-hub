@@ -14,6 +14,10 @@
 //   • i premi si pagano solo se la provincia fa almeno l'85% della media delle consegne
 //     dei tre mesi precedenti (i mesi senza dati non contano)
 //   • premio: buono carburante Q8 o buono Amazon, a scelta del vincitore
+//   • tetto fringe benefit (confermato da Guido il 01/11/2026): massimo 1.000 € di premi
+//     per driver nell'anno solare; un premio che supera il residuo viene ridotto al residuo,
+//     chi ha già raggiunto il tetto resta in classifica e il premio passa al successivo.
+//     Si contano i premi del nuovo sistema (dal 2026-11) dei mesi con soglia superata.
 
 const PROVINCE_PREMI = ['CT', 'ME', 'PA', 'SR'];
 const NOME_PROVINCIA = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Siracusa', EN: 'Enna' };
@@ -29,6 +33,8 @@ const REGOLE = {
     quoteTre: [0.5, 0.3, 0.2],
     quoteDue: [0.6, 0.4],
     premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore',
+    tettoAnnuo: 1000,
+    tettoDal: '2026-11',
 };
 
 function round10(x) { return Math.round(x / 10) * 10; }
@@ -53,14 +59,29 @@ function ripartisci(totale, nDriver, regole) {
     return [primo].concat(altri);
 }
 
-// Requisiti per ricevere il premio. `d` = { giorni, danni, patenteOk }
+// Requisiti per ricevere il premio. `d` = { giorni, danni, patenteOk, premiAnno }
+// (`premiAnno` = euro di premi già maturati nell'anno, per il tetto fringe benefit)
 function premiabile(d, regole) {
     const r = regole || REGOLE;
     const motivi = [];
     if ((Number(d.giorni) || 0) < r.minGiorniLavorati) motivi.push('giorni');
     if ((Number(d.danni) || 0) > 0) motivi.push('danni');
     if (!d.patenteOk) motivi.push('patente');
+    if ((Number(d.premiAnno) || 0) >= r.tettoAnnuo) motivi.push('tetto');
     return { ok: motivi.length === 0, motivi };
+}
+
+// Mesi 'YYYY-MM' dell'anno di `mese` che contano per il tetto: da tettoDal (o gennaio) al mese precedente
+function mesiTetto(mese, regole) {
+    const r = regole || REGOLE;
+    const m = String(mese).match(/^(\d{4})-(\d{2})$/);
+    if (!m) return [];
+    const anno = m[1], out = [];
+    for (let k = 1; k < Number(m[2]); k++) {
+        const mm = anno + '-' + String(k).padStart(2, '0');
+        if (mm >= r.tettoDal) out.push(mm);
+    }
+    return out;
 }
 
 // Soglia di attivazione: consegne del mese contro l'85% della media dei mesi precedenti.
@@ -85,11 +106,14 @@ function soglia(consegne, storico, giornoDelMese, giorniNelMese, regole) {
 }
 
 // Classifica di una provincia. `drivers` = voci già ordinate per score, ognuna con
-// { driver, consegne, danni, giorni, patenteOk, score, ... }. Restituisce la classifica
-// con posizione, premiabilità e premio assegnato (il premio salta chi non è premiabile).
-function classificaProvincia(provincia, drivers, storico, giornoDelMese, giorniNelMese, regole) {
+// { driver, consegne, danni, giorni, patenteOk, score, ... }. `premiAnno` = { driver: euro
+// già maturati nell'anno }. Restituisce la classifica con posizione, premiabilità e premio
+// assegnato (il premio salta chi non è premiabile; viene ridotto se supera il residuo del tetto).
+function classificaProvincia(provincia, drivers, storico, giornoDelMese, giorniNelMese, regole, premiAnno) {
     const r = regole || REGOLE;
-    const lista = (drivers || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+    const anno = premiAnno || {};
+    const lista = (drivers || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0))
+        .map((d) => Object.assign({}, d, { premiAnno: Number(anno[d.driver]) || 0 }));
     const consegne = lista.reduce((s, d) => s + (Number(d.consegne) || 0), 0);
     const totale = montepremi(consegne, r);
     const importi = ripartisci(totale, lista.length, r);
@@ -97,9 +121,15 @@ function classificaProvincia(provincia, drivers, storico, giornoDelMese, giorniN
     let k = 0;
     const out = lista.map((d, i) => {
         const p = premiabile(d, r);
-        let premio = 0;
-        if (p.ok && k < importi.length) { premio = importi[k]; k++; }
-        return Object.assign({}, d, { posizione: i + 1, premiabile: p.ok, motiviNonPremiabile: p.motivi, premio });
+        let premio = 0, premioPieno = 0;
+        if (p.ok && k < importi.length) {
+            premioPieno = importi[k]; k++;
+            premio = Math.min(premioPieno, r.tettoAnnuo - d.premiAnno);
+        }
+        return Object.assign({}, d, {
+            posizione: i + 1, premiabile: p.ok, motiviNonPremiabile: p.motivi, premio,
+            premioRidotto: premio > 0 && premio < premioPieno,
+        });
     });
     return {
         provincia,
@@ -108,7 +138,7 @@ function classificaProvincia(provincia, drivers, storico, giornoDelMese, giorniN
         consegne,
         montepremi: totale,
         importi,
-        premi: out.filter((d) => d.premio > 0).map((d) => ({ posizione: d.posizione, driver: d.driver, importo: d.premio })),
+        premi: out.filter((d) => d.premio > 0).map((d) => ({ posizione: d.posizione, driver: d.driver, importo: d.premio, ridotto: d.premioRidotto })),
         soglia: sog,
         drivers: out,
     };
@@ -121,4 +151,4 @@ function giorniNelMese(mese) {
     return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
 }
 
-module.exports = { PROVINCE_PREMI, NOME_PROVINCIA, REGOLE, montepremi, ripartisci, premiabile, soglia, classificaProvincia, giorniNelMese };
+module.exports = { PROVINCE_PREMI, NOME_PROVINCIA, REGOLE, montepremi, ripartisci, premiabile, mesiTetto, soglia, classificaProvincia, giorniNelMese };

@@ -9,7 +9,7 @@
 
 var CLASSIFICA_PROVINCE = ['CT', 'ME', 'PA', 'SR'];
 var CLASSIFICA_NOMI = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Siracusa', EN: 'Enna' };
-var CLASSIFICA_MOTIVI = { giorni: 'meno di 12 giorni lavorati', danni: 'danno nel mese', patente: 'patente non verificata' };
+var CLASSIFICA_MOTIVI = { giorni: 'meno di 12 giorni lavorati', danni: 'danno nel mese', patente: 'patente non verificata', tetto: 'tetto 1.000 €/anno raggiunto' };
 var classificaState = { prov: null, mese: null };
 
 function classificaTabsVisibili(data) {
@@ -158,14 +158,14 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
             '<div style="font-weight:700;color:var(--text);margin-top:6px;font-size:' + (isFirst ? '15px' : '13px') + '">' + escapeHtmlSafe(classificaNome(d)) + '</div>' +
             '<div style="font-size:11px;color:var(--text-muted)">' + pr.posizione + '° · ' + (d.consegne || 0) + ' consegne · ' + (d.giorni || 0) + ' gg · ' + (d.score || 0) + ' pt</div>' +
             '<div style="margin-top:8px;display:inline-block;background:#fef3c7;color:#b45309;font-weight:800;padding:4px 12px;border-radius:8px;font-size:' + (isFirst ? '16px' : '14px') + '">🎁 €' + pr.importo + '</div>' +
-            '<div style="font-size:10px;color:var(--text-light);margin-top:4px">buono Q8 o Amazon</div>' +
+            '<div style="font-size:10px;color:var(--text-light);margin-top:4px">buono Q8 o Amazon' + (pr.ridotto ? ' · ridotto per tetto annuo' : '') + '</div>' +
         '</div>';
     }).join('');
 
     var podioCard = importi.length
         ? '<div class="card" style="margin-bottom:20px">' +
             '<div class="card-title">🏆 Podio ' + escapeHtmlSafe(c.nome) + ' ' + meseLabel(mese) + (inCorso ? ' — provvisorio' : '') + '</div>' +
-            '<div class="card-desc">Premiabile solo chi ha almeno ' + regole.minGiorniLavorati + ' giorni lavorati, zero danni e patente verificata: il premio passa al successivo. Fringe benefit: esenti fino a 1.000 € l\'anno per dipendente, oltre vanno in busta.</div>' +
+            '<div class="card-desc">Premiabile solo chi ha almeno ' + regole.minGiorniLavorati + ' giorni lavorati, zero danni e patente verificata: il premio passa al successivo. Tetto fringe benefit 1.000 € l\'anno per driver: il premio che supera il residuo viene ridotto, chi ha raggiunto il tetto passa il premio al successivo (si contano i premi dal ' + meseLabel((regole.tettoDal || '2026-11')) + ').</div>' +
             '<div style="display:flex;gap:14px;align-items:flex-end;margin-top:14px">' + podioHtml + '</div>' +
           '</div>'
         : '';
@@ -182,7 +182,7 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
     var rowsHtml = drivers.map(function(d) {
         var pos = d.posizione;
         var premioHtml;
-        if (d.premio > 0) premioHtml = '<span class="badge" style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">🎁 €' + d.premio + '</span>';
+        if (d.premio > 0) premioHtml = '<span class="badge" style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">🎁 €' + d.premio + '</span>' + (d.premioRidotto ? '<div style="font-size:10px;color:var(--warning,#b45309);margin-top:2px">ridotto: tetto 1.000 €/anno</div>' : '');
         else if (!d.premiabile) premioHtml = '<span style="font-size:11px;color:var(--danger)" title="Non premiabile">✗ ' + (d.motiviNonPremiabile || []).map(function(m) { return CLASSIFICA_MOTIVI[m] || m; }).join(', ') + '</span>';
         else premioHtml = '<span style="font-size:11px;color:var(--success)">✓ premiabile</span>';
         return (
@@ -200,9 +200,10 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
               '<td style="text-align:right"><strong style="color:var(--accent);font-size:15px">' + (d.score || 0) + '</strong></td>' +
               '<td style="text-align:center">' + renderTrend(d.posPrec, pos) + '</td>' +
               '<td>' + premioHtml + '</td>' +
+              '<td style="text-align:right;color:' + ((d.premiAnno || 0) >= 1000 ? 'var(--danger)' : 'var(--text-light)') + '">€' + (d.premiAnno || 0) + '</td>' +
             '</tr>'
         );
-    }).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted);padding:24px">Nessun driver di ' + escapeHtmlSafe(c.nome) + ' con consegne nel mese</td></tr>';
+    }).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--text-muted);padding:24px">Nessun driver di ' + escapeHtmlSafe(c.nome) + ' con consegne nel mese</td></tr>';
 
     return montepremiCard + podioCard + statCard +
         '<div class="card">' +
@@ -226,6 +227,7 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
                 '<th style="text-align:right">Score</th>' +
                 '<th style="text-align:center">Trend</th>' +
                 '<th>Premio</th>' +
+                '<th style="text-align:right" title="Premi già maturati nell\'anno (tetto fringe 1.000 €)">Anno</th>' +
               '</tr></thead>' +
               '<tbody>' + rowsHtml + '</tbody>' +
             '</table>' +
@@ -365,7 +367,7 @@ async function esportaClassificaCsv() {
         var tab = classificaState.prov || 'TUTTE';
         var perProv = tab !== 'TUTTE' && data.province && data.province[tab];
         var drivers = perProv ? (data.province[tab].drivers || []) : (data.drivers || []);
-        var rows = [['Posizione', 'Cognome', 'Nome', 'Email', 'Provincia', 'Giorni lavorati', 'Consegne', 'Tempo medio (min)', 'Bonus velocita', 'Danni', 'Zero danni', 'Patente verificata', 'Score', 'Posizione mese precedente', 'Premiabile', 'Motivo non premiabile', 'Premio (EUR)']];
+        var rows = [['Posizione', 'Cognome', 'Nome', 'Email', 'Provincia', 'Giorni lavorati', 'Consegne', 'Tempo medio (min)', 'Bonus velocita', 'Danni', 'Zero danni', 'Patente verificata', 'Score', 'Posizione mese precedente', 'Premiabile', 'Motivo non premiabile', 'Premio (EUR)', 'Premio ridotto per tetto', 'Premi anno precedenti (EUR)']];
         drivers.forEach(function(d, i) {
             rows.push([
                 d.posizione || (i + 1),
@@ -385,6 +387,8 @@ async function esportaClassificaCsv() {
                 perProv ? (d.premiabile ? 'SI' : 'NO') : '',
                 perProv ? (d.motiviNonPremiabile || []).map(function(m) { return CLASSIFICA_MOTIVI[m] || m; }).join(', ') : '',
                 perProv ? (d.premio || '') : '',
+                perProv ? (d.premioRidotto ? 'SI' : 'NO') : '',
+                perProv ? (d.premiAnno || 0) : '',
             ]);
         });
         if (perProv) {
