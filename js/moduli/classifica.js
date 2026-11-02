@@ -1,9 +1,9 @@
 // DELIVERY HUB — Classifica Driver (vista admin con nomi reali)
 // Legge leaderboardFull/{mese} scritta dalla Cloud Function precalcolaLeaderboard.
 // Dal 31/10/2026 le classifiche sono per provincia (CT, ME, PA, SR; Enna esclusa):
-// ogni provincia ha un montepremi legato alle consegne del mese (5 cent a consegna,
-// min 40 / max 200 €: il primo di Catania prende al massimo 100 €), ripartito 50/30/20 con 5+ driver o 60/40 con 3-4, pagato
-// solo se la provincia fa almeno l'85% della media dei 3 mesi precedenti.
+// ogni provincia ha un montepremi fisso (Catania 200, Messina 70, Palermo 60, Siracusa 40 €),
+// ripartito 50/30/20 con 5+ driver o 60/40 con 3-4. Il volume di consegne lo decide
+// Arena, non i driver: nessuna soglia legata alle consegne.
 // Premiabile: 12 giorni lavorati, zero danni, patente verificata. Il premio è un
 // buono Q8 o Amazon a scelta del vincitore. Regole in functions/leaderboard-core.js.
 
@@ -68,7 +68,7 @@ async function renderClassifica() {
         ? '<div class="card" style="margin-bottom:16px;background:var(--warning-bg)">⚠️ Questo mese è stato calcolato prima delle classifiche per provincia: premi e montepremi compaiono dopo un ricalcolo. <button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Ricalcola ora</button></div>'
         : '';
 
-    var regole = data.regole || { euroPerConsegna: 0.05, montepremiMin: 40, montepremiMax: 200, minGiorniLavorati: 12, sogliaPct: 0.85, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
+    var regole = data.regole || { montepremiProvincia: { CT: 200, ME: 70, PA: 60, SR: 40 }, minGiorniLavorati: 12, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
     var scoringDesc = 'Scoring: 1 consegna = 1 pt · ⚡ Velocità (tempo medio &lt;20 min = +30, &lt;25 min = +15, con almeno 10 consegne con orari) · Zero danni = +50 pt · Danno = -30 pt';
 
     var body = tab === 'TUTTE'
@@ -104,21 +104,10 @@ function classificaStatCard(items) {
     }).join('') + '</div>';
 }
 
-// ── Classifica di una provincia: montepremi, soglia, podio, tabella ──
+// ── Classifica di una provincia: montepremi, podio, tabella ──
 function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, regole) {
     var drivers = c.drivers || [];
     var inCorso = !!data.inCorso;
-    var s = c.soglia || {};
-
-    // Stato soglia
-    var stato, statoColore, statoBg;
-    if (!s.richiesto) { stato = 'Soglia non applicata: nessun mese precedente con dati'; statoColore = 'var(--text-muted)'; statoBg = 'var(--info-bg)'; }
-    else if (!inCorso) {
-        if (s.superata) { stato = '✓ Premi confermati: ' + s.consegne + ' consegne su ' + s.richiesto + ' richieste'; statoColore = 'var(--success)'; statoBg = 'var(--success-bg)'; }
-        else { stato = '✗ Premi sospesi: ' + s.consegne + ' consegne, ne servivano ' + s.richiesto; statoColore = 'var(--danger)'; statoBg = 'var(--danger-bg)'; }
-    } else if (s.proiezioneOk) { stato = '📈 In linea: proiezione ' + s.proiezione + ' consegne su ' + s.richiesto + ' richieste'; statoColore = 'var(--success)'; statoBg = 'var(--success-bg)'; }
-    else { stato = '⚠️ Sotto soglia: proiezione ' + s.proiezione + ' consegne, ne servono ' + s.richiesto; statoColore = '#b45309'; statoBg = 'var(--warning-bg)'; }
-    var sogliaSub = s.richiesto ? 'Media ' + s.mesiStorico + ' mes' + (s.mesiStorico === 1 ? 'e' : 'i') + ' precedent' + (s.mesiStorico === 1 ? 'e' : 'i') + ': ' + s.media + ' consegne · richiesto l\'' + Math.round((regole.sogliaPct || 0.85) * 100) + '%' : '';
 
     var importi = c.importi || [];
     var premiStr = importi.length ? importi.map(function(x, i) { return ['🥇', '🥈', '🥉'][i] + ' €' + x; }).join(' · ') : 'nessun premio (servono almeno 3 driver)';
@@ -129,7 +118,7 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
             '<div>' +
               '<div style="font-size:11px;opacity:.75;text-transform:uppercase;letter-spacing:1px">Montepremi ' + escapeHtmlSafe(c.nome) + ' · ' + meseLabel(mese) + '</div>' +
               '<div style="font-size:34px;font-weight:800;margin-top:2px">€' + c.montepremi + '</div>' +
-              '<div style="font-size:12px;opacity:.85">' + c.consegne + ' consegne di squadra × ' + (regole.euroPerConsegna || 0.05).toFixed(2).replace('.', ',') + ' € · minimo €' + regole.montepremiMin + ' · massimo €' + regole.montepremiMax + '</div>' +
+              '<div style="font-size:12px;opacity:.85">montepremi fisso della provincia · ' + c.nDriver + ' driver · ' + c.consegne + ' consegne di squadra' + (inCorso ? ' (mese in corso)' : '') + '</div>' +
             '</div>' +
             '<div style="text-align:right">' +
               '<div style="font-size:11px;opacity:.75;text-transform:uppercase;letter-spacing:1px">Premi</div>' +
@@ -137,8 +126,6 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
               '<div style="font-size:11px;opacity:.85;margin-top:4px">' + escapeHtmlSafe(regole.premio || '') + '</div>' +
             '</div>' +
           '</div>' +
-          '<div style="margin-top:14px;padding:10px 14px;border-radius:8px;background:' + statoBg + ';color:' + statoColore + ';font-weight:700;font-size:13px">' + stato +
-            (sogliaSub ? '<div style="font-weight:500;font-size:11px;opacity:.9;margin-top:2px">' + sogliaSub + '</div>' : '') + '</div>' +
         '</div>';
 
     // Podio: i premi già assegnati dalla CF (saltano chi non è premiabile)
@@ -394,7 +381,7 @@ async function esportaClassificaCsv() {
         if (perProv) {
             var c = data.province[tab];
             rows.push([]);
-            rows.push(['Montepremi ' + c.nome, c.montepremi, 'Consegne', c.consegne, 'Soglia richiesta', (c.soglia && c.soglia.richiesto) || 0, 'Soglia superata', c.soglia && c.soglia.superata ? 'SI' : 'NO', 'Premio', (data.regole && data.regole.premio) || '']);
+            rows.push(['Montepremi ' + c.nome, c.montepremi, 'Consegne', c.consegne, 'Premio', (data.regole && data.regole.premio) || '']);
         }
         var csv = rows.map(function(r) {
             return r.map(function(cell) {

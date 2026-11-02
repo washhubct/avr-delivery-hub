@@ -5,31 +5,26 @@
 //
 // Regole approvate da Guido il 31/10/2026:
 //   • quattro classifiche separate: Catania, Messina, Palermo, Siracusa (Enna esclusa: un solo driver)
-//   • montepremi mensile della provincia = 5 centesimi per consegna dei suoi driver,
-//     arrotondato ai 10 €, minimo 40 €, massimo 200 € (così il primo di Catania, la provincia
-//     con più ricavi, prende al massimo 100 €; le altre province sono in proporzione alle consegne)
-//     — scala ridotta da Guido il 01/11/2026 (prima 6 cent, 100-500 €)
+//   • montepremi mensile FISSO per provincia (deciso da Guido il 02/11/2026, dagli importi
+//     di ottobre 2026): Catania 200 €, Messina 70 €, Palermo 60 €, Siracusa 40 €.
+//     Il volume di consegne lo decide il Gruppo Arena, non i driver: niente montepremi
+//     legato alle consegne e niente soglia di attivazione.
 //   • ripartizione: con 5+ driver 50/30/20 ai primi tre, con 3-4 driver 60/40 ai primi due,
 //     con meno di 3 driver niente premi
 //   • premiabile solo chi ha almeno 12 giorni lavorati, zero danni nel mese e patente verificata;
 //     chi non è premiabile resta in classifica ma il premio passa al successivo
-//   • i premi si pagano solo se la provincia fa almeno l'85% della media delle consegne
-//     dei tre mesi precedenti (i mesi senza dati non contano)
 //   • premio: buono carburante Q8 o buono Amazon, a scelta del vincitore
 //   • tetto fringe benefit (confermato da Guido il 01/11/2026): massimo 1.000 € di premi
 //     per driver nell'anno solare; un premio che supera il residuo viene ridotto al residuo,
 //     chi ha già raggiunto il tetto resta in classifica e il premio passa al successivo.
-//     Si contano i premi del nuovo sistema (dal 2026-11) dei mesi con soglia superata.
+//     Si contano i premi del nuovo sistema (dal 2026-11).
 
 const PROVINCE_PREMI = ['CT', 'ME', 'PA', 'SR'];
 const NOME_PROVINCIA = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Siracusa', EN: 'Enna' };
 
 const REGOLE = {
-    euroPerConsegna: 0.05,
-    montepremiMin: 40,
-    montepremiMax: 200,
+    montepremiProvincia: { CT: 200, ME: 70, PA: 60, SR: 40 },
     minGiorniLavorati: 12,
-    sogliaPct: 0.85,
     minDriverTrePremi: 5,
     minDriverDuePremi: 3,
     quoteTre: [0.5, 0.3, 0.2],
@@ -39,14 +34,12 @@ const REGOLE = {
     tettoDal: '2026-11',
 };
 
-function round10(x) { return Math.round(x / 10) * 10; }
 function round5(x) { return Math.round(x / 5) * 5; }
 
-// Montepremi della provincia dalle consegne del mese
-function montepremi(consegne, regole) {
+// Montepremi fisso della provincia
+function montepremi(provincia, regole) {
     const r = regole || REGOLE;
-    const grezzo = round10((Number(consegne) || 0) * r.euroPerConsegna);
-    return Math.min(r.montepremiMax, Math.max(r.montepremiMin, grezzo));
+    return Number((r.montepremiProvincia || {})[provincia]) || 0;
 }
 
 // Importi dei premi (1°, 2°, 3°): arrotondati ai 5 €, il resto va al primo
@@ -86,40 +79,18 @@ function mesiTetto(mese, regole) {
     return out;
 }
 
-// Soglia di attivazione: consegne del mese contro l'85% della media dei mesi precedenti.
-// `storico` = consegne della provincia nei mesi precedenti (si ignorano quelli a zero).
-// Durante il mese la proiezione riporta il parziale a fine mese (pro-rata sui giorni).
-function soglia(consegne, storico, giornoDelMese, giorniNelMese, regole) {
-    const r = regole || REGOLE;
-    const validi = (storico || []).map(Number).filter((x) => x > 0);
-    const media = validi.length ? Math.round(validi.reduce((s, x) => s + x, 0) / validi.length) : 0;
-    const richiesto = Math.round(media * r.sogliaPct);
-    const g = Math.max(1, Number(giornoDelMese) || 1), n = Math.max(g, Number(giorniNelMese) || g);
-    const proiezione = Math.round((Number(consegne) || 0) * n / g);
-    return {
-        mesiStorico: validi.length,
-        media,
-        richiesto,
-        consegne: Number(consegne) || 0,
-        proiezione,
-        superata: (Number(consegne) || 0) >= richiesto,
-        proiezioneOk: proiezione >= richiesto,
-    };
-}
-
 // Classifica di una provincia. `drivers` = voci già ordinate per score, ognuna con
 // { driver, consegne, danni, giorni, patenteOk, score, ... }. `premiAnno` = { driver: euro
 // già maturati nell'anno }. Restituisce la classifica con posizione, premiabilità e premio
 // assegnato (il premio salta chi non è premiabile; viene ridotto se supera il residuo del tetto).
-function classificaProvincia(provincia, drivers, storico, giornoDelMese, giorniNelMese, regole, premiAnno) {
+function classificaProvincia(provincia, drivers, regole, premiAnno) {
     const r = regole || REGOLE;
     const anno = premiAnno || {};
     const lista = (drivers || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0))
         .map((d) => Object.assign({}, d, { premiAnno: Number(anno[d.driver]) || 0 }));
     const consegne = lista.reduce((s, d) => s + (Number(d.consegne) || 0), 0);
-    const totale = montepremi(consegne, r);
+    const totale = montepremi(provincia, r);
     const importi = ripartisci(totale, lista.length, r);
-    const sog = soglia(consegne, storico, giornoDelMese, giorniNelMese, r);
     let k = 0;
     const out = lista.map((d, i) => {
         const p = premiabile(d, r);
@@ -141,7 +112,6 @@ function classificaProvincia(provincia, drivers, storico, giornoDelMese, giorniN
         montepremi: totale,
         importi,
         premi: out.filter((d) => d.premio > 0).map((d) => ({ posizione: d.posizione, driver: d.driver, importo: d.premio, ridotto: d.premioRidotto })),
-        soglia: sog,
         drivers: out,
     };
 }
@@ -153,4 +123,4 @@ function giorniNelMese(mese) {
     return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
 }
 
-module.exports = { PROVINCE_PREMI, NOME_PROVINCIA, REGOLE, montepremi, ripartisci, premiabile, mesiTetto, soglia, classificaProvincia, giorniNelMese };
+module.exports = { PROVINCE_PREMI, NOME_PROVINCIA, REGOLE, montepremi, ripartisci, premiabile, mesiTetto, classificaProvincia, giorniNelMese };
