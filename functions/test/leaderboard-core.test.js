@@ -20,9 +20,9 @@ test('ripartisci: 50/30/20 con 5+ driver, 60/40 con 3-4, niente sotto i 3; somma
     [200, 70, 50, 40, 100, 130].forEach((t) => [3, 5, 8].forEach((n) => assert.equal(L.ripartisci(t, n).reduce((s, x) => s + x, 0), t)));
 });
 
-test('premiabile: 12 giorni, zero danni, patente verificata', () => {
+test('premiabile: zero danni, patente verificata, sotto il tetto (i giorni lavorati non contano)', () => {
     assert.deepEqual(L.premiabile({ giorni: 20, danni: 0, patenteOk: true }), { ok: true, motivi: [] });
-    assert.deepEqual(L.premiabile({ giorni: 11, danni: 0, patenteOk: true }).motivi, ['giorni']);
+    assert.deepEqual(L.premiabile({ giorni: 2, danni: 0, patenteOk: true }).motivi, []);
     assert.deepEqual(L.premiabile({ giorni: 20, danni: 1, patenteOk: false }).motivi, ['danni', 'patente']);
     assert.deepEqual(L.premiabile({ giorni: 20, danni: 0, patenteOk: true, premiAnno: 1000 }).motivi, ['tetto']);
     assert.deepEqual(L.premiabile({ giorni: 20, danni: 0, patenteOk: true, premiAnno: 950 }).motivi, []);
@@ -58,7 +58,7 @@ test('classificaProvincia: posizioni, premi che saltano i non premiabili, totale
     const drivers = [
         { driver: 'A', consegne: 600, danni: 1, giorni: 25, patenteOk: true, score: 620 },   // primo ma con un danno
         { driver: 'B', consegne: 500, danni: 0, giorni: 24, patenteOk: true, score: 580 },
-        { driver: 'C', consegne: 450, danni: 0, giorni: 10, patenteOk: true, score: 530 },   // pochi giorni
+        { driver: 'C', consegne: 450, danni: 0, giorni: 10, patenteOk: true, score: 530 },   // pochi giorni: non conta più
         { driver: 'D', consegne: 400, danni: 0, giorni: 22, patenteOk: false, score: 470 },  // patente non verificata
         { driver: 'E', consegne: 300, danni: 0, giorni: 20, patenteOk: true, score: 380 },
         { driver: 'F', consegne: 250, danni: 0, giorni: 18, patenteOk: true, score: 330 },
@@ -69,7 +69,7 @@ test('classificaProvincia: posizioni, premi che saltano i non premiabili, totale
     assert.equal(c.montepremi, 200);
     assert.deepEqual(c.importi, [100, 60, 40]);
     assert.deepEqual(c.drivers.map((d) => d.driver), ['A', 'B', 'C', 'D', 'E', 'F']);
-    assert.deepEqual(c.premi, [{ posizione: 2, driver: 'B', importo: 100, ridotto: false }, { posizione: 5, driver: 'E', importo: 60, ridotto: false }, { posizione: 6, driver: 'F', importo: 40, ridotto: false }]);
+    assert.deepEqual(c.premi, [{ posizione: 2, driver: 'B', importo: 100, ridotto: false }, { posizione: 3, driver: 'C', importo: 60, ridotto: false }, { posizione: 5, driver: 'E', importo: 40, ridotto: false }]);
     assert.deepEqual(c.drivers[0].motiviNonPremiabile, ['danni']);
     assert.equal(c.drivers[0].premio, 0);
     const piccola = L.classificaProvincia('SR', drivers.slice(0, 2));
@@ -82,9 +82,8 @@ test('messaggioStimolo: testi diversi per chi ha segnato, chi no, chi è fuori c
     const primo = { posizione: 1, score: 420, giorni: 20, premiabile: true, motiviNonPremiabile: [] };
     const quinto = { posizione: 5, score: 300, giorni: 18, premiabile: true, motiviNonPremiabile: [] };
     const danno = { posizione: 2, score: 400, giorni: 15, premiabile: false, motiviNonPremiabile: ['danni'] };
-    const inizioMese = { posizione: 2, score: 60, giorni: 2, premiabile: false, motiviNonPremiabile: ['giorni'] };
-    assert.match(L.messaggioStimolo({ consegneOggi: 1, classifica, entry: inizioMese, terzoScore: 20, giorniRestanti: 28 }, 0), /Oggi 1 consegna segnata! Sei 2° a Catania, in zona premio: €60 🎁 \(2\/12 giorni lavorati\)/);
-    assert.match(L.messaggioStimolo({ consegneOggi: 0, classifica, entry: inizioMese, terzoScore: 20, giorniRestanti: 5 }, 0), /in zona premio, ma non arrivi più a 12 giorni/);
+    const inizioMese = { posizione: 2, score: 60, giorni: 2, premiabile: true, motiviNonPremiabile: [] };
+    assert.match(L.messaggioStimolo({ consegneOggi: 1, classifica, entry: inizioMese, terzoScore: 20, giorniRestanti: 28 }, 0), /Oggi 1 consegna segnata! Sei 2° a Catania, in zona premio: €60 🎁\. /);
     assert.match(L.messaggioStimolo({ consegneOggi: 0, classifica: { nome: 'Siracusa', importi: [], montepremi: 40, nDriver: 2 }, entry: { posizione: 1, score: 1, giorni: 1 } }, 0), /1 punto · con 3 driver in classifica partono i premi/);
     assert.match(L.messaggioStimolo({ consegneOggi: 14, classifica, entry: primo, terzoScore: 350 }, 0), /Oggi 14 consegne.*1° a Catania, in zona premio: €100/);
     assert.match(L.messaggioStimolo({ consegneOggi: 0, classifica, entry: quinto, terzoScore: 350 }, 1), /Hai consegnato oggi\?.*5° a Catania, 51 punti dall'ultimo posto premiato \(€40\)/);

@@ -4,12 +4,12 @@
 // ogni provincia ha un montepremi fisso (Catania 200, Messina 70, Palermo 60, Siracusa 40 €),
 // ripartito 50/30/20 con 5+ driver o 60/40 con 3-4. Il volume di consegne lo decide
 // Arena, non i driver: nessuna soglia legata alle consegne.
-// Premiabile: 12 giorni lavorati, zero danni, patente verificata. Il premio è un
+// Premiabile: zero danni, patente verificata. Il premio è un
 // buono Q8 o Amazon a scelta del vincitore. Regole in functions/leaderboard-core.js.
 
 var CLASSIFICA_PROVINCE = ['CT', 'ME', 'PA', 'SR'];
 var CLASSIFICA_NOMI = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Siracusa', EN: 'Enna' };
-var CLASSIFICA_MOTIVI = { giorni: 'meno di 12 giorni lavorati', danni: 'danno nel mese', patente: 'patente non verificata', tetto: 'tetto 1.000 €/anno raggiunto' };
+var CLASSIFICA_MOTIVI = { danni: 'danno nel mese', patente: 'patente non verificata', tetto: 'tetto 1.000 €/anno raggiunto' };
 var classificaState = { prov: null, mese: null };
 
 function classificaTabsVisibili(data) {
@@ -71,7 +71,7 @@ async function renderClassifica() {
             : '<div class="card" style="margin-bottom:16px;background:var(--warning-bg)">⚠️ Questo mese è stato calcolato prima delle classifiche per provincia: premi e montepremi compaiono dopo un ricalcolo. <button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Ricalcola ora</button></div>')
         : '';
 
-    var regole = data.regole || { montepremiProvincia: { CT: 200, ME: 70, PA: 60, SR: 40 }, minGiorniLavorati: 12, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
+    var regole = data.regole || { montepremiProvincia: { CT: 200, ME: 70, PA: 60, SR: 40 }, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
     var scoringDesc = 'Scoring: 1 consegna = 1 pt · ⚡ Velocità (tempo medio &lt;20 min = +30, &lt;25 min = +15, con almeno 10 consegne con orari) · Zero danni = +50 pt · Danno = -30 pt';
 
     var body = tab === 'TUTTE'
@@ -155,7 +155,7 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
     var podioCard = importi.length
         ? '<div class="card" style="margin-bottom:20px">' +
             '<div class="card-title">🏆 Podio ' + escapeHtmlSafe(c.nome) + ' ' + meseLabel(mese) + (inCorso ? ' — provvisorio' : '') + '</div>' +
-            '<div class="card-desc">Premiabile solo chi ha almeno ' + regole.minGiorniLavorati + ' giorni lavorati, zero danni e patente verificata: il premio passa al successivo. Tetto fringe benefit 1.000 € l\'anno per driver: il premio che supera il residuo viene ridotto, chi ha raggiunto il tetto passa il premio al successivo (si contano i premi dal ' + meseLabel((regole.attivaDal || '2026-11')) + ').</div>' +
+            '<div class="card-desc">Premiabile solo chi ha zero danni e patente verificata: il premio passa al successivo. Tetto fringe benefit 1.000 € l\'anno per driver: il premio che supera il residuo viene ridotto, chi ha raggiunto il tetto passa il premio al successivo (si contano i premi dal ' + meseLabel((regole.attivaDal || '2026-11')) + ').</div>' +
             '<div style="display:flex;gap:14px;align-items:flex-end;margin-top:14px">' + podioHtml + '</div>' +
           '</div>'
         : '';
@@ -181,7 +181,7 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
               '<td><strong>' + escapeHtmlSafe(classificaNome(d)) + '</strong>' +
                 (d.email ? '<div style="font-size:11px;color:var(--text-light);margin-top:2px">' + escapeHtmlSafe(d.email) + '</div>' : '') +
               '</td>' +
-              '<td style="text-align:right;color:' + ((d.giorni || 0) < regole.minGiorniLavorati ? 'var(--danger)' : 'var(--text)') + '">' + (d.giorni || 0) + '</td>' +
+              '<td style="text-align:right;color:var(--text-light)">' + (d.giorni || 0) + '</td>' +
               '<td style="text-align:right"><strong>' + (d.consegne || 0) + '</strong></td>' +
               '<td style="text-align:right">' + classificaTempoHtml(d) + '</td>' +
               '<td style="text-align:right;color:' + ((d.danni || 0) > 0 ? 'var(--danger)' : 'var(--text-light)') + '">' + (d.danni || 0) + '</td>' +

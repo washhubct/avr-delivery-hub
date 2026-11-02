@@ -384,7 +384,7 @@ async function sendResendInvitoEmail({ apiKey, to, link, nome, mansione, provinc
 //   • leaderboard/{YYYY-MM}_{PROV} → classifica anonima della provincia con montepremi,
 //                                    premi: l'app legge solo quella del driver
 //   • leaderboardFull/{YYYY-MM}    → gestionale: generale + province con nomi reali
-// Regole premi (montepremi fisso per provincia, 12 giorni, zero danni, patente, tetto 1.000 €/anno) in leaderboard-core.js.
+// Regole premi (montepremi fisso per provincia, zero danni, patente, tetto 1.000 €/anno) in leaderboard-core.js.
 // ═══════════════════════════════════════════════════════════════════
 
 function meseInRome(date) {

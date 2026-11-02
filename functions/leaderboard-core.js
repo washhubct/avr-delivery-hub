@@ -11,7 +11,8 @@
 //     legato alle consegne e niente soglia di attivazione.
 //   • ripartizione: con 5+ driver 50/30/20 ai primi tre, con 3-4 driver 60/40 ai primi due,
 //     con meno di 3 driver niente premi
-//   • premiabile solo chi ha almeno 12 giorni lavorati, zero danni nel mese e patente verificata;
+//   • premiabile solo chi ha zero danni nel mese e patente verificata (niente requisito di giorni:
+//     i driver sono dipendenti con orario da contratto, tolto da Guido il 02/11/2026);
 //     chi non è premiabile resta in classifica ma il premio passa al successivo
 //   • premio: buono carburante Q8 o buono Amazon, a scelta del vincitore
 //   • tetto fringe benefit (confermato da Guido il 01/11/2026): massimo 1.000 € di premi
@@ -24,7 +25,6 @@ const NOME_PROVINCIA = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Sirac
 
 const REGOLE = {
     montepremiProvincia: { CT: 200, ME: 70, PA: 60, SR: 40 },
-    minGiorniLavorati: 12,
     minDriverTrePremi: 5,
     minDriverDuePremi: 3,
     quoteTre: [0.5, 0.3, 0.2],
@@ -54,12 +54,11 @@ function ripartisci(totale, nDriver, regole) {
     return [primo].concat(altri);
 }
 
-// Requisiti per ricevere il premio. `d` = { giorni, danni, patenteOk, premiAnno }
+// Requisiti per ricevere il premio. `d` = { danni, patenteOk, premiAnno }
 // (`premiAnno` = euro di premi già maturati nell'anno, per il tetto fringe benefit)
 function premiabile(d, regole) {
     const r = regole || REGOLE;
     const motivi = [];
-    if ((Number(d.giorni) || 0) < r.minGiorniLavorati) motivi.push('giorni');
     if ((Number(d.danni) || 0) > 0) motivi.push('danni');
     if (!d.patenteOk) motivi.push('patente');
     if ((Number(d.premiAnno) || 0) >= r.tettoAnnuo) motivi.push('tetto');
@@ -118,7 +117,7 @@ function classificaProvincia(provincia, drivers, regole, premiAnno) {
 
 // Testo della push quotidiana che spinge a segnare le consegne (19:30, lun-sab).
 // ctx = { consegneOggi, provincia, classifica: { nome, importi, montepremi, nDriver }, entry: voce del
-// driver in classifica (o null), giorniRestanti }. `seed` varia la chiusura di giorno in giorno.
+// driver in classifica (o null), terzoScore, giorniRestanti }. `seed` varia la chiusura di giorno in giorno.
 const CHIUSURE = [
     'Continua così 💪',
     'Il podio si costruisce un giorno alla volta 🏆',
@@ -127,10 +126,9 @@ const CHIUSURE = [
     'Ogni consegna segnata è un punto in più 📈',
     'Patente verificata nell\'app = premio garantito ✅',
 ];
-const MOTIVI_BREVI = { giorni: 'non arrivi più a 12 giorni lavorati', danni: 'un danno nel mese ti esclude dal premio', patente: 'verifica la patente nell\'app', tetto: 'hai raggiunto il tetto annuo dei premi' };
+const MOTIVI_BREVI = { danni: 'un danno nel mese ti esclude dal premio', patente: 'verifica la patente nell\'app', tetto: 'hai raggiunto il tetto annuo dei premi' };
 const plurale = (n, uno, tanti) => `${n} ${n === 1 ? uno : tanti}`;
-function messaggioStimolo(ctx, seed, regole) {
-    const r = regole || REGOLE;
+function messaggioStimolo(ctx, seed) {
     const c = ctx.classifica, e = ctx.entry, n = Number(ctx.consegneOggi) || 0;
     const chiusura = CHIUSURE[(Number(seed) || 0) % CHIUSURE.length];
     const oggiStr = plurale(n, 'consegna segnata', 'consegne segnate');
@@ -141,14 +139,11 @@ function messaggioStimolo(ctx, seed, regole) {
     if (!e) {
         return `🏁 La classifica di ${c.nome} è aperta (montepremi €${c.montepremi}): segna le consegne ogni giorno, ognuna vale 1 punto. ${chiusura}`;
     }
-    // I giorni mancanti non sono un problema finché il mese permette ancora di arrivare a 12
-    const giorni = Number(e.giorni) || 0, restanti = Number(ctx.giorniRestanti);
-    const giorniRecuperabili = !Number.isFinite(restanti) || giorni + restanti >= r.minGiorniLavorati;
-    const motivi = (e.motiviNonPremiabile || []).filter((m) => !(m === 'giorni' && giorniRecuperabili));
+    const motivi = e.motiviNonPremiabile || [];
     let stato;
     if (e.posizione <= importi.length) {
         stato = motivi.length === 0
-            ? `in zona premio: €${importi[e.posizione - 1]} 🎁` + (giorni < r.minGiorniLavorati ? ` (${giorni}/${r.minGiorniLavorati} giorni lavorati)` : '')
+            ? `in zona premio: €${importi[e.posizione - 1]} 🎁`
             : `in zona premio, ma ${MOTIVI_BREVI[motivi[0]] || 'manca un requisito'}`;
     } else if (importi.length && ctx.terzoScore != null) {
         const gap = Math.max(1, ctx.terzoScore - (e.score || 0) + 1);
