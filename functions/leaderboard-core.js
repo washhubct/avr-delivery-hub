@@ -17,7 +17,7 @@
 //   • tetto fringe benefit (confermato da Guido il 01/11/2026): massimo 1.000 € di premi
 //     per driver nell'anno solare; un premio che supera il residuo viene ridotto al residuo,
 //     chi ha già raggiunto il tetto resta in classifica e il premio passa al successivo.
-//     Si contano i premi del nuovo sistema (dal 2026-11).
+//     Si contano i premi dal primo mese della classifica (attivaDal, 2026-11).
 
 const PROVINCE_PREMI = ['CT', 'ME', 'PA', 'SR'];
 const NOME_PROVINCIA = { CT: 'Catania', ME: 'Messina', PA: 'Palermo', SR: 'Siracusa', EN: 'Enna' };
@@ -31,7 +31,7 @@ const REGOLE = {
     quoteDue: [0.6, 0.4],
     premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore',
     tettoAnnuo: 1000,
-    tettoDal: '2026-11',
+    attivaDal: '2026-11',   // primo mese della classifica a premi: prima non si scrivono classifiche di provincia
 };
 
 function round5(x) { return Math.round(x / 5) * 5; }
@@ -66,7 +66,7 @@ function premiabile(d, regole) {
     return { ok: motivi.length === 0, motivi };
 }
 
-// Mesi 'YYYY-MM' dell'anno di `mese` che contano per il tetto: da tettoDal (o gennaio) al mese precedente
+// Mesi 'YYYY-MM' dell'anno di `mese` che contano per il tetto: da attivaDal (o gennaio) al mese precedente
 function mesiTetto(mese, regole) {
     const r = regole || REGOLE;
     const m = String(mese).match(/^(\d{4})-(\d{2})$/);
@@ -74,7 +74,7 @@ function mesiTetto(mese, regole) {
     const anno = m[1], out = [];
     for (let k = 1; k < Number(m[2]); k++) {
         const mm = anno + '-' + String(k).padStart(2, '0');
-        if (mm >= r.tettoDal) out.push(mm);
+        if (mm >= r.attivaDal) out.push(mm);
     }
     return out;
 }
@@ -116,6 +116,55 @@ function classificaProvincia(provincia, drivers, regole, premiAnno) {
     };
 }
 
+// Testo della push quotidiana che spinge a segnare le consegne (19:30, lun-sab).
+// ctx = { consegneOggi, provincia, classifica: { nome, importi, montepremi, nDriver }, entry: voce del
+// driver in classifica (o null), giorniRestanti }. `seed` varia la chiusura di giorno in giorno.
+const CHIUSURE = [
+    'Continua così 💪',
+    'Il podio si costruisce un giorno alla volta 🏆',
+    'Zero danni nel mese = +50 punti 🛡️',
+    'Segna anche gli orari: la velocità vale fino a +30 punti 🚀',
+    'Ogni consegna segnata è un punto in più 📈',
+    'Patente verificata nell\'app = premio garantito ✅',
+];
+const MOTIVI_BREVI = { giorni: 'non arrivi più a 12 giorni lavorati', danni: 'un danno nel mese ti esclude dal premio', patente: 'verifica la patente nell\'app', tetto: 'hai raggiunto il tetto annuo dei premi' };
+const plurale = (n, uno, tanti) => `${n} ${n === 1 ? uno : tanti}`;
+function messaggioStimolo(ctx, seed, regole) {
+    const r = regole || REGOLE;
+    const c = ctx.classifica, e = ctx.entry, n = Number(ctx.consegneOggi) || 0;
+    const chiusura = CHIUSURE[(Number(seed) || 0) % CHIUSURE.length];
+    const oggiStr = plurale(n, 'consegna segnata', 'consegne segnate');
+    if (!c) {
+        return n > 0 ? `📦 Oggi ${oggiStr}, grazie! ${chiusura}` : '✍️ Hai consegnato oggi? Segna le consegne nell\'app prima di chiudere la giornata 📦';
+    }
+    const importi = c.importi || [];
+    if (!e) {
+        return `🏁 La classifica di ${c.nome} è aperta (montepremi €${c.montepremi}): segna le consegne ogni giorno, ognuna vale 1 punto. ${chiusura}`;
+    }
+    // I giorni mancanti non sono un problema finché il mese permette ancora di arrivare a 12
+    const giorni = Number(e.giorni) || 0, restanti = Number(ctx.giorniRestanti);
+    const giorniRecuperabili = !Number.isFinite(restanti) || giorni + restanti >= r.minGiorniLavorati;
+    const motivi = (e.motiviNonPremiabile || []).filter((m) => !(m === 'giorni' && giorniRecuperabili));
+    let stato;
+    if (e.posizione <= importi.length) {
+        stato = motivi.length === 0
+            ? `in zona premio: €${importi[e.posizione - 1]} 🎁` + (giorni < r.minGiorniLavorati ? ` (${giorni}/${r.minGiorniLavorati} giorni lavorati)` : '')
+            : `in zona premio, ma ${MOTIVI_BREVI[motivi[0]] || 'manca un requisito'}`;
+    } else if (importi.length && ctx.terzoScore != null) {
+        const gap = Math.max(1, ctx.terzoScore - (e.score || 0) + 1);
+        stato = `${plurale(gap, 'punto', 'punti')} dall\'ultimo posto premiato (€${importi[importi.length - 1]})`;
+    } else if (!importi.length) {
+        stato = `${plurale(e.score || 0, 'punto', 'punti')} · con 3 driver in classifica partono i premi`;
+    } else {
+        stato = plurale(e.score || 0, 'punto', 'punti');
+    }
+    const testa = n > 0
+        ? `📦 Oggi ${oggiStr}! Sei ${e.posizione}° a ${c.nome}, ${stato}.`
+        : `✍️ Hai consegnato oggi? Segna le consegne: ogni consegna è 1 punto. Sei ${e.posizione}° a ${c.nome}, ${stato}.`;
+    const coda = ctx.giorniRestanti != null && ctx.giorniRestanti <= 7 ? `Mancano ${ctx.giorniRestanti} giorni a fine mese ⏳` : chiusura;
+    return `${testa} ${coda}`;
+}
+
 // Giorni nel mese 'YYYY-MM'
 function giorniNelMese(mese) {
     const m = String(mese).match(/^(\d{4})-(\d{2})$/);
@@ -123,4 +172,4 @@ function giorniNelMese(mese) {
     return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
 }
 
-module.exports = { PROVINCE_PREMI, NOME_PROVINCIA, REGOLE, montepremi, ripartisci, premiabile, mesiTetto, classificaProvincia, giorniNelMese };
+module.exports = { PROVINCE_PREMI, NOME_PROVINCIA, REGOLE, montepremi, ripartisci, premiabile, mesiTetto, classificaProvincia, messaggioStimolo, giorniNelMese };

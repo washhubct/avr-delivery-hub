@@ -64,8 +64,11 @@ async function renderClassifica() {
         return '<button class="btn btn-sm' + (p === tab ? ' btn-primary' : '') + '" onclick="classificaState.prov=\'' + p + '\';renderClassifica()">' + label + '</button>';
     }).join('') + '</div>';
 
+    var attivaDal = (data.regole && data.regole.attivaDal) || '2026-11';
     var avvisoVecchio = !data.province
-        ? '<div class="card" style="margin-bottom:16px;background:var(--warning-bg)">⚠️ Questo mese è stato calcolato prima delle classifiche per provincia: premi e montepremi compaiono dopo un ricalcolo. <button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Ricalcola ora</button></div>'
+        ? (mese < attivaDal
+            ? '<div class="card" style="margin-bottom:16px;background:var(--info-bg)">ℹ️ Le classifiche per provincia con premi partono da ' + meseLabel(attivaDal) + ': per questo mese c\'è solo la classifica generale, senza premi.</div>'
+            : '<div class="card" style="margin-bottom:16px;background:var(--warning-bg)">⚠️ Questo mese è stato calcolato prima delle classifiche per provincia: premi e montepremi compaiono dopo un ricalcolo. <button class="btn btn-sm solo-ufficio" onclick="rebuildClassifica()">🔄 Ricalcola ora</button></div>')
         : '';
 
     var regole = data.regole || { montepremiProvincia: { CT: 200, ME: 70, PA: 60, SR: 40 }, minGiorniLavorati: 12, premio: 'Buono carburante Q8 o buono Amazon, a scelta del vincitore' };
@@ -152,7 +155,7 @@ function renderClassificaProvincia(c, data, mese, lastUpdateStr, scoringDesc, re
     var podioCard = importi.length
         ? '<div class="card" style="margin-bottom:20px">' +
             '<div class="card-title">🏆 Podio ' + escapeHtmlSafe(c.nome) + ' ' + meseLabel(mese) + (inCorso ? ' — provvisorio' : '') + '</div>' +
-            '<div class="card-desc">Premiabile solo chi ha almeno ' + regole.minGiorniLavorati + ' giorni lavorati, zero danni e patente verificata: il premio passa al successivo. Tetto fringe benefit 1.000 € l\'anno per driver: il premio che supera il residuo viene ridotto, chi ha raggiunto il tetto passa il premio al successivo (si contano i premi dal ' + meseLabel((regole.tettoDal || '2026-11')) + ').</div>' +
+            '<div class="card-desc">Premiabile solo chi ha almeno ' + regole.minGiorniLavorati + ' giorni lavorati, zero danni e patente verificata: il premio passa al successivo. Tetto fringe benefit 1.000 € l\'anno per driver: il premio che supera il residuo viene ridotto, chi ha raggiunto il tetto passa il premio al successivo (si contano i premi dal ' + meseLabel((regole.attivaDal || '2026-11')) + ').</div>' +
             '<div style="display:flex;gap:14px;align-items:flex-end;margin-top:14px">' + podioHtml + '</div>' +
           '</div>'
         : '';

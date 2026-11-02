@@ -563,7 +563,7 @@ async function buildLeaderboardForMese(mese, prevMesePositions, anagByCognome, p
 }
 
 // Premi già maturati nell'anno per driver (tetto fringe benefit 1.000 €): somma dei premi
-// dei mesi chiusi dal nuovo sistema (LB.REGOLE.tettoDal).
+// dei mesi chiusi dal primo mese della classifica (LB.REGOLE.attivaDal).
 async function loadPremiAnno(mese) {
     const out = {};
     for (const m of LB.mesiTetto(mese)) {
@@ -611,6 +611,9 @@ async function precalcoloMese(mese, anagByCognome) {
         return { mese, nDrivers: 0, skipped: true };
     }
 
+    // Le classifiche per provincia (con premi) esistono solo dal mese di partenza:
+    // per i mesi precedenti si scrive solo la classifica generale, senza premi.
+    const conProvince = mese >= LB.REGOLE.attivaDal;
     const ts = admin.firestore.FieldValue.serverTimestamp();
     const batch = db.batch();
     batch.set(db.collection('leaderboard').doc(mese), {
@@ -619,20 +622,22 @@ async function precalcoloMese(mese, anagByCognome) {
         totalDrivers: anon.length,
         lastUpdate: ts,
     });
-    LB.PROVINCE_PREMI.forEach(p => {
-        batch.set(db.collection('leaderboard').doc(mese + '_' + p), Object.assign({ mese, inCorso, regole: LB.REGOLE, lastUpdate: ts }, provinceAnon[p]));
-    });
-    batch.set(db.collection('leaderboardFull').doc(mese), {
+    if (conProvince) {
+        LB.PROVINCE_PREMI.forEach(p => {
+            batch.set(db.collection('leaderboard').doc(mese + '_' + p), Object.assign({ mese, inCorso, regole: LB.REGOLE, lastUpdate: ts }, provinceAnon[p]));
+        });
+    }
+    batch.set(db.collection('leaderboardFull').doc(mese), Object.assign({
         mese,
         drivers: full,
         totalDrivers: full.length,
-        province: provinceFull,
-        regole: LB.REGOLE,
         inCorso,
         lastUpdate: ts,
-    });
+    }, conProvince ? { province: provinceFull, regole: LB.REGOLE } : {}));
     await batch.commit();
-    const riep = LB.PROVINCE_PREMI.map(p => `${p} ${provinceFull[p].nDriver} drv/${provinceFull[p].consegne} cons/€${provinceFull[p].montepremi}`).join(', ');
+    const riep = conProvince
+        ? LB.PROVINCE_PREMI.map(p => `${p} ${provinceFull[p].nDriver} drv/${provinceFull[p].consegne} cons/€${provinceFull[p].montepremi}`).join(', ')
+        : 'solo classifica generale (prima di ' + LB.REGOLE.attivaDal + ')';
     console.log(`[leaderboard] ${mese}: ${anon.length} driver aggiornati — ${riep}`);
     return { mese, nDrivers: anon.length, skipped: false, province: riep };
 }
@@ -1005,6 +1010,93 @@ exports.pushPromemoriaReport = onSchedule(
         console.log(`[push] promemoria: ${daAvvisare.length} driver, ${subs.length} device, sent=${r.sent} dead=${r.dead}`);
     }
 );
+
+// 19:30 lun-sab — stimolo quotidiano: consegne segnate oggi e posizione nella classifica
+// della propria provincia, a tutti i driver con l'app registrata alle notifiche.
+async function eseguiStimoloClassifica(dryRun) {
+    const now = new Date();
+    const oggi = giornoInRome(now);
+    const mese = oggi.slice(0, 7);
+    if (mese < LB.REGOLE.attivaDal) return { skipped: 'classifica non ancora attiva' };
+
+    const subsSnap = await db.collection('pushSubscriptions').get();
+    const subsPerEmail = {};
+    subsSnap.forEach(doc => {
+        const s = { id: doc.id, ...doc.data() };
+        const em = (s.email || '').toLowerCase();
+        if (em) (subsPerEmail[em] = subsPerEmail[em] || []).push(s);
+    });
+    const emails = Object.keys(subsPerEmail);
+    if (emails.length === 0) return { sent: 0, motivo: 'nessuna subscription' };
+
+    const anagPerEmail = {};
+    (await db.collection('driverAnagrafica').get()).forEach(doc => {
+        const a = doc.data();
+        if (a.email) anagPerEmail[a.email.toLowerCase()] = a;
+    });
+
+    const lbDoc = await db.collection('leaderboardFull').doc(mese).get();
+    const province = (lbDoc.exists && lbDoc.data().province) || {};
+    const entryPerEmail = {};
+    Object.keys(province).forEach(p => {
+        (province[p].drivers || []).forEach(d => { if (d.email) entryPerEmail[d.email.toLowerCase()] = d; });
+    });
+
+    // Consegne segnate oggi per driver
+    const consegneOggi = {};
+    (await db.collection('reportDriver').where('mese', '==', mese).get()).forEach(doc => {
+        const r = doc.data();
+        const dt = r.data && typeof r.data.toDate === 'function' ? r.data.toDate() : null;
+        if (!dt || giornoInRome(dt) !== oggi || !r.driverEmail) return;
+        const em = r.driverEmail.toLowerCase();
+        consegneOggi[em] = (consegneOggi[em] || 0) + (r.numConsegne || 0);
+    });
+
+    const giorno = Number(oggi.slice(8, 10));
+    const giorniRestanti = LB.giorniNelMese(mese) - giorno;
+    const seed = Math.floor(now.getTime() / 86400000);
+    const messaggi = [];
+    for (const em of emails) {
+        const a = anagPerEmail[em];
+        if (a && a.attivo === false) continue;
+        const prov = a && a.citta ? String(a.citta).toUpperCase().trim() : '';
+        const c = LB.PROVINCE_PREMI.includes(prov) ? province[prov] : null;
+        const entry = c ? entryPerEmail[em] || null : null;
+        const importi = (c && c.importi) || [];
+        const terzo = c && importi.length ? (c.drivers || []).find(d => d.posizione === importi.length) : null;
+        const body = LB.messaggioStimolo({
+            consegneOggi: consegneOggi[em] || 0,
+            classifica: c ? { nome: c.nome, importi, montepremi: c.montepremi, nDriver: c.nDriver } : null,
+            entry,
+            terzoScore: terzo ? terzo.score : null,
+            giorniRestanti,
+        }, seed);
+        messaggi.push({ email: em, subs: subsPerEmail[em], body });
+    }
+    if (dryRun) return { mese, oggi, messaggi: messaggi.map(m => ({ email: m.email, device: m.subs.length, body: m.body })) };
+
+    initWebpush();
+    let sent = 0, dead = 0;
+    for (const m of messaggi) {
+        const r = await inviaPushASubs(m.subs, { title: 'Last Mile Driver · Classifica', body: m.body, url: './' });
+        sent += r.sent; dead += r.dead;
+    }
+    console.log(`[push] stimolo classifica ${oggi}: ${messaggi.length} driver, sent=${sent} dead=${dead}`);
+    return { sent, dead, driver: messaggi.length };
+}
+
+exports.pushStimoloClassifica = onSchedule(
+    {
+        schedule: '30 19 * * 1-6',
+        timeZone: 'Europe/Rome',
+        region: 'europe-west1',
+        secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY],
+    },
+    async () => { await eseguiStimoloClassifica(false); }
+);
+
+// Uso da CLI (anteprima dei testi senza inviare): non è una Cloud Function, il deploy la ignora
+exports.cliStimoloClassifica = async () => eseguiStimoloClassifica(true);
 
 // Cambio stato ritorno (accettato/rifiutato) → notifica al driver
 exports.pushEsitoRitorno = onDocumentUpdated(
