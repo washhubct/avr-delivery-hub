@@ -3,7 +3,7 @@
 function renderAnagraficaDriver() {
     const tbody = document.getElementById('tblAnagraficaDriver');
     if (state.driverList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:40px">Nessun driver. Clicca "Popola driver" per caricare la lista preconfigurata.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:40px">Nessun driver. Clicca "Popola driver" per caricare la lista preconfigurata.</td></tr>';
         return;
     }
 
@@ -19,7 +19,7 @@ function renderAnagraficaDriver() {
     }
 
     if (sorted.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:40px">Nessun risultato per "' + searchTerm + '"</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:40px">Nessun risultato per "' + searchTerm + '"</td></tr>';
         return;
     }
 
@@ -32,6 +32,7 @@ function renderAnagraficaDriver() {
         <td>${escapeHtml(d.contratto) || '—'}</td>
         <td>${scadenzaBadge(d.scadenzaContratto)}</td>
         <td>${patenteBadge(d)}</td>
+        <td style="text-align:center">${pushBadge(d)}</td>
         <td><span class="badge ${d.attivo !== false ? 'badge-ok' : 'badge-err'}">${d.attivo !== false ? 'Attivo' : 'Inattivo'}</span></td>
         <td><span class="solo-ufficio">
             <button class="btn btn-sm" onclick="editDriver('${idSafe}')">✏️</button>
@@ -40,6 +41,25 @@ function renderAnagraficaDriver() {
         </span></td>
     </tr>`;
     }).join('');
+}
+
+// Badge push: il driver ha almeno un dispositivo registrato alle notifiche (pushSubscriptions,
+// leggibile solo dal superadmin: per gli altri ruoli la colonna resta vuota).
+var pushEmails; // undefined = non ancora caricate, null = non leggibili, Set = caricate
+function pushBadge(d) {
+    if (pushEmails === undefined) { pushEmails = null; caricaPushEmails(); return '<span style="color:var(--text-light)">…</span>'; }
+    if (!pushEmails) return '<span style="color:var(--text-light)">—</span>';
+    var em = (d.email || '').toLowerCase().trim();
+    return pushEmails.has(em)
+        ? '<span class="badge badge-ok" title="Notifiche attive">🔔</span>'
+        : '<span class="badge badge-warn" title="Nessun dispositivo registrato: il driver non riceve le notifiche">no</span>';
+}
+async function caricaPushEmails() {
+    try {
+        var snap = await db.collection('pushSubscriptions').get();
+        pushEmails = new Set(snap.docs.map(function(x) { return ((x.data().email || '') + '').toLowerCase().trim(); }));
+    } catch (e) { pushEmails = null; return; }
+    if (document.getElementById('tblAnagraficaDriver')) renderAnagraficaDriver();
 }
 
 // Badge scadenza contratto: rosso se scaduto, giallo se entro 30 giorni
