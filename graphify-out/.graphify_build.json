@@ -1,0 +1,1 @@
+{"excludes":["app-hosting/assets/**","app-hosting/assets","**/app-hosting/assets/**","docs/manuali/*.pdf"],"gitignore":true}
