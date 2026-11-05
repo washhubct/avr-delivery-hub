@@ -418,5 +418,47 @@
     "seen": 1793656062.045181,
     "ast_hash": "88bba7304600cf6283ee851c5c967488",
     "semantic_hash": "88bba7304600cf6283ee851c5c967488"
+  },
+  "app-hosting/icon-512.png": {
+    "mtime": 1784798480.0,
+    "seen": 1793874410.2720199,
+    "ast_hash": "ffbd52adca0c7939e4773608e5c095ca",
+    "semantic_hash": ""
+  },
+  "app-hosting/logo.png": {
+    "mtime": 1784798480.0,
+    "seen": 1793874410.272021,
+    "ast_hash": "37c2fb56aced06da63f4483a725d8f68",
+    "semantic_hash": ""
+  },
+  "apple-touch-icon.png": {
+    "mtime": 1782753819.0,
+    "seen": 1793874410.272022,
+    "ast_hash": "dfeae02282372d7e6ad6fe13af28cc0b",
+    "semantic_hash": ""
+  },
+  "assets/icons/icon-192.png": {
+    "mtime": 1791217422.3334014,
+    "seen": 1793874410.272022,
+    "ast_hash": "25cc438891014d5eb1102cc3d3cae329",
+    "semantic_hash": ""
+  },
+  "assets/icons/icon-512.png": {
+    "mtime": 1791217422.3338244,
+    "seen": 1793874410.272023,
+    "ast_hash": "ffbd52adca0c7939e4773608e5c095ca",
+    "semantic_hash": ""
+  },
+  "avr-logo.png": {
+    "mtime": 1782753819.0,
+    "seen": 1793874410.272023,
+    "ast_hash": "37c2fb56aced06da63f4483a725d8f68",
+    "semantic_hash": ""
+  },
+  "functions/package-lock.json": {
+    "mtime": 1791562895.039745,
+    "seen": 1793874410.2720242,
+    "ast_hash": "c9a137b32124a306fa036618ff17989d",
+    "semantic_hash": ""
   }
 }
