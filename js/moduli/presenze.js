@@ -237,7 +237,8 @@ async function presSalvaGiorno(email, giorno, causale) {
     var ref = db.collection('presenzeDriver').doc(email + '_' + giorno);
     var campi = { causale: causale, nota: causale ? nota : '', modificatoDa: me, modificatoIl: firebase.firestore.FieldValue.serverTimestamp() };
     try {
-        if (doc) await ref.update(campi);
+        // Un giorno toccato a mano non è più della richiesta d'assenza: il suo annullo non lo cancellerà
+        if (doc) await ref.update(doc.richiestaId ? Object.assign({ richiestaId: firebase.firestore.FieldValue.delete() }, campi) : campi);
         else {
             if (!causale) { closeModal(); return; }
             await ref.set(Object.assign({ email: email, data: giorno, mese: giorno.slice(0, 7), driver: r.cognome || '', driverNome: ((r.cognome || '') + ' ' + (r.nome || '')).trim(), citta: r.citta || '' }, campi));

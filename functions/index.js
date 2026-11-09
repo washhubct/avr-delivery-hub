@@ -2445,3 +2445,77 @@ exports.presenzaDaRapporto = onDocumentWritten(
         }
     }
 );
+
+// ═══════════════════════════════════════════════════════════════════
+// ASSENZE — richiesteAssenza/{id} dall'app driver (assenze-core.js).
+// Ferie/permessi: in_attesa → approvata|rifiutata dal responsabile di
+// provincia (o HR); malattia: registrata subito (solo numero di
+// protocollo, mai il certificato). Attive → causale in presenzeDriver
+// sui giorni del periodo, con richiestaId per poterle togliere.
+// ═══════════════════════════════════════════════════════════════════
+const Assenze = require('./assenze-core.js');
+
+async function applicaAssenzaAPresenze(id, prima, dopo) {
+    const r = dopo || prima;
+    const email = String(r.email || '').toLowerCase();
+    const giorni = new Set([...(prima ? Assenze.giorniTra(prima.dal, prima.al) : []), ...(dopo ? Assenze.giorniTra(dopo.dal, dopo.al) : [])]);
+    if (!email || !giorni.size) return { metti: [], togli: [], saltati: [] };
+    const refs = {};
+    giorni.forEach((g) => { refs[g] = db.collection('presenzeDriver').doc(Presenze.idPresenza(email, g)); });
+    const snaps = await db.getAll(...Object.values(refs));
+    const esistenti = {};
+    snaps.forEach((s) => { if (s.exists) esistenti[s.data().data] = s.data(); });
+    const piano = Assenze.pianoPresenze(prima, dopo, id, esistenti);
+    const FV = admin.firestore.FieldValue;
+    const batch = db.batch();
+    piano.metti.forEach((g) => batch.set(refs[g], {
+        email, data: g, mese: g.slice(0, 7), driver: r.driver || '', driverNome: r.driverNome || '', citta: r.citta || '',
+        causale: r.tipo, nota: Assenze.TIPI[r.tipo].label + ' da app' + (r.protocollo ? ', prot. ' + r.protocollo : ''),
+        modificatoDa: 'app: ' + (r.decisaDa || email), modificatoIl: FV.serverTimestamp(), richiestaId: id,
+    }, { merge: true }));
+    piano.togli.forEach((g) => batch.update(refs[g], { causale: null, nota: '', richiestaId: FV.delete(), modificatoDa: 'app: annullata', modificatoIl: FV.serverTimestamp() }));
+    if (piano.metti.length || piano.togli.length) await batch.commit();
+    return piano;
+}
+
+async function responsabiliDi(citta) {
+    const snap = await db.collection('utenti').where('mansione', '==', 'responsabile').where('province', 'array-contains', citta).get();
+    return snap.docs.filter((d) => d.data().attivo !== false).map((d) => d.id.toLowerCase());
+}
+
+exports.richiestaAssenzaCreata = onDocumentCreated(
+    { document: 'richiesteAssenza/{id}', region: 'europe-west1', secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY] },
+    async (event) => {
+        const id = event.params.id;
+        let r = event.data.data();
+        // Nome e provincia dall'anagrafica, non dal client
+        const a = await db.collection('driverAnagrafica').where('email', '==', String(r.email || '').toLowerCase()).limit(1).get();
+        if (!a.empty) {
+            const x = a.docs[0].data();
+            const fix = { driver: String(x.cognome || '').toUpperCase(), driverNome: (String(x.cognome || '').toUpperCase() + ' ' + (x.nome || '')).trim(), citta: String(x.citta || '').toUpperCase() };
+            await event.data.ref.update(fix);
+            r = { ...r, ...fix };
+        }
+        const piano = await applicaAssenzaAPresenze(id, null, r);
+        initWebpush();
+        const resp = r.citta ? await responsabiliDi(r.citta) : [];
+        const p = Assenze.pushNuova(r);
+        const res = resp.length ? await inviaPushASubs(await subsPerEmails(resp), { ...p, url: './' }) : { sent: 0 };
+        console.log(`[assenze] nuova ${id} ${r.tipo} ${r.email} ${r.dal}..${r.al} → presenze +${piano.metti.length}, push responsabili ${resp.join(',') || '-'} sent=${res.sent}`);
+    }
+);
+
+exports.richiestaAssenzaAggiornata = onDocumentUpdated(
+    { document: 'richiesteAssenza/{id}', region: 'europe-west1', secrets: [VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY] },
+    async (event) => {
+        const prima = event.data.before.data(), dopo = event.data.after.data();
+        if (prima.stato === dopo.stato && prima.dal === dopo.dal && prima.al === dopo.al) return;
+        const piano = await applicaAssenzaAPresenze(event.params.id, prima, dopo);
+        let sent = 0;
+        if (prima.stato === 'in_attesa' && (dopo.stato === 'approvata' || dopo.stato === 'rifiutata')) {
+            initWebpush();
+            sent = (await inviaPushASubs(await subsPerEmails([String(dopo.email).toLowerCase()]), { ...Assenze.pushEsito(dopo), url: './' })).sent;
+        }
+        console.log(`[assenze] ${event.params.id} ${prima.stato} → ${dopo.stato}: presenze +${piano.metti.length} -${piano.togli.length} saltati ${piano.saltati.length}, push driver sent=${sent}`);
+    }
+);

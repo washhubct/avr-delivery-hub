@@ -210,8 +210,10 @@ service cloud.firestore {
                        && request.resource.data.keys().hasOnly(['email', 'data', 'mese', 'driver', 'driverNome', 'citta', 'causale', 'nota', 'modificatoDa', 'modificatoIl'])
                        && request.resource.data.modificatoDa == userEmail()
                        && causaleValida(request.resource.data);
+      // richiestaId: il gestionale lo toglie quando sovrascrive un giorno nato da una richiesta d'assenza
       allow update: if puoScriverePresenza(resource.data)
-                       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['causale', 'nota', 'modificatoDa', 'modificatoIl'])
+                       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['causale', 'nota', 'modificatoDa', 'modificatoIl', 'richiestaId'])
+                       && !('richiestaId' in request.resource.data)
                        && request.resource.data.modificatoDa == userEmail()
                        && causaleValida(request.resource.data);
       allow delete: if isSuperAdmin();
@@ -220,6 +222,51 @@ service cloud.firestore {
     match /presenzeMesi/{mese} {
       allow read: if isGestionale();
       allow write: if canGestirePresenze();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RICHIESTE ASSENZA — ferie, permessi, malattia dall'app driver.
+    // Il driver crea solo per sé (ferie/permesso in_attesa, malattia
+    // registrata con il solo numero di protocollo) e può annullarle.
+    // Decide il responsabile della provincia o HR/amministratore; HR
+    // può anche revocare dopo. Nome e provincia li riscrive la CF
+    // richiestaAssenzaCreata dall'anagrafica; le causali in
+    // presenzeDriver le scrivono le CF.
+    // ═══════════════════════════════════════════════════════════
+    function decideRichiesta() {
+      return canGestirePresenze()
+             || (isResponsabile() && resource.data.citta in provinceResponsabile());
+    }
+    match /richiesteAssenza/{id} {
+      allow read: if isAdminOrStaff() || canGestirePresenze()
+                     || (isResponsabile() && resource.data.citta in provinceResponsabile())
+                     || (isSignedIn() && resource.data.email == userEmail());
+      allow create: if isSignedIn()
+                       && request.resource.data.email == userEmail()
+                       && request.resource.data.keys().hasOnly(['email', 'driver', 'driverNome', 'citta', 'tipo', 'dal', 'al', 'protocollo', 'nota', 'stato', 'creataIl'])
+                       && request.resource.data.tipo in ['ferie', 'permesso', 'malattia']
+                       && request.resource.data.stato == (request.resource.data.tipo == 'malattia' ? 'registrata' : 'in_attesa')
+                       && request.resource.data.dal is string && request.resource.data.dal.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                       && request.resource.data.al is string && request.resource.data.al.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                       && request.resource.data.al >= request.resource.data.dal;
+      allow update: if
+                       // Driver: annulla la propria richiesta non ancora decisa (o la malattia comunicata)
+                       (resource.data.email == userEmail()
+                        && resource.data.stato in ['in_attesa', 'registrata']
+                        && request.resource.data.stato == 'annullata'
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stato', 'annullataIl']))
+                       // Responsabile di provincia o HR: approva o rifiuta
+                       || (decideRichiesta()
+                           && resource.data.stato == 'in_attesa'
+                           && request.resource.data.stato in ['approvata', 'rifiutata']
+                           && request.resource.data.decisaDa == userEmail()
+                           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stato', 'decisaDa', 'decisaIl', 'motivoRifiuto']))
+                       // HR/amministratore: revoca anche dopo la decisione
+                       || (canGestirePresenze()
+                           && request.resource.data.stato in ['approvata', 'rifiutata', 'annullata']
+                           && request.resource.data.decisaDa == userEmail()
+                           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stato', 'decisaDa', 'decisaIl', 'motivoRifiuto']));
+      allow delete: if isSuperAdmin();
     }
 
     // ═══════════════════════════════════════════════════════════
