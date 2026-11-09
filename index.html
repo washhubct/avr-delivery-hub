@@ -79,11 +79,8 @@
                 <a class="nav-item nav-can-manage-users" data-module="utenti" onclick="navigateTo('utenti')">
                     <span class="nav-icon">👥</span> Utenti
                 </a>
-                <a class="nav-item nav-timbrature-admin" data-module="timbrature" onclick="navigateTo('timbrature')">
-                    <span class="nav-icon">🕐</span> Timbrature
-                </a>
-                <a class="nav-item nav-timbrature-admin" data-module="punti-timbratura" onclick="navigateTo('punti-timbratura')">
-                    <span class="nav-icon">📍</span> Punti Timbratura
+                <a class="nav-item nav-presenze" data-module="presenze" onclick="navigateTo('presenze')">
+                    <span class="nav-icon">📅</span> Presenze
                 </a>
                 <a class="nav-item nav-superadmin" data-module="log-accessi" onclick="navigateTo('log-accessi')">
                     <span class="nav-icon">📋</span> Log Accessi
@@ -480,6 +477,37 @@
         </section>
 
         <!-- ═══ PUNTI TIMBRATURA ═══ -->
+        <!-- ═══ PRESENZE (HR, amministratori, responsabili per le loro province) ═══ -->
+        <section id="screen-presenze" class="screen" style="display:none">
+            <div class="card">
+                <h3 class="card-title">📅 Presenze driver</h3>
+                <p class="card-desc">Un driver è <strong>presente</strong> se quel giorno ha aperto il turno o inviato un rapporto nell'app driver. Solo la presenza, non le ore. Clicca un giorno per segnare ferie, malattia, permesso, riposo o assenza, per confermare una presenza senza app o per annullare un'apertura dell'app nel giorno libero.</p>
+                <div id="presOggiBox" style="display:none;margin:14px 0;padding:12px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg-card-hover)"></div>
+                <div class="toolbar">
+                    <input type="month" id="presMese" class="input" style="width:170px" onchange="renderPresenze()">
+                    <select id="presProv" class="input filter-select" onchange="presDisegna()"></select>
+                    <input type="text" id="presCerca" class="input search-input" placeholder="Cerca driver..." oninput="presDisegna()">
+                    <span id="presStatoMese"></span>
+                    <span style="flex:1"></span>
+                    <label class="btn" for="presArenaFile" title="Il file resta sul tuo computer: viene solo letto per il confronto">📊 Confronta con file Arena</label>
+                    <input type="file" id="presArenaFile" accept=".xlsx" style="display:none" onchange="presCaricaArena(this.files);this.value=''">
+                    <button class="btn" onclick="presEsporta()">⬇️ Esporta per HR</button>
+                    <button class="btn" id="presBtnChiudi" style="display:none" onclick="presToggleChiusura()">🔒 Chiudi mese</button>
+                </div>
+                <div id="presArenaNota" class="card-desc" style="display:none;margin:10px 0;font-size:12px"></div>
+                <div id="presGriglia"></div>
+                <p class="card-desc" style="margin-top:12px;font-size:12px">
+                    <strong style="color:#10b981">P</strong> presente ·
+                    <strong style="color:#38bdf8">F</strong> ferie ·
+                    <strong style="color:#a855f7">M</strong> malattia ·
+                    <strong style="color:#6366f1">PE</strong> permesso ·
+                    <strong style="color:#64748b">R</strong> riposo ·
+                    <strong style="color:#f43f5e">AS</strong> assente ·
+                    <strong>–</strong> non lavorato. Le celle sottolineate sono state impostate a mano. Dopo la chiusura del mese i responsabili non possono più modificare.
+                </p>
+            </div>
+        </section>
+
         <!-- ═══ TIMBRATURE (admin/HR) ═══ -->
         <section id="screen-timbrature" class="screen" style="display:none">
             <div class="card">
@@ -858,6 +886,7 @@
     <script src="js/moduli/utenti.js"></script>
     <script src="js/moduli/punti-timbratura.js"></script>
     <script src="js/moduli/timbrature.js"></script>
+    <script src="js/moduli/presenze.js"></script>
     <script src="js/fic/fic-core.js"></script>
     <script src="js/moduli/fatturazione.js"></script>
     <script src="js/moduli/fatturazione-fic.js"></script>

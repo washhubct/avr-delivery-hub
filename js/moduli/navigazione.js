@@ -13,6 +13,7 @@ const MODULE_TITLES = {
     utenti: 'Utenti',
     'punti-timbratura': 'Punti Timbratura',
     timbrature: 'Timbrature',
+    presenze: 'Presenze driver',
     fatturazione: 'Fatturazione',
     'report-finanziario': 'Report Finanziario',
     'log-accessi': 'Log Accessi',
@@ -64,6 +65,7 @@ function refreshCurrentModule() {
             loadPuntiTimbratura().then(renderPuntiTimbratura);
             break;
         case 'timbrature': renderTimbrature(); break;
+        case 'presenze': renderPresenze(); break;
         case 'fatturazione': renderFatturazione(); break;
         case 'report-finanziario': renderReportFinanziario(); break;
         case 'log-accessi': renderLogAccessi(); break;

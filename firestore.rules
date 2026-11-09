@@ -171,6 +171,58 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // PRESENZE DRIVER — presenzeDriver/{email}_{YYYY-MM-DD}, un doc per
+    // driver e giorno. I campi app (fonti, presenteApp, primoAccesso) li
+    // scrivono solo le CF presenzaDaTurno/presenzaDaRapporto (admin SDK).
+    // Dal gestionale si scrivono solo causale e nota: HR/amministratore
+    // ovunque e anche a mese chiuso; responsabile solo nelle sue province
+    // e a mese aperto. Il driver legge solo i propri giorni.
+    // ═══════════════════════════════════════════════════════════
+    function provinceResponsabile() {
+      return get(/databases/$(database)/documents/utenti/$(userEmail())).data.province;
+    }
+    function canGestirePresenze() {
+      return isSuperAdmin() || isAmministratore() || isRisorseUmane();
+    }
+    function mesePresenzeChiuso(mese) {
+      return exists(/databases/$(database)/documents/presenzeMesi/$(mese))
+             && get(/databases/$(database)/documents/presenzeMesi/$(mese)).data.chiuso == true;
+    }
+    function puoScriverePresenza(d) {
+      return canGestirePresenze()
+             || (isResponsabile()
+                 && d.citta in provinceResponsabile()
+                 && !mesePresenzeChiuso(d.mese));
+    }
+    function causaleValida(d) {
+      return !('causale' in d)
+             || d.causale == null
+             || d.causale in ['presente', 'ferie', 'malattia', 'permesso', 'riposo', 'assente', 'non_lavorato'];
+    }
+    match /presenzeDriver/{id} {
+      allow read: if isAdminOrStaff() || canGestirePresenze()
+                     || (isResponsabile() && resource.data.citta in provinceResponsabile())
+                     || (isDriver() && resource.data.email == userEmail());
+      // Giorno senza attività in app (ferie, malattia, presenza confermata a mano)
+      allow create: if puoScriverePresenza(request.resource.data)
+                       && id == request.resource.data.email + '_' + request.resource.data.data
+                       && request.resource.data.mese == request.resource.data.data[0:7]
+                       && request.resource.data.keys().hasOnly(['email', 'data', 'mese', 'driver', 'driverNome', 'citta', 'causale', 'nota', 'modificatoDa', 'modificatoIl'])
+                       && request.resource.data.modificatoDa == userEmail()
+                       && causaleValida(request.resource.data);
+      allow update: if puoScriverePresenza(resource.data)
+                       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['causale', 'nota', 'modificatoDa', 'modificatoIl'])
+                       && request.resource.data.modificatoDa == userEmail()
+                       && causaleValida(request.resource.data);
+      allow delete: if isSuperAdmin();
+    }
+    // Chiusura mese presenze: dopo la chiusura i responsabili non modificano più
+    match /presenzeMesi/{mese} {
+      allow read: if isGestionale();
+      allow write: if canGestirePresenze();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // PUSH SUBSCRIPTIONS — l'app driver registra il proprio device;
     // legge/invia solo la Cloud Function (admin SDK bypassa le rules)
     // ═══════════════════════════════════════════════════════════

@@ -2,7 +2,7 @@
 
 const { onRequest } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onDocumentUpdated, onDocumentCreated, onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
@@ -2383,6 +2383,65 @@ exports.pushPatenteSettimanale = onSchedule(
             const subs = await subsPerEmails(gruppi[k]);
             const r = await inviaPushASubs(subs, { title: 'Patente 🪪', body: msg[k], url: './' });
             console.log('[push] patente ' + k + ': ' + gruppi[k].length + ' driver, ' + subs.length + ' device, sent=' + r.sent);
+        }
+    }
+);
+
+// ═══════════════════════════════════════════════════════════════════
+// PRESENZE — presenzeDriver/{email}_{YYYY-MM-DD}: un doc per driver e
+// giorno, ricalcolato a ogni turno aperto e a ogni rapporto inserito,
+// modificato o cancellato nell'app driver (presenze-core.js). La CF
+// scrive solo i campi app; causale e nota restano del gestionale.
+// ═══════════════════════════════════════════════════════════════════
+const Presenze = require('./presenze-core.js');
+
+async function aggiornaPresenza(email, data) {
+    email = String(email || '').trim().toLowerCase();
+    if (!email || !/^\d{4}-\d{2}-\d{2}$/.test(data || '')) return;
+    // Giorno di Roma = UTC-1/-2: finestra larga e filtro esatto in memoria
+    const base = new Date(data + 'T00:00:00Z');
+    const da = new Date(base.getTime() - 3 * 3600e3), a = new Date(base.getTime() + 27 * 3600e3);
+    const [tSnap, rSnap, aSnap] = await Promise.all([
+        db.collection('turniDriver').where('email', '==', email).where('data', '==', data).get(),
+        db.collection('reportDriver').where('driverEmail', '==', email).where('data', '>=', da).where('data', '<', a).orderBy('data', 'desc').get(),
+        db.collection('driverAnagrafica').where('email', '==', email).limit(1).get(),
+    ]);
+    const rapporti = rSnap.docs.map((d) => d.data()).filter((r) => {
+        const dt = Presenze.toDate(r.data);
+        return dt && Presenze.giornoRoma(dt) === data;
+    });
+    const campi = Presenze.campiApp({
+        email, data,
+        turni: tSnap.docs.map((d) => d.data()),
+        rapporti,
+        anag: aSnap.empty ? null : aSnap.docs[0].data(),
+    });
+    const ref = db.collection('presenzeDriver').doc(Presenze.idPresenza(email, data));
+    if (!campi.presenteApp && !(await ref.get()).exists) return;
+    await ref.set({ ...campi, aggiornatoIl: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+}
+
+exports.presenzaDaTurno = onDocumentCreated(
+    { document: 'turniDriver/{id}', region: 'europe-west1' },
+    async (event) => {
+        const t = event.data && event.data.data();
+        if (t) await aggiornaPresenza(t.email, t.data);
+    }
+);
+
+exports.presenzaDaRapporto = onDocumentWritten(
+    { document: 'reportDriver/{id}', region: 'europe-west1' },
+    async (event) => {
+        // Prima e dopo: un rapporto spostato di giorno o cancellato aggiorna entrambi i giorni
+        const chiavi = new Set();
+        [event.data.before, event.data.after].forEach((snap) => {
+            const r = snap && snap.exists ? snap.data() : null;
+            const dt = r && Presenze.toDate(r.data);
+            if (r && r.driverEmail && dt) chiavi.add(r.driverEmail.toLowerCase() + '|' + Presenze.giornoRoma(dt));
+        });
+        for (const k of chiavi) {
+            const [email, data] = k.split('|');
+            await aggiornaPresenza(email, data);
         }
     }
 );

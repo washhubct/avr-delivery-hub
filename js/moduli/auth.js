@@ -97,8 +97,8 @@ function provinceVisibili() {
     return p.map(function(x) { return String(x).toUpperCase(); });
 }
 
-// Moduli raggiungibili da un responsabile (Timbrature è in menu ma non cliccabile).
-var MODULI_RESPONSABILE = ['anagrafica-driver', 'produttivita', 'danni', 'ritorni', 'classifica', 'segnalazioni'];
+// Moduli raggiungibili da un responsabile (Presenze limitate alle sue province).
+var MODULI_RESPONSABILE = ['anagrafica-driver', 'produttivita', 'presenze', 'danni', 'ritorni', 'classifica', 'segnalazioni'];
 
 // True se il ruolo ha accesso admin/staff completo alla dashboard (senza P&L).
 function isAdminOrStaffRole(role) {
@@ -199,6 +199,11 @@ function initAuth() {
                 var timbratureItems = document.querySelectorAll('.nav-timbrature-admin');
                 timbratureItems.forEach(function(el) {
                     el.style.display = canManageTimbrature(role) ? 'block' : 'none';
+                });
+
+                // Presenze — HR, amministratori e responsabili (solo le loro province)
+                document.querySelectorAll('.nav-presenze').forEach(function(el) {
+                    el.style.display = (canManageTimbrature(role) || isResponsabileZona()) ? 'block' : 'none';
                 });
 
                 // Fatturazione — nascosta alle Risorse Umane (tutto tranne il fatturato)

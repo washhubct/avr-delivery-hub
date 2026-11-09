@@ -1266,3 +1266,19 @@ html:not(.theme-light) .rf-chart .rf-bar.costi { fill: #a855f7; }
 .rf-chart .rf-tip { position: absolute; pointer-events: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,.25); white-space: nowrap; display: none; z-index: 5; }
 .rf-chart .rf-tip b { display: block; margin-bottom: 4px; }
 .rf-chart .rf-tip span { display: block; color: var(--text-muted); }
+
+/* ── Presenze driver: griglia mese ── */
+.pres-table { font-size: 12px; }
+.pres-table th, .pres-table td { padding: 4px 2px; text-align: center; white-space: nowrap; }
+.pres-table th.pres-g { min-width: 26px; line-height: 1.1; }
+.pres-table th.pres-g span { font-size: 9px; font-weight: 400; color: var(--text-muted); }
+.pres-table .pres-nome { text-align: left; padding-left: 8px; position: sticky; left: 0; background: var(--bg-card); z-index: 1; }
+.pres-table .pres-dom { background: rgba(148, 163, 184, 0.07); }
+.pres-table .pres-oggi { box-shadow: inset 0 -2px 0 var(--accent); }
+.pres-table td.pres-c { font-weight: 700; cursor: default; border-left: 1px solid var(--border); }
+.pres-table td.pres-c[onclick] { cursor: pointer; }
+.pres-table td.pres-c[onclick]:hover { outline: 1px solid var(--accent); }
+.pres-table td.pres-man { text-decoration: underline; }
+.pres-table td.pres-arena { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+.pres-table td.pres-warn { box-shadow: inset 0 0 0 2px var(--danger); }
+.pres-table tr.pres-tot td { font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); }
