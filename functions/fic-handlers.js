@@ -251,8 +251,10 @@ function createHandlers(deps) {
         let num;
         try { num = await fic.getNumerazioni(); } catch (e) { throw new HttpError(502, 'Numerazione FIC non disponibile: ' + e.message); }
         const perAnno = num[anno] || {};
-        const ultimo = Number(perAnno[numerazione] || 0);
-        return { ok: true, anno, numerazione, ultimo, prossimo: ultimo + 1 };
+        // FIC restituisce il PROSSIMO numero da usare, non l'ultimo usato
+        // (verificato 11/11/2026: ultima fattura 217 → numerations 218)
+        const prossimo = Number(perAnno[numerazione] || 1);
+        return { ok: true, anno, numerazione, ultimo: prossimo - 1, prossimo };
     }
 
     function pubblico(doc) {
