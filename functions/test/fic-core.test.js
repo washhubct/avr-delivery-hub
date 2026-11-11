@@ -125,6 +125,7 @@ function wbSintetico(opts) {
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(riep), opts.nome || 'agosto 26');
+    if (opts.soloRiepilogo) return wb;
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(speciali), 'speciali');
     if (opts.foglio1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(opts.foglio1), 'Foglio1');
     return wb;
@@ -185,6 +186,29 @@ test('riconciliazione Foglio1: split diverso e Arena vs Last Mile con impatto â‚
     assert.equal(Core.centsToString(arena.deltaCents), '37.83'); // 3 Ã— 12,61
     assert.equal(arena.dettagli[0].codice, '634');
     assert.ok(!sc.find(s => s.tipo === 'confronto_totale'));
+});
+
+test('foglio unico "Foglio1": riepilogo riconosciuto, mese indicato a mano', () => {
+    const p = Core.parseWorkbook(XLSX, wbSintetico({ nome: 'Foglio1', soloRiepilogo: true }));
+    assert.equal(p.riepilogo.nomeFoglio, 'Foglio1');
+    assert.equal(p.confronto, null);
+    assert.equal(p.riepilogo.filiali.length, 3);
+    assert.equal(p.riepilogo.meseDaFoglio, false);
+    assert.equal(Core.meseKey(p), null);
+    assert.throws(() => Core.buildRighe(p, {}), /Mese\/anno non determinati/);
+    assert.throws(() => Core.impostaMese(p, '2026-13'), /Mese non valido/);
+    Core.impostaMese(p, '2026-10');
+    assert.equal(Core.meseKey(p), '2026-10');
+    const righe = Core.buildRighe(p, {});
+    assert.equal(righe.length, 6);
+    assert.equal(righe[0].descrizione, 'Filiale 300 (CT) - consegne giorni feriali ottobre 2026');
+    assert.equal(Core.centsToString(Core.totali(righe, 22).imponibile), '3519.90');
+    // nome foglio con mese: nessun intervento
+    assert.equal(Core.parseWorkbook(XLSX, wbSintetico()).riepilogo.meseDaFoglio, true);
+    // Foglio1 di solo confronto senza riepilogo: errore originale
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['filiale', 'ecom feriali', 'ecom festivi'], [300, 1, 0]]), 'Foglio1');
+    assert.throws(() => Core.parseWorkbook(XLSX, wb), /Nessun foglio riepilogo/);
 });
 
 test('parser tollerante: righe spostate e area alias', () => {

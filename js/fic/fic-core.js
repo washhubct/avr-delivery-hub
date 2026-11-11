@@ -306,6 +306,7 @@
             nomeFoglio: nomeFoglio,
             mese: ma ? ma.mese : null,
             anno: ma ? ma.anno : null,
+            meseDaFoglio: !!(ma && ma.mese && ma.anno),
             filiali: filiali,
             totaliArea: totaliArea,
             totaleFile: totaleFile,
@@ -458,9 +459,16 @@
                 if (findCell(rws, function (v) { return norm(v) === 'FILIALE'; })) { nomeRiep = names[i]; break; }
             }
         }
+        var riep = null;
+        if (!nomeRiep && nomeConf) {
+            // foglio unico non rinominato ("Foglio1"): se è un riepilogo valido lo usa
+            // come tale (mese/anno da indicare a mano, vedi impostaMese)
+            try { riep = parseRiepilogo(sheetRows(XLSX, wb.Sheets[nomeConf]), cfg, nomeConf); } catch (e) { riep = null; }
+            if (riep && riep.filiali.length) { nomeRiep = nomeConf; nomeConf = null; } else riep = null;
+        }
         if (!nomeRiep) throw new Error('Nessun foglio riepilogo trovato (atteso es. "luglio 26")');
 
-        var riep = parseRiepilogo(sheetRows(XLSX, wb.Sheets[nomeRiep]), cfg, nomeRiep);
+        riep = riep || parseRiepilogo(sheetRows(XLSX, wb.Sheets[nomeRiep]), cfg, nomeRiep);
         var spec = nomeSpec ? parseSpeciali(sheetRows(XLSX, wb.Sheets[nomeSpec])) : null;
         var conf = nomeConf ? parseConfronto(sheetRows(XLSX, wb.Sheets[nomeConf])) : null;
         return { config: cfg, riepilogo: riep, speciali: spec, confronto: conf, fogli: names };
@@ -615,13 +623,28 @@
         });
     }
 
+    // 'YYYY-MM' della fattura, null se il nome foglio non dice mese e anno
+    function meseKey(parsed) {
+        var r = parsed.riepilogo;
+        return r.mese && r.anno ? r.anno + '-' + String(r.mese).padStart(2, '0') : null;
+    }
+
+    // Mese/anno indicati a mano ('YYYY-MM') quando il nome foglio non li contiene
+    function impostaMese(parsed, key) {
+        var m = String(key || '').match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+        if (!m) throw new Error('Mese non valido: ' + key + ' (atteso AAAA-MM)');
+        parsed.riepilogo.anno = parseInt(m[1], 10);
+        parsed.riepilogo.mese = parseInt(m[2], 10);
+        return parsed;
+    }
+
     // opts: { mese, anno, acconto: { importo (cents|string), riferimento } }
     function buildRighe(parsed, opts) {
         opts = opts || {};
         var cfg = parsed.config;
         var mese = opts.mese || parsed.riepilogo.mese;
         var anno = opts.anno || parsed.riepilogo.anno;
-        if (!mese || !anno) throw new Error('Mese/anno non determinati (nome foglio: ' + parsed.riepilogo.nomeFoglio + ')');
+        if (!mese || !anno) throw new Error('Mese/anno non determinati (nome foglio: ' + parsed.riepilogo.nomeFoglio + '): indica il mese della fattura');
         var periodo = labelMese(mese, anno);
         var tFer = toCents(cfg.tariffe.feriale), tFes = toCents(cfg.tariffe.festivo);
         var righe = [];
@@ -715,6 +738,7 @@
         ricalcola: ricalcola, riconcilia: riconcilia,
         buildRighe: buildRighe, totali: totali, subtotaliArea: subtotaliArea, ordinaFiliali: ordinaFiliali,
         righeToJson: righeToJson, righeFromJson: righeFromJson, labelMese: labelMese, addDays: addDays,
+        meseKey: meseKey, impostaMese: impostaMese,
         MESI_IT: MESI_IT
     };
 }));

@@ -46,9 +46,10 @@ async function ficHandleFile(files) {
         var parsed = FicCore.parseWorkbook(XLSX, wb, cfg.core);
         ficState.parsed = parsed;
         ficState.scostamenti = FicCore.riconcilia(parsed);
-        // mese di riferimento della fattura = mese del foglio
-        var meseKey = parsed.riepilogo.anno + '-' + String(parsed.riepilogo.mese).padStart(2, '0');
-        ficState.meseKey = meseKey;
+        // mese di riferimento della fattura = mese del foglio; se il nome foglio
+        // non lo dice (es. "Foglio1") parte dal mese selezionato, modificabile in anteprima
+        if (!FicCore.meseKey(parsed)) FicCore.impostaMese(parsed, state.meseCorrente);
+        ficState.meseKey = FicCore.meseKey(parsed);
         // Default intestazione
         var oggi = new Date().toISOString().slice(0, 10);
         ficState.intestazione = ficState.intestazione || {};
@@ -92,6 +93,16 @@ function ficOnIntestazioneChange() {
     try { ficRebuild(); } catch (e) { toast(e.message, 'error'); }
 }
 
+// Mese fattura indicato a mano (solo se il nome foglio non lo contiene)
+function ficOnMeseChange(val) {
+    try {
+        FicCore.impostaMese(ficState.parsed, val);
+        ficState.meseKey = FicCore.meseKey(ficState.parsed);
+        ficRebuild();
+        ficAggiornaStato(false);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
 // Numero continuativo: ultimo usato su FIC per l'anno della data + 1 (resta modificabile)
 async function ficPrecompilaNumero() {
     var it = ficState.intestazione;
@@ -120,6 +131,10 @@ function ficRenderAnteprima() {
     var giaCreata = stato && stato.esiste && stato.doc && stato.doc.ficDocumentId;
 
     var h = '';
+    if (!p.riepilogo.meseDaFoglio) {
+        h += '<div class="fic-alert fic-alert-error">⚠️ Il nome del foglio (<strong>' + escapeHtml(p.riepilogo.nomeFoglio) + '</strong>) non indica mese e anno: controlla il mese della fattura.' +
+            '<div style="margin-top:8px">' + ficField('Mese fattura', '<input class="fic-input" type="month" id="ficMese" value="' + escapeHtml(ficState.meseKey || '') + '" onchange="ficOnMeseChange(this.value)"' + (giaCreata ? ' disabled' : '') + '>') + '</div></div>';
+    }
     // KPI
     h += '<div class="kpi-grid" style="margin:12px 0">' +
         fatKpi('Consegne feriali', formatNumber(calc.feriali) + ' × ' + euro(FicCore.toCents(cfg.tariffe.feriale))) +
