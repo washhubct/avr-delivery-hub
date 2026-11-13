@@ -16,7 +16,7 @@ var COSTI_VOCI = [
     { key: 'consulenteLavoro', label: 'Consulente del lavoro', default: 600, daFattura: true },
     { key: 'carburante', label: 'Carburante (netto)', default: 2000, daFattura: true },
     { key: 'f24', label: 'F24 / Tasse', default: 7000 },
-    { key: 'costoMezzi', label: 'Costo mezzi / Noleggio', default: 854, daFattura: true },
+    { key: 'costoMezzi', label: 'Costo mezzi / Noleggio', default: 0, daFattura: true },
     { key: 'altro', label: 'Altro', default: 0, daFattura: true }
 ];
 var VOCI_FATTURA = COSTI_VOCI.filter(function(v) { return v.daFattura; });
