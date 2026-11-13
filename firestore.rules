@@ -248,7 +248,10 @@ service cloud.firestore {
                        && request.resource.data.stato == (request.resource.data.tipo == 'malattia' ? 'registrata' : 'in_attesa')
                        && request.resource.data.dal is string && request.resource.data.dal.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
                        && request.resource.data.al is string && request.resource.data.al.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-                       && request.resource.data.al >= request.resource.data.dal;
+                       && request.resource.data.al >= request.resource.data.dal
+                       // nota breve (niente diagnosi), protocollo = solo il numero del certificato
+                       && (!('nota' in request.resource.data) || (request.resource.data.nota is string && request.resource.data.nota.size() <= 80))
+                       && (!('protocollo' in request.resource.data) || (request.resource.data.protocollo is string && request.resource.data.protocollo.size() <= 20));
       allow update: if
                        // Driver: annulla la propria richiesta non ancora decisa (o la malattia comunicata)
                        (resource.data.email == userEmail()
