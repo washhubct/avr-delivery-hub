@@ -78,3 +78,40 @@ test('raggruppaPerMese: totali solo su righe valide, costi washhub esclusi, da_c
     assert.deepEqual(ago.totali.costiPerVoce, { carburante: 100, altro: 30 });
     assert.equal(g['2026-07'].totali.ricaviImponibile, 11000);
 });
+
+test('da registrare: solo fornitori in elenco, competenza dalle righe XML, costo Last Mile', () => {
+    assert.equal(C.daRegistrareAmmessa({ supplier_name: 'FRATELLI ARENA S.R.L.' }), true);
+    assert.equal(C.daRegistrareAmmessa({ supplier_name: 'M&R CONSULTING SRL STP' }), true);
+    assert.equal(C.daRegistrareAmmessa({ supplier_name: 'KUWAIT PETROLEUM ITALIA SPA' }), true);
+    assert.equal(C.daRegistrareAmmessa({ supplier_name: 'GURGONE GIANLUCA' }), false);
+    assert.equal(C.daRegistrareAmmessa({ supplier_name: 'GURGONE GIANLUCA' }, ['Gurgone']), true);
+    assert.equal(C.daRegistrareAmmessa({ supplier_name: '' }), false);
+
+    const xml = '<?xml version="1.0"?><ns3:FatturaElettronica><DettaglioLinee><Descrizione>RIADDEBITO CANONE NOLEGGIO</Descrizione></DettaglioLinee>' +
+        '<DettaglioLinee><Descrizione>COMPETENZA ottobre 2026</Descrizione></DettaglioLinee><DettaglioLinee><Descrizione>RIADDEBITO CANONE NOLEGGIO</Descrizione></DettaglioLinee>' +
+        '<Causale>Rif. contratto A&amp;B</Causale></ns3:FatturaElettronica>';
+    const righe = C.testoDaXml(xml);
+    assert.deepEqual(righe, ['RIADDEBITO CANONE NOLEGGIO', 'COMPETENZA ottobre 2026', 'Rif. contratto A&B']);
+
+    const doc = { id: 656903798, date: '2026-11-05 09:20:31', emission_date: '2026-11-04', ei_number: '002913/9D', supplier_name: 'FRATELLI ARENA S.R.L.', amount_net: 16883.03, amount_vat: 3714.27, amount_gross: 20597.3, subject: 'Fattura 002913/9D da FRATELLI ARENA S.R.L.' };
+    const r = C.normalizzaDaRegistrare(doc, righe, undefined, undefined);
+    assert.equal(r.ficId, 'P656903798');
+    assert.equal(r.meseCompetenza, '2026-10');
+    assert.equal(r.competenzaFonte, 'testo');
+    assert.equal(r.data, '2026-11-04');
+    assert.equal(r.numero, '002913/9D');
+    assert.equal(r.descrizione, 'RIADDEBITO CANONE NOLEGGIO');
+    assert.equal(r.azienda, 'lastmile');
+    assert.equal(r.voce, 'altro');
+    assert.equal(r.imponibile, 16883.03);
+    assert.equal(r.daRegistrare, true);
+
+    // senza XML: mese della data di emissione; fornitore configurato e override vincono
+    const k = C.normalizzaDaRegistrare({ ...doc, id: 1, supplier_name: 'KUWAIT PETROLEUM ITALIA SPA', emission_date: '2026-10-31' }, [], { id: 54761920, azienda: 'lastmile', voce: 'carburante' });
+    assert.equal(k.meseCompetenza, '2026-10');
+    assert.equal(k.voce, 'carburante');
+    assert.equal(k.fornitoreId, 54761920);
+    const o = C.normalizzaDaRegistrare(doc, righe, undefined, { azienda: 'washhub', meseCompetenza: '2026-11' });
+    assert.equal(o.azienda, 'washhub');
+    assert.equal(o.meseCompetenza, '2026-11');
+});

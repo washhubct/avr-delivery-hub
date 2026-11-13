@@ -131,8 +131,9 @@ async function renderReportFinanziario() {
         ricEl.innerHTML = rigaWH + visibili.map(function(r) {
             var stile = (r.escludi || r.azienda === 'washhub') ? 'opacity:.5' : '';
             var fonte = r.competenzaFonte === 'manuale' ? ' ✎' : '';
+            var daReg = r.daRegistrare ? ' <span title="Arrivata su Fatture in Cloud, non ancora registrata (si registra dopo il pagamento)" style="font-size:10px;color:var(--warning)">da registrare</span>' : '';
             return '<tr style="' + stile + '">' +
-                '<td>' + formatDateIt(r.data) + fonte + '<div style="font-size:11px;color:var(--text-light)">' + escapeHtml(r.numero || '') + '</div></td>' +
+                '<td>' + formatDateIt(r.data) + fonte + '<div style="font-size:11px;color:var(--text-light)">' + escapeHtml(r.numero || '') + daReg + '</div></td>' +
                 '<td><strong>' + escapeHtml(r.fornitore) + '</strong><div style="font-size:11px;color:var(--text-muted)">' + escapeHtml(r.descrizione) + '</div></td>' +
                 '<td style="text-align:right">' + formatCurrency(r.imponibile) + '<div style="font-size:11px;color:var(--text-light)">lordo ' + formatCurrency(r.lordo) + '</div></td>' +
                 '<td>' + selA(r) + '</td>' +

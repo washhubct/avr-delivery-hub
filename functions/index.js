@@ -1476,6 +1476,29 @@ async function ficListaTutta(fic, path, q) {
     return out;
 }
 
+// Fatture ricevute non ancora registrate su FIC dei soli fornitori in elenco
+// (fic-sync-core.js): la competenza si legge dalle righe dell'XML.
+async function ficDaRegistrare(fic, c, elenco, fornitori, overrides, daData) {
+    const perNome = {};
+    Object.keys(fornitori).forEach((id) => { perNome[FicSync.nomeChiave(fornitori[id].nome)] = { ...fornitori[id], id: Number(id) }; });
+    const out = [];
+    for (let page = 1; page <= 20; page++) {
+        const r = await fic.request('GET', c + '/received_documents/pending?fieldset=detailed&per_page=100&page=' + page);
+        for (const d of (r && r.data) || []) {
+            if (d.document_type !== 'expense' || !FicSync.daRegistrareAmmessa(d, elenco)) continue;
+            if (String(d.emission_date || d.date || '').slice(0, 10) < daData) continue;
+            let righe = [];
+            try {
+                const x = d.attachment_url ? await fetch(d.attachment_url) : null;
+                if (x && x.ok) righe = FicSync.testoDaXml(Buffer.from(await x.arrayBuffer()).toString('utf8'));
+            } catch (e) { console.warn('[ficSync] xml da registrare', d.id, e.message || e); }
+            out.push(FicSync.normalizzaDaRegistrare(d, righe, perNome[FicSync.nomeChiave(d.supplier_name)], overrides['ricevuta_P' + d.id]));
+        }
+        if (!r || !r.last_page || page >= r.last_page) break;
+    }
+    return out;
+}
+
 async function eseguiFicSync() {
     const fic = createFicClient({ token: FIC_TOKEN.value(), companyId: FIC_COMPANY_ID.value() });
     const cfg = (await db.collection('config').doc('fic').get()).data() || {};
@@ -1517,6 +1540,10 @@ async function eseguiFicSync() {
                 ricevute.push(n);
             });
         } catch (e) { avvisi.push('Note di credito ricevute non lette (permesso token): ' + (e.message || e)); }
+        try {
+            const daReg = await ficDaRegistrare(fic, c, cfg.fornitoriDaRegistrare, fornitori, overrides, daData);
+            daReg.forEach((r) => ricevute.push(r));
+        } catch (e) { avvisi.push('Fatture da registrare non lette: ' + (e.message || e)); }
     } catch (e) {
         // Token senza permesso "documenti ricevuti": i ricavi si aggiornano lo stesso
         ricevuteDisponibili = false;

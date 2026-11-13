@@ -119,6 +119,49 @@ function normalizzaRicevuta(doc, fornitore, override) {
     };
 }
 
+// Fatture arrivate su FIC ma non ancora registrate (received_documents/pending):
+// si registrano solo dopo il pagamento, ma per il P&L contano subito. Entrano
+// solo i fornitori dell'elenco (config/fic.fornitoriDaRegistrare), le altre
+// arrivate su FIC non riguardano il report. Il dettaglio FIC ha imponibile e IVA
+// ma non le righe: il testo per la competenza viene dall'XML della fattura.
+const FORNITORI_DA_REGISTRARE = ['M&R CONSULTING', 'FRATELLI ARENA', 'KUWAIT PETROLEUM'];
+
+function nomeChiave(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9&]/g, ''); }
+
+function daRegistrareAmmessa(doc, elenco) {
+    const n = nomeChiave(doc && doc.supplier_name);
+    return !!n && (elenco && elenco.length ? elenco : FORNITORI_DA_REGISTRARE).some((x) => nomeChiave(x) && n.includes(nomeChiave(x)));
+}
+
+// Descrizioni righe e causale dalla FatturaPA (anche dentro un .p7m: i tag restano in chiaro).
+function testoDaXml(xml) {
+    const out = [];
+    const re = /<(?:\w+:)?(Descrizione|Causale)>([^<]{1,300})</g;
+    let m;
+    while ((m = re.exec(String(xml || ''))) && out.length < 200) {
+        const t = m[2].replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+        if (t && !out.includes(t)) out.push(t);
+    }
+    return out;
+}
+
+function normalizzaDaRegistrare(doc, righeXml, fornitore, override) {
+    righeXml = righeXml || [];
+    const r = normalizzaRicevuta({
+        id: 'P' + doc.id,
+        date: doc.emission_date || doc.date,
+        invoice_number: doc.ei_number,
+        entity: { name: doc.supplier_name, id: (fornitore && fornitore.id) || null },
+        description: righeXml[0] || doc.subject || '',
+        notes: righeXml.join(' | '),
+        amount_net: doc.amount_net, amount_vat: doc.amount_vat, amount_gross: doc.amount_gross,
+    }, fornitore, override);
+    // Fornitore in elenco ma non ancora classificato: è un costo Last Mile per definizione
+    if (r.azienda === 'da_classificare' && !(override && override.azienda)) r.azienda = 'lastmile';
+    r.daRegistrare = true;
+    return r;
+}
+
 // Raggruppa per mese di competenza e calcola i totali (solo righe non escluse;
 // i costi contano solo azienda 'lastmile' + 'da_classificare', così un costo mai
 // classificato non sparisce in silenzio: resta visibile da sistemare).
@@ -144,4 +187,4 @@ function raggruppaPerMese(emesse, ricevute) {
     return mesi;
 }
 
-module.exports = { meseDaTesto, meseShift, normalizzaEmessa, normalizzaRicevuta, raggruppaPerMese, VOCI_COSTO };
+module.exports = { meseDaTesto, meseShift, normalizzaEmessa, normalizzaRicevuta, raggruppaPerMese, VOCI_COSTO, FORNITORI_DA_REGISTRARE, nomeChiave, daRegistrareAmmessa, testoDaXml, normalizzaDaRegistrare };
